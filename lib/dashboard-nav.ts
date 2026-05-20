@@ -2,7 +2,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   BarChart3,
   FolderGit2,
-  LineChart,
+  Sparkles,
   AppWindow,
   Star,
   Layout,
@@ -10,7 +10,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   LayoutGrid,
-  Cpu,
+  MessageSquare,
   CreditCard,
 } from 'lucide-react'
 
@@ -35,7 +35,7 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
     primary: true,
   },
   {
-    label: 'Repositories',
+    label: 'Repos',
     href: '/dashboard/repositories',
     icon: FolderGit2,
     description: 'Connected GitHub & GitLab repos',
@@ -45,7 +45,7 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
   {
     label: 'Analyses',
     href: '/dashboard/analyses',
-    icon: LineChart,
+    icon: Sparkles,
     description: 'AI-powered repo scans',
     isPro: false,
     primary: true,
@@ -88,10 +88,10 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
     isPro: false,
   },
   {
-    label: 'Pattern Analyzer',
+    label: 'App Idea Chat',
     href: '/dashboard/pattern-analyzer',
-    icon: Cpu,
-    description: 'Discover new project patterns',
+    icon: MessageSquare,
+    description: 'Chat through new project ideas from your repos',
     isPro: false,
   },
   {

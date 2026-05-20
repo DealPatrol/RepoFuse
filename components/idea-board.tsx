@@ -16,6 +16,7 @@ import {
   Search,
   RefreshCw,
   LayoutGrid,
+  Plus,
   type LucideIcon,
 } from 'lucide-react'
 import type { Analysis } from '@/lib/queries'
@@ -24,36 +25,41 @@ type StatusFilter = 'all' | Analysis['status']
 
 const STATUS_META: Record<
   Analysis['status'],
-  { label: string; color: string; badgeClass: string; icon: LucideIcon }
+  { label: string; color: string; badgeClass: string; cardBorder: string; icon: LucideIcon }
 > = {
   pending: {
     label: 'Pending',
     color: 'text-muted-foreground',
-    badgeClass: 'bg-muted text-muted-foreground',
+    badgeClass: 'bg-muted text-muted-foreground border-0',
+    cardBorder: 'border-border/60',
     icon: Clock,
   },
   scanning: {
     label: 'Scanning',
-    color: 'text-chart-1',
-    badgeClass: 'bg-chart-1/10 text-chart-1',
+    color: 'text-blue-500',
+    badgeClass: 'bg-blue-500/10 text-blue-500 border-0',
+    cardBorder: 'border-blue-500/30',
     icon: Loader2,
   },
   analyzing: {
     label: 'Analyzing',
     color: 'text-chart-2',
-    badgeClass: 'bg-chart-2/10 text-chart-2',
+    badgeClass: 'bg-chart-2/10 text-chart-2 border-0',
+    cardBorder: 'border-chart-2/30',
     icon: Sparkles,
   },
   complete: {
     label: 'Complete',
     color: 'text-chart-1',
-    badgeClass: 'bg-chart-1/10 text-chart-1',
+    badgeClass: 'bg-chart-1/10 text-chart-1 border-0',
+    cardBorder: 'border-chart-1/30',
     icon: CheckCircle2,
   },
   failed: {
     label: 'Failed',
     color: 'text-destructive',
-    badgeClass: 'bg-destructive/10 text-destructive',
+    badgeClass: 'bg-destructive/10 text-destructive border-0',
+    cardBorder: 'border-destructive/30',
     icon: XCircle,
   },
 }
@@ -76,11 +82,17 @@ function AnalysisCard({ analysis }: { analysis: Analysis }) {
       : 0
 
   return (
-    <Card className="p-5 hover:shadow-md transition-all duration-200 hover:border-border flex flex-col gap-4">
+    <Card className={`p-5 hover:shadow-lg transition-all duration-200 flex flex-col gap-4 border ${meta.cardBorder}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="h-9 w-9 rounded-lg bg-muted/60 flex items-center justify-center flex-shrink-0">
-            <Sparkles className="h-4 w-4 text-muted-foreground" />
+          <div className={`h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+            analysis.status === 'complete' ? 'bg-chart-1/10' :
+            analysis.status === 'failed' ? 'bg-destructive/10' :
+            'bg-muted/60'
+          }`}>
+            <StatusIcon
+              className={`h-5 w-5 ${meta.color} ${analysis.status === 'scanning' ? 'animate-spin' : analysis.status === 'analyzing' ? 'animate-pulse' : ''}`}
+            />
           </div>
           <div className="min-w-0">
             <h3 className="font-semibold text-foreground truncate">{analysis.name}</h3>
@@ -94,9 +106,6 @@ function AnalysisCard({ analysis }: { analysis: Analysis }) {
           </div>
         </div>
         <Badge className={`text-xs shrink-0 ${meta.badgeClass}`}>
-          <StatusIcon
-            className={`h-3 w-3 mr-1 ${analysis.status === 'scanning' ? 'animate-spin' : analysis.status === 'analyzing' ? 'animate-pulse' : ''}`}
-          />
           {meta.label}
         </Badge>
       </div>
@@ -105,11 +114,13 @@ function AnalysisCard({ analysis }: { analysis: Analysis }) {
         <div className="space-y-1.5">
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>{analysis.analyzed_files} / {analysis.total_files} files</span>
-            <span>{progress}%</span>
+            <span className="font-medium">{progress}%</span>
           </div>
           <div className="h-1.5 rounded-full bg-muted overflow-hidden">
             <div
-              className="h-full rounded-full bg-chart-1 transition-all duration-500"
+              className={`h-full rounded-full transition-all duration-500 ${
+                analysis.status === 'complete' ? 'bg-chart-1' : 'bg-chart-2'
+              }`}
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -117,12 +128,14 @@ function AnalysisCard({ analysis }: { analysis: Analysis }) {
       )}
 
       {analysis.error_message && (
-        <p className="text-xs text-destructive line-clamp-2">{analysis.error_message}</p>
+        <p className="text-xs text-destructive line-clamp-2 bg-destructive/5 rounded-lg px-3 py-2">
+          {analysis.error_message}
+        </p>
       )}
 
-      <Button variant="outline" size="sm" asChild className="self-start mt-auto">
+      <Button variant={analysis.status === 'complete' ? 'default' : 'outline'} size="sm" asChild className="self-start mt-auto">
         <Link href={`/dashboard/analyses/${analysis.id}`}>
-          View Results
+          {analysis.status === 'complete' ? 'View Blueprints' : 'Open'}
           <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
         </Link>
       </Button>
@@ -173,50 +186,87 @@ export function IdeaBoard() {
     {} as Record<string, number>,
   )
 
+  const completeCount = counts['complete'] || 0
+  const failedCount = counts['failed'] || 0
+  const inProgressCount = (counts['scanning'] || 0) + (counts['analyzing'] || 0)
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <LayoutGrid className="h-5 w-5 text-chart-2" />
+          <div className="flex items-center gap-2.5 mb-1">
+            <div className="h-8 w-8 rounded-lg bg-chart-2/10 flex items-center justify-center">
+              <LayoutGrid className="h-4 w-4 text-chart-2" />
+            </div>
             <h1 className="text-2xl font-bold text-foreground">Idea Board</h1>
           </div>
-          <p className="text-muted-foreground">All your analyses at a glance — track progress and review results.</p>
+          <p className="text-muted-foreground text-sm">All your analyses at a glance — track progress and review results.</p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => fetchAnalyses(true)}
-          disabled={refreshing}
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchAnalyses(true)}
+            disabled={refreshing}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Button size="sm" asChild>
+            <Link href="/dashboard/analyses">
+              <Plus className="h-4 w-4 mr-2" />
+              New Analysis
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Stats strip */}
       {!loading && analyses.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {(Object.keys(STATUS_META) as Analysis['status'][]).map((status) => {
-            const meta = STATUS_META[status]
-            const count = counts[status] || 0
-            if (count === 0) return null
-            return (
-              <button
-                key={status}
-                onClick={() => setStatusFilter(statusFilter === status ? 'all' : status)}
-                className={`text-left p-3 rounded-xl border transition-all duration-200 ${
-                  statusFilter === status
-                    ? 'border-foreground/30 bg-foreground/5'
-                    : 'border-border hover:border-border/80 hover:bg-muted/40'
-                }`}
-              >
-                <p className="text-xl font-bold text-foreground tabular-nums">{count}</p>
-                <p className={`text-xs font-medium mt-0.5 ${meta.color}`}>{meta.label}</p>
-              </button>
-            )
-          })}
+        <div className="grid grid-cols-3 gap-3">
+          <Card
+            className={`p-4 cursor-pointer transition-all ${statusFilter === 'complete' ? 'ring-2 ring-chart-1' : 'hover:shadow-sm'}`}
+            onClick={() => setStatusFilter(statusFilter === 'complete' ? 'all' : 'complete')}
+          >
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-lg bg-chart-1/10 flex items-center justify-center">
+                <CheckCircle2 className="h-5 w-5 text-chart-1" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-foreground tabular-nums">{completeCount}</p>
+                <p className="text-xs text-muted-foreground">Complete</p>
+              </div>
+            </div>
+          </Card>
+          <Card
+            className={`p-4 cursor-pointer transition-all ${inProgressCount > 0 ? 'hover:shadow-sm' : 'opacity-60'}`}
+            onClick={() => inProgressCount > 0 && setStatusFilter('scanning')}
+          >
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-lg bg-chart-2/10 flex items-center justify-center">
+                <Loader2 className="h-5 w-5 text-chart-2" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-foreground tabular-nums">{inProgressCount}</p>
+                <p className="text-xs text-muted-foreground">In Progress</p>
+              </div>
+            </div>
+          </Card>
+          <Card
+            className={`p-4 cursor-pointer transition-all ${statusFilter === 'failed' ? 'ring-2 ring-destructive' : failedCount > 0 ? 'hover:shadow-sm' : 'opacity-60'}`}
+            onClick={() => failedCount > 0 && setStatusFilter(statusFilter === 'failed' ? 'all' : 'failed')}
+          >
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-lg bg-destructive/10 flex items-center justify-center">
+                <XCircle className="h-5 w-5 text-destructive" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-foreground tabular-nums">{failedCount}</p>
+                <p className="text-xs text-muted-foreground">Failed</p>
+              </div>
+            </div>
+          </Card>
         </div>
       )}
 
@@ -239,11 +289,11 @@ export function IdeaBoard() {
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                 statusFilter === f.value
                   ? 'bg-foreground text-background'
-                  : 'bg-muted text-muted-foreground hover:text-foreground'
+                  : 'bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80'
               }`}
             >
               {f.label}
-              {f.value !== 'all' && counts[f.value] != null && (
+              {f.value !== 'all' && counts[f.value] != null && counts[f.value] > 0 && (
                 <span className="ml-1.5 opacity-70">{counts[f.value]}</span>
               )}
             </button>
@@ -254,37 +304,40 @@ export function IdeaBoard() {
       {/* Content */}
       {loading && (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <div className="text-center space-y-3">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mx-auto" />
+            <p className="text-sm text-muted-foreground">Loading analyses...</p>
+          </div>
         </div>
       )}
 
       {error && (
-        <Card className="p-8 text-center border-destructive/30">
+        <Card className="p-8 text-center border-destructive/30 bg-destructive/5">
           <XCircle className="mx-auto h-10 w-10 text-destructive/50 mb-3" />
           <p className="font-medium text-foreground mb-1">Failed to load analyses</p>
           <p className="text-sm text-muted-foreground mb-4">{error}</p>
-          <Button variant="outline" onClick={() => fetchAnalyses()}>
-            Try Again
-          </Button>
+          <Button variant="outline" onClick={() => fetchAnalyses()}>Try Again</Button>
         </Card>
       )}
 
       {!loading && !error && filtered.length === 0 && (
         <Card className="border-dashed p-12 text-center">
-          <Sparkles className="mx-auto h-12 w-12 text-muted-foreground/30 mb-4" />
+          <div className="h-16 w-16 rounded-2xl bg-muted/60 flex items-center justify-center mx-auto mb-4">
+            <Sparkles className="h-8 w-8 text-muted-foreground/50" />
+          </div>
           <h3 className="text-lg font-semibold text-foreground mb-2">
             {analyses.length === 0 ? 'No analyses yet' : 'No matches'}
           </h3>
-          <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
+          <p className="text-muted-foreground mb-6 max-w-sm mx-auto text-sm">
             {analyses.length === 0
-              ? 'Run your first analysis to see it appear here.'
+              ? 'Run your first analysis to discover apps you can build from your existing code.'
               : 'Try adjusting your search or filter.'}
           </p>
           {analyses.length === 0 && (
             <Button asChild>
               <Link href="/dashboard/analyses">
                 <Sparkles className="h-4 w-4 mr-2" />
-                Go to Analyses
+                Start an Analysis
               </Link>
             </Button>
           )}

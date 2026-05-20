@@ -41,7 +41,7 @@ export function ImpactStats({ variant = 'default' }: ImpactStatsProps) {
     <section
       className={cn(
         isMarketing
-          ? 'border-y border-cyan-500/20 bg-gradient-to-b from-cyan-950/10 to-transparent py-12 px-4'
+          ? 'border-y border-white/5 py-12 px-4'
           : 'py-16 px-4 sm:px-6 lg:px-8 bg-muted/30',
       )}
     >
@@ -76,7 +76,7 @@ export function ImpactStats({ variant = 'default' }: ImpactStatsProps) {
                 >
                   {stat.label}
                 </p>
-                <p className={cn('text-sm', isMarketing ? 'text-cyan-200/50' : 'text-muted-foreground')}>
+                <p className={cn('text-sm', isMarketing ? 'text-gray-500' : 'text-muted-foreground')}>
                   {stat.description}
                 </p>
               </div>

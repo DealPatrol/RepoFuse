@@ -26,11 +26,11 @@ export function getStripe(): Stripe {
 export const PLANS = {
   free: {
     name: 'Free',
-    analyses_per_month: 2,
-    blueprints_viewable: 3,
-    repos_limit: 2,
+    analyses_per_month: 1,
+    blueprints_viewable: 1,
+    repos_limit: 1,
     price_monthly: 0,
-    credits_per_month: 500,
+    credits_per_month: 200,
     ai_provider: 'builtin' as const,
     description: 'Explore the basics, no card needed',
   },

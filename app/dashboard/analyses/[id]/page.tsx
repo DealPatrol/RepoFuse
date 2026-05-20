@@ -33,19 +33,22 @@ export default async function AnalysisDetailPage({
       getRepositoriesForAnalysis(id),
       getBlueprintsByAnalysis(id),
     ])
+  } catch {
+    notFound()
+  }
 
-    if (user) {
+  if (user) {
+    try {
       const [subscription, viewedIds] = await Promise.all([
         getSubscriptionByGithubId(user.github_id),
         getUserViewedBlueprintIds(user.id),
       ])
       userPlan = subscription?.plan || 'free'
       viewedBlueprintIds = viewedIds
-      // Check if in trial via Stripe (subscription status = 'trialing')
       isTrialing = subscription?.status === 'trialing'
+    } catch {
+      // Subscription/views table not available yet — use free defaults
     }
-  } catch {
-    notFound()
   }
 
   if (!analysis) {

@@ -45,14 +45,13 @@ export function Testimonials({ variant = 'default' }: TestimonialsProps) {
     <section
       className={cn(
         'py-20 px-4',
-        isMarketing && 'border-b border-cyan-500/20 bg-gradient-to-b from-black via-cyan-950/5 to-black',
+        isMarketing && 'border-b border-white/5',
       )}
     >
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-16">
           {isMarketing && (
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-cyan-500/30 bg-cyan-950/30 mb-6 text-xs font-mono text-cyan-300">
-              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 mb-6 text-xs font-mono text-gray-400">
               TESTIMONIALS
             </div>
           )}
@@ -67,7 +66,7 @@ export function Testimonials({ variant = 'default' }: TestimonialsProps) {
           <p
             className={cn(
               'text-lg max-w-2xl mx-auto',
-              isMarketing ? 'text-cyan-200/70' : 'text-muted-foreground',
+              isMarketing ? 'text-gray-400' : 'text-muted-foreground',
             )}
           >
             Join builders discovering, assembling, and shipping apps from their existing code.
@@ -81,7 +80,7 @@ export function Testimonials({ variant = 'default' }: TestimonialsProps) {
               className={cn(
                 'p-8 flex flex-col transition-all duration-300',
                 isMarketing
-                  ? 'border-cyan-500/20 bg-cyan-950/10 hover:bg-cyan-950/20 hover:border-cyan-400/40'
+                  ? 'border-white/10 bg-white/3 hover:bg-white/5 hover:border-cyan-500/30'
                   : 'bg-card hover:shadow-lg hover:shadow-black/5',
               )}
             >
@@ -95,7 +94,7 @@ export function Testimonials({ variant = 'default' }: TestimonialsProps) {
               <p
                 className={cn(
                   'mb-6 flex-grow leading-relaxed',
-                  isMarketing ? 'text-cyan-100/90' : 'text-foreground',
+                  isMarketing ? 'text-gray-300' : 'text-foreground',
                 )}
               >
                 &ldquo;{testimonial.quote}&rdquo;
@@ -104,7 +103,7 @@ export function Testimonials({ variant = 'default' }: TestimonialsProps) {
                 <p className={cn('font-semibold', isMarketing ? 'text-white' : 'text-foreground')}>
                   {testimonial.author}
                 </p>
-                <p className={cn('text-sm', isMarketing ? 'text-cyan-400/60' : 'text-muted-foreground')}>
+                <p className={cn('text-sm', isMarketing ? 'text-gray-500' : 'text-muted-foreground')}>
                   {testimonial.title} at {testimonial.company}
                 </p>
               </div>
