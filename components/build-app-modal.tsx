@@ -21,8 +21,10 @@ import {
   GitBranch,
   Upload,
   Hammer,
+  Rocket,
 } from 'lucide-react'
 import type { AppBlueprint } from '@/lib/queries'
+import { LaunchPreviewModal } from '@/components/launch-preview-modal'
 
 type Platform = 'github' | 'gitlab'
 
@@ -63,6 +65,7 @@ export function BuildAppModal({ blueprint, open, onOpenChange }: BuildAppModalPr
     blueprint.name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-'),
   )
   const [step, setStep] = useState<BuildStep>({ id: 'idle' })
+  const [launchPreviewOpen, setLaunchPreviewOpen] = useState(false)
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null)
 
   const isBuilding =
@@ -261,29 +264,55 @@ export function BuildAppModal({ blueprint, open, onOpenChange }: BuildAppModalPr
             </Button>
           </div>
         ) : step.id === 'done' ? (
-          <div className="space-y-5 pt-1">
-            <div className="flex flex-col items-center text-center gap-3 py-4">
-              <div className="h-14 w-14 rounded-full bg-chart-1/10 flex items-center justify-center">
-                <CheckCircle2 className="h-7 w-7 text-chart-1" />
+          <>
+            <div className="space-y-5 pt-1">
+              <div className="flex flex-col items-center text-center gap-3 py-4">
+                <div className="h-14 w-14 rounded-full bg-chart-1/10 flex items-center justify-center">
+                  <CheckCircle2 className="h-7 w-7 text-chart-1" />
+                </div>
+                <div>
+                  <p className="font-semibold text-foreground">App built successfully!</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {step.filesCreated} files pushed to your new repository.
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="font-semibold text-foreground">App built successfully!</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {step.filesCreated} files pushed to your new repository.
-                </p>
-              </div>
+
+              {platform === 'github' && (
+                <Button
+                  className="w-full shadow-lg shadow-primary/20"
+                  onClick={() => setLaunchPreviewOpen(true)}
+                >
+                  <Rocket className="h-4 w-4 mr-2" />
+                  Launch Preview on Vercel
+                </Button>
+              )}
+
+              <Button variant={platform === 'github' ? 'outline' : 'default'} className="w-full" asChild>
+                <a href={step.repoUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Open Repository
+                </a>
+              </Button>
+              <Button variant="outline" className="w-full" onClick={() => handleClose(false)}>
+                Done
+              </Button>
             </div>
 
-            <Button className="w-full" asChild>
-              <a href={step.repoUrl} target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="h-4 w-4 mr-2" />
-                Open Repository
-              </a>
-            </Button>
-            <Button variant="outline" className="w-full" onClick={() => handleClose(false)}>
-              Done
-            </Button>
-          </div>
+            {(() => {
+              const parts = step.repoUrl.replace('https://github.com/', '').split('/')
+              const owner = parts[0] ?? ''
+              const name = parts[1] ?? repoName
+              return (
+                <LaunchPreviewModal
+                  repoOwner={owner}
+                  repoName={name}
+                  open={launchPreviewOpen}
+                  onOpenChange={setLaunchPreviewOpen}
+                />
+              )
+            })()}
+          </>
         ) : (
           /* Building state — step tracker */
           <div className="py-4 space-y-5">
