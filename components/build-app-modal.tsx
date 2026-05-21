@@ -147,7 +147,7 @@ export function BuildAppModal({ blueprint, open, onOpenChange }: BuildAppModalPr
       // If stream ended without reaching 'done', the function timed out
       setStep((prev) =>
         prev.id !== 'done' && prev.id !== 'error'
-          ? { id: 'error', message: 'Build timed out — please try again. File generation can take up to 60 seconds.' }
+          ? { id: 'error', message: 'Build timed out — please try again. File generation can take up to 2 minutes for larger projects.' }
           : prev
       )
     } catch (e) {
@@ -384,7 +384,7 @@ export function BuildAppModal({ blueprint, open, onOpenChange }: BuildAppModalPr
             </div>
 
             <p className="text-xs text-center text-muted-foreground">
-              This may take up to 30 seconds — please keep this window open.
+              This may take up to 2 minutes — please keep this window open.
             </p>
           </div>
         )}

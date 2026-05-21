@@ -4,7 +4,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { getAnthropicModel } from '@/lib/anthropic-model'
 import type { AppBlueprint } from '@/lib/queries'
 
-export const maxDuration = 60
+export const maxDuration = 120
 export const dynamic = 'force-dynamic'
 
 const anthropic = new Anthropic()
@@ -62,16 +62,26 @@ Rules:
 Return format: {"path/to/file.ts": "...full content...", "README.md": "..."}
 `
 
-  const response = await anthropic.messages.create({
+  // Use streaming so Vercel keeps the function alive during generation
+  // and we aren't blocked waiting for a single large response.
+  let raw = ''
+  const stream = anthropic.messages.stream({
     model: getAnthropicModel(),
-    max_tokens: 4096,
+    max_tokens: 8192,
     messages: [{ role: 'user', content: prompt }],
   })
+  for await (const chunk of stream) {
+    if (
+      chunk.type === 'content_block_delta' &&
+      chunk.delta.type === 'text_delta'
+    ) {
+      raw += chunk.delta.text
+    }
+  }
 
-  const raw = response.content[0].type === 'text' ? response.content[0].text.trim() : ''
-  const jsonText = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
+  raw = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
 
-  const obj = JSON.parse(jsonText) as Record<string, unknown>
+  const obj = JSON.parse(raw) as Record<string, unknown>
   const files: Record<string, string> = {}
   for (const [k, v] of Object.entries(obj)) {
     files[k] = typeof v === 'string' ? v : JSON.stringify(v, null, 2)
