@@ -373,7 +373,7 @@ export function DebtScannerClient({ completedAnalyses }: DebtScannerClientProps)
             </p>
             <Button
               onClick={handleScan}
-              disabled={!selectedAnalysisId || scanState === 'scanning'}
+              disabled={!selectedAnalysisId}
             >
               <ShieldAlert className="h-4 w-4 mr-2" />
               Scan for Issues
