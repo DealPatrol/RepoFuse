@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { getCurrentUser } from '@/lib/auth'
 import { getAnthropicModel } from '@/lib/anthropic-model'
+import { deductCredits, CREDITS } from '@/lib/credits'
 import type { DebtIssue } from '@/app/api/debt-scan/route'
 
 export const maxDuration = 60
@@ -177,6 +178,19 @@ export async function POST(request: NextRequest) {
 
         if (!issue || !repoOwner || !repoName) {
           send({ step: 'error', message: 'Missing required fields.' })
+          controller.close()
+          return
+        }
+
+        // Deduct credits before any AI work
+        const creditResult = await deductCredits(
+          user.id,
+          CREDITS.DEBT_FIX_COST,
+          'debt_fix',
+          { issueId: issue.id, repoOwner, repoName },
+        )
+        if (!creditResult.success) {
+          send({ step: 'error', message: creditResult.error ?? 'Insufficient credits' })
           controller.close()
           return
         }

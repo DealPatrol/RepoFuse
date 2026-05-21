@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { getCurrentUser } from '@/lib/auth'
 import { getAnthropicModel } from '@/lib/anthropic-model'
+import { deductCredits, CREDITS } from '@/lib/credits'
 import type { AppBlueprint } from '@/lib/queries'
 
 export const maxDuration = 120
@@ -237,6 +238,19 @@ export async function POST(request: NextRequest) {
         }
 
         const cleanRepoName = repoName.trim().replace(/\s+/g, '-').toLowerCase()
+
+        // Deduct credits before any AI work
+        const creditResult = await deductCredits(
+          user.id,
+          CREDITS.BUILD_APP_COST,
+          'build_app',
+          { repoName: cleanRepoName, platform },
+        )
+        if (!creditResult.success) {
+          send({ step: 'error', message: creditResult.error ?? 'Insufficient credits to build this app.' })
+          controller.close()
+          return
+        }
 
         // Step 1 — generate files with Claude
         send({ step: 'generating', message: 'Generating file contents with Claude…' })

@@ -260,7 +260,7 @@ export function BuildAppModal({ blueprint, open, onOpenChange }: BuildAppModalPr
 
             <Button className="w-full" onClick={handleBuild} disabled={!repoName.trim()}>
               <Hammer className="h-4 w-4 mr-2" />
-              Build &amp; Deploy to {platform === 'github' ? 'GitHub' : 'GitLab'}
+              Build &amp; Deploy to {platform === 'github' ? 'GitHub' : 'GitLab'} — 500 credits
             </Button>
           </div>
         ) : step.id === 'done' ? (

@@ -9,8 +9,10 @@ export const CREDITS = {
   ANALYSIS_COST: 100,           // Credits per analysis run
   SCAFFOLD_COST: 150,           // Credits per scaffold generation
   BUILD_APP_COST: 500,          // Credits per Build This App
-  PATTERN_ANALYZER_COST: 100,   // Credits per Pattern Analyzer scan
+  PATTERN_ANALYZER_COST: 100,   // Credits per App Idea Chat message
   DEBT_SCAN_COST: 150,          // Credits per Debt Scanner scan
+  DEBT_FIX_COST: 50,            // Credits per auto-fix PR
+  LAUNCH_PREVIEW_COST: 100,     // Credits per Launch Preview deployment
 }
 
 // Types
@@ -29,7 +31,7 @@ export interface CreditTransaction {
   id: string
   user_id: string
   amount: number
-  transaction_type: 'grant' | 'analysis' | 'scaffold' | 'build_app' | 'pattern_analyzer' | 'debt_scan' | 'refund' | 'renewal'
+  transaction_type: 'grant' | 'analysis' | 'scaffold' | 'build_app' | 'pattern_analyzer' | 'debt_scan' | 'debt_fix' | 'launch_preview' | 'refund' | 'renewal'
   reason: string | null
   metadata: Record<string, any>
   balance_after: number
@@ -114,7 +116,7 @@ export async function grantCredits(
 export async function deductCredits(
   userId: string,
   amount: number,
-  type: 'analysis' | 'scaffold' | 'build_app' | 'pattern_analyzer' | 'debt_scan',
+  type: 'analysis' | 'scaffold' | 'build_app' | 'pattern_analyzer' | 'debt_scan' | 'debt_fix' | 'launch_preview',
   metadata: Record<string, any> = {}
 ): Promise<{ success: boolean; transaction?: CreditTransaction; error?: string }> {
   const sql = getDb()

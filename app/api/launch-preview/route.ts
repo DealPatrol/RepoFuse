@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { getCurrentUser } from '@/lib/auth'
 import { getAnthropicModel } from '@/lib/anthropic-model'
+import { deductCredits, CREDITS } from '@/lib/credits'
 
 export const maxDuration = 120
 export const dynamic = 'force-dynamic'
@@ -181,6 +182,19 @@ export async function POST(request: NextRequest) {
 
         if (!repoOwner?.trim() || !repoName?.trim()) {
           send({ step: 'error', message: 'Repository owner and name are required.' })
+          controller.close()
+          return
+        }
+
+        // Deduct credits before any AI/cloud work
+        const creditResult = await deductCredits(
+          user.id,
+          CREDITS.LAUNCH_PREVIEW_COST,
+          'launch_preview',
+          { repoOwner, repoName },
+        )
+        if (!creditResult.success) {
+          send({ step: 'error', message: creditResult.error ?? 'Insufficient credits' })
           controller.close()
           return
         }

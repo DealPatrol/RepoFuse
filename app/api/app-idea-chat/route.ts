@@ -122,7 +122,7 @@ Existing blueprints: ${blueprints.slice(0, 5).map((b) => b.name).join(', ') || '
 Files sample (first 60):
 ${allFiles
   .slice(0, 60)
-  .map((f) => `  [${f.repoName}] ${f.path} — ${f.purpose}`)
+  .map((f) => `  [${f.repoName}] ${f.path} — ${f.purpose ?? ''}`)
   .join('\n')}
 `
         }
