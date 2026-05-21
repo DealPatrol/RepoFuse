@@ -182,91 +182,12 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
         {/* Before / After comparison */}
         <section className="py-20 border-b border-white/5">
-          <div className="container mx-auto px-4 max-w-xl">
-
-            {/* WITHOUT */}
-            <p className="text-xs font-mono font-bold tracking-widest text-orange-500 mb-5 uppercase">Without RepoFuse</p>
-
-            <div className="rounded-2xl overflow-hidden border border-white/8 bg-[#0d0d14] mb-6">
-              <div className="flex items-center gap-2 px-5 py-3 border-b border-white/8">
-                <div className="w-3 h-3 rounded-full bg-red-500/80" />
-                <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
-                <div className="w-3 h-3 rounded-full bg-green-500/80" />
-              </div>
-              <div className="p-5 font-mono text-sm space-y-1.5">
-                <div><span className="text-gray-500">$</span> <span className="text-gray-300">git log --oneline</span></div>
-                <div className="text-gray-500 pl-3">a3f2c11 WIP: dashboard v2</div>
-                <div className="text-gray-500 pl-3">b7d8e09 fix: auth bug (again)</div>
-                <div className="text-gray-500 pl-3">c1a4d67 TODO: finish this someday</div>
-                <div className="mt-2"><span className="text-gray-500">$</span> <span className="text-gray-300">ls graveyard/</span></div>
-                <div className="text-gray-500 pl-3">half-built-saas/  abandoned-api/  ideas.txt</div>
-                <div className="mt-2 text-red-400">ERROR: another repo collecting dust</div>
-                <div className="text-red-400">Build failed. No launch. Again.</div>
-              </div>
-            </div>
-
-            <div className="space-y-4 mb-12 pl-1">
-              {[
-                { label: 'Repos sit unused for months', red: false },
-                { label: "Can't see the ideas hiding in your code", red: false },
-                { label: 'Start from scratch every single time', red: false },
-                { label: 'Give up on half-built projects', red: true },
-              ].map((item) => (
-                <div key={item.label} className="flex items-center gap-3">
-                  <span className={`text-xl font-black ${item.red ? 'text-orange-500' : 'text-gray-600'}`}>✕</span>
-                  <span className={`text-lg font-semibold ${item.red ? 'text-orange-400' : 'text-gray-500'}`}>{item.label}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Arrow */}
-            <div className="flex justify-center mb-12">
-              <svg width="32" height="48" viewBox="0 0 32 48" fill="none" className="text-cyan-500">
-                <line x1="16" y1="0" x2="16" y2="36" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
-                <polyline points="6,26 16,40 26,26" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-              </svg>
-            </div>
-
-            {/* WITH */}
-            <div className="rounded-2xl overflow-hidden border border-cyan-500/20 bg-[#080d12] shadow-xl shadow-cyan-500/10">
-              <div className="px-5 pt-5 pb-3">
-                <p className="text-xs font-mono font-bold tracking-widest text-cyan-400 uppercase mb-4">With RepoFuse</p>
-              </div>
-
-              <div className="rounded-xl overflow-hidden border border-white/8 bg-[#0d0d14] mx-5 mb-5">
-                <div className="flex items-center gap-2 px-4 py-3 border-b border-white/8">
-                  <div className="w-3 h-3 rounded-full bg-red-500/80" />
-                  <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
-                  <div className="w-3 h-3 rounded-full bg-green-500/80" />
-                </div>
-                <div className="p-4 font-mono text-sm space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                    <span className="text-green-400">RepoFuse scan complete</span>
-                  </div>
-                  <div className="text-orange-400 pt-1">⚡ 7 buildable apps detected</div>
-                  <div className="text-cyan-400 pl-3">→ SaaS: AI Code Review Tool</div>
-                  <div className="text-cyan-400 pl-3">→ Tool: Repo Health Dashboard</div>
-                  <div className="text-cyan-400 pl-3">→ API: Webhook Automation Kit</div>
-                  <div className="text-gray-500 pl-3">+ 4 more ideas →</div>
-                </div>
-              </div>
-
-              <div className="px-5 pb-6 space-y-2">
-                <h3 className="text-2xl font-black text-white mb-4">RepoFuse turns your graveyard into a goldmine.</h3>
-                {[
-                  'Your old code becomes new launchable ideas.',
-                  'Full blueprints, stack recs, and MVP roadmaps.',
-                  'Push a scaffold to GitHub in one click.',
-                ].map((text) => (
-                  <div key={text} className="flex items-start gap-3">
-                    <span className="text-cyan-400 font-bold mt-0.5">✓</span>
-                    <span className="text-gray-300">{text}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
+          <div className="container mx-auto px-4 max-w-4xl">
+            <img
+              src="/comparison-preview.svg"
+              alt="Without RepoFuse: repos collecting dust, no launches. With RepoFuse: 7 buildable apps detected, full blueprints, push to GitHub in one click."
+              className="w-full rounded-2xl shadow-2xl shadow-cyan-500/10"
+            />
           </div>
         </section>
 
