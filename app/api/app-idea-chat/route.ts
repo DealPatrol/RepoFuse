@@ -24,10 +24,20 @@ export interface AppIdeaSuggestion {
   whyNow: string
 }
 
+export interface StarterFile {
+  path: string
+  purpose: string
+  technologies: string[]
+  repoName: string
+  relevance: string
+}
+
 export interface AppIdeaChatResponse {
   reply: string
   suggestions: AppIdeaSuggestion[]
   followUpQuestions: string[]
+  starterFiles?: StarterFile[]
+  templateSummary?: string
 }
 
 export interface ChatMessage {
@@ -62,8 +72,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: creditResult.error || 'Insufficient credits' }, { status: 402 })
     }
 
-    // Optionally load codebase context
+    // Load codebase context and raw file list when an analysis is selected
     let codebaseContext = ''
+    let repoFiles: Array<{ path: string; purpose: string; technologies: string[]; repoName: string }> = []
+
     if (analysisId) {
       try {
         const analysis = await getAnalysisById(analysisId)
@@ -74,8 +86,20 @@ export async function POST(request: NextRequest) {
           ])
 
           const allFiles = (
-            await Promise.all(repositories.map((r) => getFilesByRepository(r.id)))
+            await Promise.all(
+              repositories.map(async (r) => {
+                const files = await getFilesByRepository(r.id)
+                return files.map((f) => ({ ...f, repoName: r.name }))
+              }),
+            )
           ).flat()
+
+          repoFiles = allFiles.map((f) => ({
+            path: f.path,
+            purpose: f.purpose ?? '',
+            technologies: f.technologies ?? [],
+            repoName: f.repoName,
+          }))
 
           const techCount: Record<string, number> = {}
           for (const file of allFiles) {
@@ -85,15 +109,21 @@ export async function POST(request: NextRequest) {
           }
           const topTech = Object.entries(techCount)
             .sort((a, b) => b[1] - a[1])
-            .slice(0, 10)
+            .slice(0, 12)
             .map(([t]) => t)
 
           codebaseContext = `
-## Developer's codebase context
+## Developer's existing codebase
 Repositories: ${repositories.map((r) => r.name).join(', ')}
 Top technologies: ${topTech.join(', ')}
 Total files: ${allFiles.length}
 Existing blueprints: ${blueprints.slice(0, 5).map((b) => b.name).join(', ') || 'none yet'}
+
+Files sample (first 60):
+${allFiles
+  .slice(0, 60)
+  .map((f) => `  [${f.repoName}] ${f.path} — ${f.purpose}`)
+  .join('\n')}
 `
         }
       } catch {
@@ -101,39 +131,48 @@ Existing blueprints: ${blueprints.slice(0, 5).map((b) => b.name).join(', ') || '
       }
     }
 
-    // Build conversation history for context
+    const hasCodebase = repoFiles.length > 0
     const conversationHistory = history.slice(-6).map((m) => ({
       role: m.role as 'user' | 'assistant',
       content: m.content,
     }))
 
-    const systemPrompt = `You are an expert product strategist and startup advisor helping developers discover what apps to build. You're having a friendly, concise conversation to help them find the perfect project idea.
+    const systemPrompt = `You are an expert product strategist helping developers figure out what to build next. You give concise, actionable advice.
 
 ${codebaseContext}
 
-When responding:
-- Keep your reply conversational and under 100 words
-- Suggest 2-4 concrete project ideas tailored to their request${codebaseContext ? ' and their codebase' : ''}
-- Ask a relevant follow-up question to refine suggestions
-- Be enthusiastic and actionable
+When the user describes something they want to build:
+${hasCodebase ? `- Identify up to 6 files from their EXISTING codebase (listed above) that are most relevant as starter code for this project. Pick files that could be reused or adapted directly.` : '- They have no connected codebase yet; suggest ideas and tech stacks only.'}
+- Suggest 2-3 concrete project ideas aligned with their request
+- Ask one follow-up question to refine suggestions
 
-Always respond with valid JSON only (no markdown fences):
+Respond with valid JSON only (no markdown fences):
 {
-  "reply": "conversational response under 100 words",
+  "reply": "conversational response, max 80 words",
   "suggestions": [
     {
       "name": "Project Name",
       "tagline": "One punchy sentence",
       "description": "2-3 sentences",
-      "type": "SaaS | CLI Tool | API | Dashboard | etc",
+      "type": "SaaS | CLI | API | Dashboard | Mobile | etc",
       "difficulty": "easy | medium | hard",
       "estimatedEffort": "e.g. 1–2 weeks",
       "suggestedStack": ["tech1", "tech2"],
-      "monetizationAngle": "How to charge",
+      "monetizationAngle": "How to monetize",
       "whyNow": "Why this is timely"
     }
   ],
-  "followUpQuestions": ["Question 1?", "Question 2?"]
+  "followUpQuestions": ["Question 1?", "Question 2?"],
+  ${hasCodebase ? `"starterFiles": [
+    {
+      "path": "exact/path/from/codebase",
+      "purpose": "what this file does",
+      "technologies": ["tech"],
+      "repoName": "repo-name",
+      "relevance": "one sentence: why this file helps for what they want to build"
+    }
+  ],
+  "templateSummary": "One sentence describing what these files collectively give them as a starting point"` : `"starterFiles": [], "templateSummary": null`}
 }`
 
     const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
@@ -156,6 +195,19 @@ Always respond with valid JSON only (no markdown fences):
       parsed = JSON.parse(jsonText)
     } catch {
       return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 })
+    }
+
+    // Validate starterFiles against actual repo files to avoid hallucinations
+    if (parsed.starterFiles?.length && repoFiles.length > 0) {
+      const pathSet = new Set(repoFiles.map((f) => f.path))
+      const validFiles = parsed.starterFiles.filter((sf) => pathSet.has(sf.path))
+      // Enrich with actual data from DB
+      parsed.starterFiles = validFiles.map((sf) => {
+        const actual = repoFiles.find((f) => f.path === sf.path)
+        return actual
+          ? { ...sf, purpose: actual.purpose || sf.purpose, technologies: actual.technologies }
+          : sf
+      })
     }
 
     return NextResponse.json(parsed)
