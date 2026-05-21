@@ -219,7 +219,7 @@ export function BillingClient({
                 Manage Subscription
               </Button>
             ) : !isPaid ? (
-              <Button onClick={handleUpgrade} disabled={checkoutLoading} className="w-full shadow-lg shadow-primary/20">
+              <Button onClick={() => handleUpgrade()} disabled={checkoutLoading} className="w-full shadow-lg shadow-primary/20">
                 {checkoutLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
                 Upgrade to Pro — 7 days free, then $19/mo
               </Button>
@@ -251,7 +251,7 @@ export function BillingClient({
                 <p className="text-xs text-destructive mt-2">
                   {usagePercent >= 100 ? "You've reached your monthly limit." : 'Approaching your monthly limit.'}
                   {' '}
-                  <button onClick={handleUpgrade} className="underline font-medium hover:no-underline">
+                  <button onClick={() => handleUpgrade()} className="underline font-medium hover:no-underline">
                     Upgrade to Pro
                   </button>
                 </p>
@@ -270,7 +270,7 @@ export function BillingClient({
                 {blueprintsUsed >= blueprintsLimit && (
                   <p className="text-xs text-destructive mt-2">
                     You&apos;ve viewed all your free blueprints.{' '}
-                    <button onClick={handleUpgrade} className="underline font-medium hover:no-underline">
+                    <button onClick={() => handleUpgrade()} className="underline font-medium hover:no-underline">
                       Upgrade for unlimited
                     </button>
                   </p>
@@ -287,7 +287,7 @@ export function BillingClient({
                     <p className="text-xs text-muted-foreground mt-1">
                       Pro gives you unlimited analyses, repos, scaffold generation, and priority AI.
                     </p>
-                    <Button size="sm" className="mt-3" onClick={handleUpgrade} disabled={checkoutLoading}>
+                    <Button size="sm" className="mt-3" onClick={() => handleUpgrade()} disabled={checkoutLoading}>
                       Upgrade Now <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
                     </Button>
                   </div>
