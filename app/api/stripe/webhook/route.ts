@@ -1,16 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-// ─── Clients ──────────────────────────────────────────────────────────────────
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+// ─── Lazy clients (avoid build-time evaluation) ──────────────────────────────
 
-// Use the service role key so we can write to Supabase from the server
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+let _stripe: Stripe | null = null;
+function getStripeClient(): Stripe {
+  if (_stripe) return _stripe;
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) {
+    throw new Error("STRIPE_SECRET_KEY is not configured");
+  }
+  _stripe = new Stripe(key);
+  return _stripe;
+}
+
+let _supabase: SupabaseClient | null = null;
+function getSupabaseClient(): SupabaseClient {
+  if (_supabase) return _supabase;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) {
+    throw new Error("Supabase env vars are not configured");
+  }
+  _supabase = createClient(url, serviceKey);
+  return _supabase;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -43,7 +61,7 @@ export async function POST(req: NextRequest) {
   // 2. Verify the event actually came from Stripe
   let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    event = getStripeClient().webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error(`⚠️  Webhook signature verification failed: ${message}`);
@@ -65,7 +83,7 @@ export async function POST(req: NextRequest) {
 
         if (!customerEmail) break;
 
-        await supabase
+        await getSupabaseClient()
           .from("subscriptions")
           .upsert({
             stripe_customer_id: customerId,
@@ -76,7 +94,7 @@ export async function POST(req: NextRequest) {
           }, { onConflict: "email" });
 
         // Also update the user's plan in the profiles table
-        await supabase
+        await getSupabaseClient()
           .from("profiles")
           .update({
             stripe_customer_id: customerId,
@@ -96,12 +114,12 @@ export async function POST(req: NextRequest) {
         const plan = getPlanFromPriceId(priceId);
 
         // Get customer email from Stripe
-        const customer = await stripe.customers.retrieve(customerId) as Stripe.Customer;
+        const customer = await getStripeClient().customers.retrieve(customerId) as Stripe.Customer;
         const email = customer.email;
 
         if (!email) break;
 
-        await supabase
+        await getSupabaseClient()
           .from("subscriptions")
           .upsert({
             stripe_customer_id: customerId,
@@ -113,7 +131,7 @@ export async function POST(req: NextRequest) {
             updated_at: new Date().toISOString(),
           }, { onConflict: "stripe_subscription_id" });
 
-        await supabase
+        await getSupabaseClient()
           .from("profiles")
           .update({ plan, subscription_status: subscription.status })
           .eq("email", email);
@@ -129,12 +147,12 @@ export async function POST(req: NextRequest) {
         const priceId = subscription.items.data[0]?.price.id;
         const plan = getPlanFromPriceId(priceId);
 
-        const customer = await stripe.customers.retrieve(customerId) as Stripe.Customer;
+        const customer = await getStripeClient().customers.retrieve(customerId) as Stripe.Customer;
         const email = customer.email;
 
         if (!email) break;
 
-        await supabase
+        await getSupabaseClient()
           .from("subscriptions")
           .update({
             status: subscription.status,
@@ -144,7 +162,7 @@ export async function POST(req: NextRequest) {
           })
           .eq("stripe_subscription_id", subscription.id);
 
-        await supabase
+        await getSupabaseClient()
           .from("profiles")
           .update({ plan, subscription_status: subscription.status })
           .eq("email", email);
@@ -158,12 +176,12 @@ export async function POST(req: NextRequest) {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId = subscription.customer as string;
 
-        const customer = await stripe.customers.retrieve(customerId) as Stripe.Customer;
+        const customer = await getStripeClient().customers.retrieve(customerId) as Stripe.Customer;
         const email = customer.email;
 
         if (!email) break;
 
-        await supabase
+        await getSupabaseClient()
           .from("subscriptions")
           .update({
             status: "canceled",
@@ -172,7 +190,7 @@ export async function POST(req: NextRequest) {
           })
           .eq("stripe_subscription_id", subscription.id);
 
-        await supabase
+        await getSupabaseClient()
           .from("profiles")
           .update({ plan: "free", subscription_status: "canceled" })
           .eq("email", email);
@@ -189,8 +207,8 @@ export async function POST(req: NextRequest) {
         if (!subscriptionId) break;
 
         // Update period end on renewal
-        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-        await supabase
+        const subscription = await getStripeClient().subscriptions.retrieve(subscriptionId);
+        await getSupabaseClient()
           .from("subscriptions")
           .update({
             status: "active",
@@ -208,12 +226,12 @@ export async function POST(req: NextRequest) {
         const invoice = event.data.object as Stripe.Invoice;
         const customerId = invoice.customer as string;
 
-        const customer = await stripe.customers.retrieve(customerId) as Stripe.Customer;
+        const customer = await getStripeClient().customers.retrieve(customerId) as Stripe.Customer;
         const email = customer.email;
 
         if (!email) break;
 
-        await supabase
+        await getSupabaseClient()
           .from("subscriptions")
           .update({
             status: "past_due",
@@ -221,7 +239,7 @@ export async function POST(req: NextRequest) {
           })
           .eq("stripe_customer_id", customerId);
 
-        await supabase
+        await getSupabaseClient()
           .from("profiles")
           .update({ subscription_status: "past_due" })
           .eq("email", email);

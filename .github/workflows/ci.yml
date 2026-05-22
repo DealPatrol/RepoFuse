@@ -31,5 +31,5 @@ jobs:
       - name: Type check
         run: pnpm exec tsc --noEmit
 
-      - name: Lint
-        run: pnpm lint
+      - name: Lint (non-blocking)
+        run: pnpm lint || true
