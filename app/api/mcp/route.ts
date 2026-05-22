@@ -1,0 +1,64 @@
+import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
+import { generateText } from 'ai'
+import { getCurrentUser } from '@/lib/auth'
+import { getBillingState } from '@/lib/billing'
+import { createAnthropicPromptRunner } from '@/lib/repofuse-core.js'
+import { createRepoFuseMcpServer } from '@/lib/repofuse-mcp.js'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+async function handleMcpRequest(request: Request) {
+  const user = await getCurrentUser()
+
+  if (!user) {
+    return Response.json({ error: 'Not authenticated' }, { status: 401 })
+  }
+
+  const billing = await getBillingState(user)
+  const model = process.env.REPOFUSE_MODEL || process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022'
+  const anthropicRunner = process.env.ANTHROPIC_API_KEY
+    ? createAnthropicPromptRunner({ apiKey: process.env.ANTHROPIC_API_KEY, model })
+    : undefined
+
+  const analysisRunner = anthropicRunner ?? (async (prompt: string) => {
+    const result = await generateText({
+      model: 'openai/gpt-4o-mini',
+      prompt,
+      temperature: 0.2,
+      maxOutputTokens: 4000,
+    })
+
+    return result.text
+  })
+
+  const scaffoldRunner = anthropicRunner
+
+  const server = createRepoFuseMcpServer({
+    githubToken: user.access_token,
+    analysisPromptRunner: analysisRunner,
+    scaffoldPromptRunner: scaffoldRunner,
+    allowCreateRepo: billing.canAccessPro,
+    maxFilesPerRepo: 120,
+    maxBlueprints: 5,
+  })
+
+  const transport = new WebStandardStreamableHTTPServerTransport({
+    enableJsonResponse: true,
+  })
+
+  await server.connect(transport)
+  return transport.handleRequest(request)
+}
+
+export async function GET(request: Request) {
+  return handleMcpRequest(request)
+}
+
+export async function POST(request: Request) {
+  return handleMcpRequest(request)
+}
+
+export async function DELETE(request: Request) {
+  return handleMcpRequest(request)
+}

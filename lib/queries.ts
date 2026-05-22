@@ -1,6 +1,14 @@
 import { getDb } from './db'
 
 // Types
+export interface UserBillingUpdate {
+  stripe_customer_id?: string | null
+  stripe_subscription_id?: string | null
+  stripe_price_id?: string | null
+  plan_tier?: 'free' | 'pro' | null
+  subscription_status?: string | null
+}
+
 export interface Repository {
   id: string
   github_id: number
@@ -340,6 +348,20 @@ export async function getBlueprintsByAnalysis(analysisId: string): Promise<AppBl
 export async function deleteBlueprintsByAnalysis(analysisId: string): Promise<void> {
   const sql = getDb()
   await sql`DELETE FROM app_blueprints WHERE analysis_id = ${analysisId}`
+}
+
+export async function updateUserBilling(userId: string, data: UserBillingUpdate): Promise<void> {
+  const sql = getDb()
+  await sql`
+    UPDATE user_auth SET
+      stripe_customer_id = COALESCE(${data.stripe_customer_id ?? null}, stripe_customer_id),
+      stripe_subscription_id = ${data.stripe_subscription_id ?? null},
+      stripe_price_id = ${data.stripe_price_id ?? null},
+      plan_tier = COALESCE(${data.plan_tier ?? null}, plan_tier),
+      subscription_status = ${data.subscription_status ?? null},
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${userId}
+  `
 }
 
 export async function createBlueprint(data: {
