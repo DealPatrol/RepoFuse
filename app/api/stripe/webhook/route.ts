@@ -4,9 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 
 // ─── Clients ──────────────────────────────────────────────────────────────────
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2024-11-20.acacia",
-});
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 // Use the service role key so we can write to Supabase from the server
 const supabase = createClient(
@@ -111,7 +109,7 @@ export async function POST(req: NextRequest) {
             email,
             status: subscription.status,
             plan,
-            current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+            current_period_end: new Date((subscription as unknown as { current_period_end: number }).current_period_end * 1000).toISOString(),
             updated_at: new Date().toISOString(),
           }, { onConflict: "stripe_subscription_id" });
 
@@ -141,7 +139,7 @@ export async function POST(req: NextRequest) {
           .update({
             status: subscription.status,
             plan,
-            current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+            current_period_end: new Date((subscription as unknown as { current_period_end: number }).current_period_end * 1000).toISOString(),
             updated_at: new Date().toISOString(),
           })
           .eq("stripe_subscription_id", subscription.id);
@@ -186,7 +184,7 @@ export async function POST(req: NextRequest) {
       // ── Invoice paid (recurring renewal) ─────────────────────────────────
       case "invoice.payment_succeeded": {
         const invoice = event.data.object as Stripe.Invoice;
-        const subscriptionId = invoice.subscription as string;
+        const subscriptionId = (invoice as unknown as { subscription?: string }).subscription as string | undefined;
 
         if (!subscriptionId) break;
 
@@ -196,7 +194,7 @@ export async function POST(req: NextRequest) {
           .from("subscriptions")
           .update({
             status: "active",
-            current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+            current_period_end: new Date((subscription as unknown as { current_period_end: number }).current_period_end * 1000).toISOString(),
             updated_at: new Date().toISOString(),
           })
           .eq("stripe_subscription_id", subscriptionId);
