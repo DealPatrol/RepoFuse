@@ -1,252 +1,169 @@
-import { NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
-import { createClient } from "@supabase/supabase-js";
+import { NextRequest, NextResponse } from 'next/server'
+import Stripe from 'stripe'
+import { getPriceIdForPlan, getStripe, getStripeWebhookSecret } from '@/lib/stripe'
+import { upsertSubscription, type Subscription } from '@/lib/queries'
 
-// ─── Clients ──────────────────────────────────────────────────────────────────
+type BillingPlan = Extract<Subscription['plan'], 'pro' | 'scale'>
+type BillingStatus = Subscription['status']
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2024-11-20.acacia",
-});
+function getPlanFromPriceId(priceId: string | undefined): BillingPlan | null {
+  if (!priceId) return null
 
-// Use the service role key so we can write to Supabase from the server
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+  const priceMap = new Map<string, BillingPlan>()
+  const proPriceId = getPriceIdForPlan('pro')
+  const scalePriceId = getPriceIdForPlan('scale')
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+  if (proPriceId) priceMap.set(proPriceId, 'pro')
+  if (scalePriceId) priceMap.set(scalePriceId, 'scale')
 
-function getPlanFromPriceId(priceId: string): string {
-  const priceMap: Record<string, string> = {
-    [process.env.STRIPE_PRICE_PRO_MONTHLY || ""]: "pro",
-    [process.env.STRIPE_PRICE_PRO_YEARLY || ""]: "pro",
-    [process.env.STRIPE_PRICE_STARTER_MONTHLY || ""]: "starter",
-  };
-  return priceMap[priceId] || "free";
+  return priceMap.get(priceId) ?? null
 }
 
-// ─── Webhook Handler ──────────────────────────────────────────────────────────
+function normalizeSubscriptionStatus(status: Stripe.Subscription.Status): BillingStatus {
+  if (status === 'trialing') return 'trialing'
+  if (status === 'past_due' || status === 'unpaid' || status === 'incomplete') return 'past_due'
+  if (status === 'canceled' || status === 'incomplete_expired') return 'canceled'
+  return 'active'
+}
+
+function getCurrentPeriodEnd(subscription: Stripe.Subscription): string | null {
+  const currentPeriodEnd = (subscription as unknown as { current_period_end?: number }).current_period_end
+  return currentPeriodEnd ? new Date(currentPeriodEnd * 1000).toISOString() : null
+}
+
+function getGithubIdFromMetadata(...metadataSources: Array<Stripe.Metadata | null | undefined>): number | null {
+  for (const metadata of metadataSources) {
+    const rawGithubId = metadata?.github_id
+    if (!rawGithubId) continue
+    const githubId = Number.parseInt(rawGithubId, 10)
+    if (!Number.isNaN(githubId)) return githubId
+  }
+  return null
+}
+
+function getInvoiceSubscriptionId(invoice: Stripe.Invoice): string | null {
+  const legacy = (invoice as unknown as { subscription?: string | { id?: string } }).subscription
+  if (typeof legacy === 'string') return legacy
+  if (legacy?.id) return legacy.id
+
+  const parentSubscription = (invoice as unknown as {
+    parent?: { subscription_details?: { subscription?: string } }
+  }).parent?.subscription_details?.subscription
+
+  return parentSubscription ?? null
+}
+
+async function upsertFromSubscription(subscription: Stripe.Subscription, fallbackMetadata?: Stripe.Metadata | null) {
+  const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id
+  const priceId = subscription.items.data[0]?.price.id
+  const plan = getPlanFromPriceId(priceId) ?? getMetadataPlan(subscription.metadata, fallbackMetadata) ?? 'pro'
+  const githubId = getGithubIdFromMetadata(subscription.metadata, fallbackMetadata)
+
+  if (!githubId) {
+    console.warn('[stripe-webhook] Missing github_id metadata for subscription:', subscription.id)
+    return
+  }
+
+  await upsertSubscription({
+    github_id: githubId,
+    stripe_customer_id: customerId,
+    stripe_subscription_id: subscription.id,
+    plan,
+    status: normalizeSubscriptionStatus(subscription.status),
+    current_period_end: getCurrentPeriodEnd(subscription),
+  })
+}
+
+function getMetadataPlan(...metadataSources: Array<Stripe.Metadata | null | undefined>): BillingPlan | null {
+  for (const metadata of metadataSources) {
+    if (metadata?.plan === 'pro' || metadata?.plan === 'scale') return metadata.plan
+  }
+  return null
+}
 
 export async function POST(req: NextRequest) {
-  // 1. Get the raw body — required for Stripe signature verification
-  const body = await req.text();
-  const sig = req.headers.get("stripe-signature");
-
-  if (!sig) {
-    console.error("⚠️  Missing stripe-signature header");
-    return NextResponse.json({ error: "Missing signature" }, { status: 400 });
+  const signature = req.headers.get('stripe-signature')
+  if (!signature) {
+    return NextResponse.json({ error: 'Missing signature' }, { status: 400 })
   }
 
-  if (!process.env.STRIPE_WEBHOOK_SECRET) {
-    console.error("⚠️  STRIPE_WEBHOOK_SECRET is not set in environment variables");
-    return NextResponse.json({ error: "Webhook secret not configured" }, { status: 500 });
+  const webhookSecret = getStripeWebhookSecret()
+  if (!webhookSecret) {
+    return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 500 })
   }
 
-  // 2. Verify the event actually came from Stripe
-  let event: Stripe.Event;
+  let event: Stripe.Event
   try {
-    event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error(`⚠️  Webhook signature verification failed: ${message}`);
-    return NextResponse.json({ error: `Webhook Error: ${message}` }, { status: 400 });
+    const body = await req.text()
+    event = getStripe().webhooks.constructEvent(body, signature, webhookSecret)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    console.error('[stripe-webhook] Signature verification failed:', message)
+    return NextResponse.json({ error: `Webhook Error: ${message}` }, { status: 400 })
   }
 
-  console.log(`✅ Stripe webhook received: ${event.type}`);
-
-  // 3. Handle each event type
   try {
     switch (event.type) {
-
-      // ── Checkout completed (first subscription purchase) ──────────────────
-      case "checkout.session.completed": {
-        const session = event.data.object as Stripe.Checkout.Session;
-        const customerId = session.customer as string;
-        const subscriptionId = session.subscription as string;
-        const customerEmail = session.customer_email || session.customer_details?.email;
-
-        if (!customerEmail) break;
-
-        await supabase
-          .from("subscriptions")
-          .upsert({
-            stripe_customer_id: customerId,
-            stripe_subscription_id: subscriptionId,
-            email: customerEmail,
-            status: "active",
-            updated_at: new Date().toISOString(),
-          }, { onConflict: "email" });
-
-        // Also update the user's plan in the profiles table
-        await supabase
-          .from("profiles")
-          .update({
-            stripe_customer_id: customerId,
-            subscription_status: "active",
-          })
-          .eq("email", customerEmail);
-
-        console.log(`✅ Checkout completed for ${customerEmail}`);
-        break;
+      case 'checkout.session.completed': {
+        const session = event.data.object as Stripe.Checkout.Session
+        if (typeof session.subscription === 'string') {
+          const subscription = await getStripe().subscriptions.retrieve(session.subscription)
+          await upsertFromSubscription(subscription, session.metadata)
+        } else {
+          const githubId = getGithubIdFromMetadata(session.metadata)
+          const customerId = typeof session.customer === 'string' ? session.customer : null
+          if (githubId && customerId) {
+            await upsertSubscription({ github_id: githubId, stripe_customer_id: customerId })
+          }
+        }
+        break
       }
 
-      // ── Subscription created ───────────────────────────────────────────────
-      case "customer.subscription.created": {
-        const subscription = event.data.object as Stripe.Subscription;
-        const customerId = subscription.customer as string;
-        const priceId = subscription.items.data[0]?.price.id;
-        const plan = getPlanFromPriceId(priceId);
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated': {
+        await upsertFromSubscription(event.data.object as Stripe.Subscription)
+        break
+      }
 
-        // Get customer email from Stripe
-        const customer = await stripe.customers.retrieve(customerId) as Stripe.Customer;
-        const email = customer.email;
-
-        if (!email) break;
-
-        await supabase
-          .from("subscriptions")
-          .upsert({
+      case 'customer.subscription.deleted': {
+        const subscription = event.data.object as Stripe.Subscription
+        const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id
+        const githubId = getGithubIdFromMetadata(subscription.metadata)
+        if (githubId) {
+          await upsertSubscription({
+            github_id: githubId,
             stripe_customer_id: customerId,
             stripe_subscription_id: subscription.id,
-            email,
-            status: subscription.status,
-            plan,
-            current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-            updated_at: new Date().toISOString(),
-          }, { onConflict: "stripe_subscription_id" });
-
-        await supabase
-          .from("profiles")
-          .update({ plan, subscription_status: subscription.status })
-          .eq("email", email);
-
-        console.log(`✅ Subscription created: ${email} → ${plan}`);
-        break;
+            plan: 'free',
+            status: 'canceled',
+            current_period_end: getCurrentPeriodEnd(subscription),
+          })
+        }
+        break
       }
 
-      // ── Subscription updated (plan change, renewal, etc.) ─────────────────
-      case "customer.subscription.updated": {
-        const subscription = event.data.object as Stripe.Subscription;
-        const customerId = subscription.customer as string;
-        const priceId = subscription.items.data[0]?.price.id;
-        const plan = getPlanFromPriceId(priceId);
-
-        const customer = await stripe.customers.retrieve(customerId) as Stripe.Customer;
-        const email = customer.email;
-
-        if (!email) break;
-
-        await supabase
-          .from("subscriptions")
-          .update({
-            status: subscription.status,
-            plan,
-            current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .eq("stripe_subscription_id", subscription.id);
-
-        await supabase
-          .from("profiles")
-          .update({ plan, subscription_status: subscription.status })
-          .eq("email", email);
-
-        console.log(`✅ Subscription updated: ${email} → ${plan} (${subscription.status})`);
-        break;
-      }
-
-      // ── Subscription cancelled/deleted ────────────────────────────────────
-      case "customer.subscription.deleted": {
-        const subscription = event.data.object as Stripe.Subscription;
-        const customerId = subscription.customer as string;
-
-        const customer = await stripe.customers.retrieve(customerId) as Stripe.Customer;
-        const email = customer.email;
-
-        if (!email) break;
-
-        await supabase
-          .from("subscriptions")
-          .update({
-            status: "canceled",
-            plan: "free",
-            updated_at: new Date().toISOString(),
-          })
-          .eq("stripe_subscription_id", subscription.id);
-
-        await supabase
-          .from("profiles")
-          .update({ plan: "free", subscription_status: "canceled" })
-          .eq("email", email);
-
-        console.log(`✅ Subscription cancelled: ${email}`);
-        break;
-      }
-
-      // ── Invoice paid (recurring renewal) ─────────────────────────────────
-      case "invoice.payment_succeeded": {
-        const invoice = event.data.object as Stripe.Invoice;
-        const subscriptionId = invoice.subscription as string;
-
-        if (!subscriptionId) break;
-
-        // Update period end on renewal
-        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-        await supabase
-          .from("subscriptions")
-          .update({
-            status: "active",
-            current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .eq("stripe_subscription_id", subscriptionId);
-
-        console.log(`✅ Invoice paid for subscription: ${subscriptionId}`);
-        break;
-      }
-
-      // ── Invoice payment failed ────────────────────────────────────────────
-      case "invoice.payment_failed": {
-        const invoice = event.data.object as Stripe.Invoice;
-        const customerId = invoice.customer as string;
-
-        const customer = await stripe.customers.retrieve(customerId) as Stripe.Customer;
-        const email = customer.email;
-
-        if (!email) break;
-
-        await supabase
-          .from("subscriptions")
-          .update({
-            status: "past_due",
-            updated_at: new Date().toISOString(),
-          })
-          .eq("stripe_customer_id", customerId);
-
-        await supabase
-          .from("profiles")
-          .update({ subscription_status: "past_due" })
-          .eq("email", email);
-
-        console.log(`⚠️  Payment failed for: ${email}`);
-        break;
+      case 'invoice.payment_succeeded':
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object as Stripe.Invoice
+        const subscriptionId = getInvoiceSubscriptionId(invoice)
+        if (subscriptionId) {
+          const subscription = await getStripe().subscriptions.retrieve(subscriptionId)
+          await upsertFromSubscription(subscription)
+        }
+        break
       }
 
       default:
-        console.log(`ℹ️  Unhandled event type: ${event.type}`);
+        console.log('[stripe-webhook] Unhandled event type:', event.type)
     }
   } catch (error) {
-    console.error("❌ Error processing webhook event:", error);
-    // Still return 200 so Stripe doesn't keep retrying for logic errors
-    return NextResponse.json({ received: true, warning: "Processing error" }, { status: 200 });
+    console.error('[stripe-webhook] Error processing event:', error)
+    return NextResponse.json({ received: true, warning: 'Processing error' }, { status: 200 })
   }
 
-  // 4. Always return 200 so Stripe knows we received the event
-  return NextResponse.json({ received: true }, { status: 200 });
+  return NextResponse.json({ received: true })
 }
 
-// ─── Block all other HTTP methods ─────────────────────────────────────────────
-// This prevents the 405 error Stripe was getting before
 export async function GET() {
-  return NextResponse.json({ error: "Method not allowed" }, { status: 405 });
+  return NextResponse.json({ error: 'Method not allowed' }, { status: 405 })
 }

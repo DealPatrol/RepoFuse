@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAllRepositories, createRepository, getSubscriptionByGithubId, upsertSubscription } from '@/lib/queries'
 import { getCurrentUser } from '@/lib/auth'
-import { PLANS } from '@/lib/stripe'
+import { isPaidPlan, PLANS } from '@/lib/stripe'
 
 export async function GET() {
   try {
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
       if (!sub) {
         sub = await upsertSubscription({ github_id: user.github_id }).catch(() => null)
       }
-      if (sub && sub.plan !== 'pro') {
+      if (sub && !isPaidPlan(sub.plan)) {
         const repos = await getAllRepositories()
         if (repos.length >= PLANS.free.repos_limit) {
           return NextResponse.json(

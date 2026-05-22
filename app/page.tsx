@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
 import { RepoFuseLogo3D } from '@/components/repofuse-logo-3d'
 import { NavDropdown } from '@/components/nav-dropdown'
 import { Github, ArrowRight, AlertCircle, Zap } from 'lucide-react'
@@ -220,7 +219,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
               </div>
               <h2 className="text-4xl md:text-5xl font-black text-white mb-3">
                 Everything your repos<br />
-                <span className="text-cyan-400">have been waiting for</span>
+                <span className="text-cyan-400">have been waiting</span><span className="text-white"> for</span>
               </h2>
             </div>
 
@@ -251,7 +250,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
               <span className="text-cyan-400">already in your repos</span>
             </h2>
             <p className="text-lg text-gray-400 mb-8">
-              Join 2,400+ developers who've stopped guessing and started shipping.
+              Join 2,400+ developers who&apos;ve stopped guessing and started shipping.
             </p>
             <a
               href="/api/auth/github/login"

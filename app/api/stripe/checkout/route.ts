@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${appUrl}/dashboard?upgraded=true`,
       cancel_url: `${appUrl}/pricing`,
+      metadata: { github_id: String(user.github_id), plan },
       subscription_data: {
         metadata: { github_id: String(user.github_id), plan },
       },

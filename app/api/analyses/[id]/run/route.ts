@@ -20,7 +20,7 @@ import {
   incrementAnalysisUsage,
 } from '@/lib/queries'
 import { getAnthropicModel } from '@/lib/anthropic-model'
-import { PLANS } from '@/lib/stripe'
+import { isPaidPlan, PLANS } from '@/lib/stripe'
 
 // Schema for AI-generated app blueprints
 const complexityEnum = z.preprocess((val) => {
@@ -162,7 +162,7 @@ export async function POST(
           if (!sub) {
             sub = await upsertSubscription({ github_id: user.github_id }).catch(() => null)
           }
-          if (sub && sub.plan !== 'pro') {
+          if (sub && !isPaidPlan(sub.plan)) {
             const limit = PLANS.free.analyses_per_month
             if (sub.analyses_used_this_month >= limit) {
               send({ error: `You've reached your free plan limit of ${limit} analyses per month. Upgrade to Pro for unlimited analyses.`, status: 'failed' })

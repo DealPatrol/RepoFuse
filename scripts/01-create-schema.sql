@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   github_id BIGINT NOT NULL UNIQUE REFERENCES user_auth(github_id),
   stripe_customer_id VARCHAR(255) UNIQUE,
   stripe_subscription_id VARCHAR(255) UNIQUE,
-  plan VARCHAR(50) DEFAULT 'free' CHECK (plan IN ('free', 'pro')),
+  plan VARCHAR(50) DEFAULT 'free' CHECK (plan IN ('free', 'byok', 'pro', 'scale')),
   status VARCHAR(50) DEFAULT 'active' CHECK (status IN ('active', 'past_due', 'canceled', 'trialing')),
   current_period_end TIMESTAMP WITH TIME ZONE,
   analyses_used_this_month INTEGER DEFAULT 0,
