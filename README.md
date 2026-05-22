@@ -4,12 +4,13 @@ An AI-powered code intelligence platform that scans your GitHub repositories and
 
 ## Features
 
-- **GitHub OAuth**: Connect your GitHub account with a single click (read-only access)
+- **GitHub App Auth**: Connect your GitHub account with a single click using GitHub App user authorization
 - **Repository Management**: Add and manage GitHub repositories for analysis
 - **AI Code Analysis**: AI scans every file to identify purpose, exports, and reusability
 - **App Blueprint Discovery**: Discover applications you can build from your existing code
 - **Gap Analysis**: See exactly which files you're missing and generate them with AI
 - **Export**: Download blueprint JSON for offline use or share with your team
+- **Stripe Billing**: Real checkout flow for RepoFuse Pro upgrades and billing management
 
 ## Tech Stack
 
@@ -18,14 +19,14 @@ An AI-powered code intelligence platform that scans your GitHub repositories and
 - **AI**: Vercel AI SDK (OpenAI GPT-4)
 - **UI Components**: Shadcn UI with Radix primitives
 - **Styling**: Tailwind CSS v4
-- **Auth**: GitHub OAuth (custom, read-only)
+- **Auth**: GitHub App user authorization (custom)
 
 ## Project Structure
 
 ```
 app/
 ├── api/                              # API Routes
-│   ├── auth/github/callback/         # GitHub OAuth callback
+│   ├── auth/github/callback/         # GitHub App callback
 │   ├── github/repos/                 # Fetch user's GitHub repos
 │   ├── github/create-repo/           # Create repo from blueprint
 │   ├── repositories/                 # Repository CRUD
@@ -63,7 +64,12 @@ scripts/
 - `github_id`: Unique GitHub user ID
 - `github_username`: GitHub login name
 - `github_avatar_url`: Profile picture URL
-- `access_token`: OAuth token (stored securely)
+- `access_token`: GitHub user access token
+- `stripe_customer_id`: Stripe customer linked to the user
+- `stripe_subscription_id`: Active or latest Stripe subscription id
+- `stripe_price_id`: Stripe price id for the user’s current plan
+- `plan_tier`: free / pro
+- `subscription_status`: Stripe subscription status
 
 ### repositories
 - `github_id`: Unique GitHub repo ID
@@ -130,10 +136,57 @@ pnpm dev
 6. **Access the application**
 Open http://localhost:3000 in your browser
 
+## RepoFuse MCP Server
+
+This repo now includes a standalone stdio MCP server at `mcp/repofuse.mjs`.
+
+### What it exposes
+- `list_github_repositories`
+- `analyze_repositories`
+- `generate_scaffold`
+- `create_repo_from_blueprint`
+
+### Environment variables
+The MCP server expects:
+- `GITHUB_TOKEN`
+- `ANTHROPIC_API_KEY`
+- optional: `REPOFUSE_MODEL`, `REPOFUSE_MAX_FILES_PER_REPO`, `REPOFUSE_MAX_BLUEPRINTS`
+
+### Run it locally
+```bash
+pnpm mcp:repofuse
+```
+
+### Smoke-test the MCP server
+```bash
+pnpm mcp:test
+```
+
+Use the live variant when you want to verify startup with real credentials:
+```bash
+pnpm mcp:test:live
+```
+
+### Streamable HTTP endpoint inside RepoFuse
+RepoFuse also exposes a stateless MCP endpoint at `/api/mcp` for authenticated web-app sessions.
+It reuses the same RepoFuse MCP tool definitions as the stdio server.
+
+### Example Claude Desktop config
+See `examples/claude-desktop.mcp.json`.
+
+### Example Cursor config
+See `examples/cursor.mcp.json`.
+
+### Repo-ready Cursor workspace config
+See `.cursor/mcp.json`.
+
+### Full MCP setup guide
+See `docs/MCP_SETUP.md` and `docs/CLIENT_SETUP_QUICK.md`.
+
 ## API Endpoints
 
 ### Authentication
-- `GET /api/auth/github/callback` - GitHub OAuth callback
+- `GET /api/auth/github/callback` - GitHub App callback
 
 ### Repositories
 - `GET /api/repositories` - List tracked repositories
@@ -142,8 +195,14 @@ Open http://localhost:3000 in your browser
 - `DELETE /api/repositories/[id]` - Remove repository
 
 ### GitHub
-- `GET /api/github/repos` - Fetch user's GitHub repos (OAuth)
-- `POST /api/github/create-repo` - Create new repo from blueprint
+- `GET /api/github/repos` - Fetch repos available to the signed-in GitHub App user
+- `POST /api/github/create-repo` - Create new repo from blueprint (Pro)
+
+### Billing
+- `GET /pricing` - Pricing page
+- `GET /api/checkout?plan=pro` - Start Stripe checkout for Pro
+- `GET /api/checkout/success` - Finalize successful checkout and sync subscription
+- `GET /api/billing/portal` - Open Stripe billing portal
 
 ### Analyses
 - `GET /api/analyses` - List analyses
@@ -162,11 +221,12 @@ Open http://localhost:3000 in your browser
 1. Push your code to GitHub
 2. Connect your repository to Vercel
 3. Add environment variables in Vercel dashboard (see `.env.example`)
+   - For paid upgrades, create a recurring Stripe Price for RepoFuse Pro and set `STRIPE_SECRET_KEY` and `STRIPE_PRO_PRICE_ID`
 4. Deploy
 
 ## Security
 
-- GitHub OAuth uses read-only scopes — we never write to your repos
+- GitHub App permissions are fine-grained and should be configured read-only for analysis access
 - Access tokens are stored in the database (encrypt at rest in production)
 - Code is scanned in memory; file contents are never permanently stored
 - All API routes validate authentication via session cookie
