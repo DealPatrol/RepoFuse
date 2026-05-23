@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import {
+  getSubscriptionByStripeCustomerId,
+  getUserByGithubId,
+  updateUserBilling,
+  upsertSubscription,
+} from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -18,27 +23,133 @@ function getStripeClient(): Stripe {
   return _stripe;
 }
 
-let _supabase: SupabaseClient | null = null;
-function getSupabaseClient(): SupabaseClient {
-  if (_supabase) return _supabase;
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceKey) {
-    throw new Error("Supabase env vars are not configured");
-  }
-  _supabase = createClient(url, serviceKey);
-  return _supabase;
-}
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function getPlanFromPriceId(priceId: string): string {
-  const priceMap: Record<string, string> = {
-    [process.env.STRIPE_PRICE_PRO_MONTHLY || ""]: "pro",
-    [process.env.STRIPE_PRICE_PRO_YEARLY || ""]: "pro",
-    [process.env.STRIPE_PRICE_STARTER_MONTHLY || ""]: "starter",
-  };
-  return priceMap[priceId] || "free";
+type PlanTier = "free" | "pro";
+type DbSubscriptionStatus = "active" | "past_due" | "canceled" | "trialing";
+
+function parseGithubId(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getCustomerId(
+  customer: string | Stripe.Customer | Stripe.DeletedCustomer | null,
+): string | null {
+  if (!customer) return null;
+  return typeof customer === "string" ? customer : customer.id;
+}
+
+function normalizeSubscriptionStatus(status: string): DbSubscriptionStatus {
+  if (status === "active" || status === "trialing" || status === "past_due") {
+    return status;
+  }
+  return "canceled";
+}
+
+function getPlanFromPriceId(priceId: string | null | undefined): PlanTier {
+  if (!priceId) return "free";
+  const paidPriceIds = new Set(
+    [
+      process.env.STRIPE_PRO_PRICE_ID,
+      process.env.STRIPE_SCALE_PRICE_ID,
+      process.env.STRIPE_PRICE_PRO_MONTHLY,
+      process.env.STRIPE_PRICE_PRO_YEARLY,
+    ].filter(Boolean),
+  );
+  return paidPriceIds.has(priceId) ? "pro" : "free";
+}
+
+function getPlanFromSubscription(subscription: Stripe.Subscription): PlanTier {
+  const metadataPlan = subscription.metadata?.plan;
+  if (metadataPlan === "pro" || metadataPlan === "scale") {
+    return "pro";
+  }
+  return getPlanFromPriceId(subscription.items.data[0]?.price.id);
+}
+
+function getCurrentPeriodEnd(subscription: Stripe.Subscription): string | null {
+  const periodEnd = (subscription as unknown as { current_period_end?: number }).current_period_end;
+  return typeof periodEnd === "number" ? new Date(periodEnd * 1000).toISOString() : null;
+}
+
+async function getGithubIdFromCustomer(customerId: string): Promise<number | null> {
+  const existingSubscription = await getSubscriptionByStripeCustomerId(customerId).catch(() => null);
+  if (existingSubscription?.github_id) {
+    return existingSubscription.github_id;
+  }
+
+  const customer = await getStripeClient().customers.retrieve(customerId);
+  if ("deleted" in customer && customer.deleted) {
+    return null;
+  }
+  return parseGithubId(customer.metadata?.github_id);
+}
+
+async function resolveGithubId(
+  customerId: string | null,
+  ...metadataSources: Array<Stripe.Metadata | null | undefined>
+): Promise<number | null> {
+  for (const metadata of metadataSources) {
+    const githubId = parseGithubId(metadata?.github_id);
+    if (githubId) {
+      return githubId;
+    }
+  }
+
+  return customerId ? getGithubIdFromCustomer(customerId) : null;
+}
+
+async function syncSubscriptionToNeon(
+  subscription: Stripe.Subscription,
+  ...metadataSources: Array<Stripe.Metadata | null | undefined>
+): Promise<void> {
+  const customerId = getCustomerId(subscription.customer);
+  const githubId = await resolveGithubId(customerId, subscription.metadata, ...metadataSources);
+
+  if (!githubId) {
+    throw new Error(`Unable to resolve GitHub user for Stripe subscription ${subscription.id}`);
+  }
+
+  const dbStatus = normalizeSubscriptionStatus(subscription.status);
+  const isActive = dbStatus === "active" || dbStatus === "trialing";
+  const plan = isActive ? getPlanFromSubscription(subscription) : "free";
+  const priceId = subscription.items.data[0]?.price.id ?? null;
+
+  await upsertSubscription({
+    github_id: githubId,
+    stripe_customer_id: customerId,
+    stripe_subscription_id: subscription.id,
+    plan,
+    status: dbStatus,
+    current_period_end: getCurrentPeriodEnd(subscription),
+  });
+
+  const user = await getUserByGithubId(githubId);
+  if (!user) {
+    console.warn(`[stripe webhook] No user_auth row found for GitHub user ${githubId}`);
+    return;
+  }
+
+  await updateUserBilling(user.id, {
+    stripe_customer_id: customerId,
+    stripe_subscription_id: subscription.id,
+    stripe_price_id: priceId,
+    plan_tier: plan,
+    subscription_status: subscription.status,
+  });
+}
+
+async function getSubscriptionFromCheckoutSession(
+  session: Stripe.Checkout.Session,
+): Promise<Stripe.Subscription> {
+  if (!session.subscription) {
+    throw new Error(`Checkout session ${session.id} did not include a subscription`);
+  }
+  return typeof session.subscription === "string"
+    ? getStripeClient().subscriptions.retrieve(session.subscription)
+    : session.subscription;
 }
 
 // ─── Webhook Handler ──────────────────────────────────────────────────────────
@@ -77,125 +188,38 @@ export async function POST(req: NextRequest) {
       // ── Checkout completed (first subscription purchase) ──────────────────
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
-        const customerId = session.customer as string;
-        const subscriptionId = session.subscription as string;
-        const customerEmail = session.customer_email || session.customer_details?.email;
+        const subscription = await getSubscriptionFromCheckoutSession(session);
 
-        if (!customerEmail) break;
+        await syncSubscriptionToNeon(subscription, session.metadata);
 
-        await getSupabaseClient()
-          .from("subscriptions")
-          .upsert({
-            stripe_customer_id: customerId,
-            stripe_subscription_id: subscriptionId,
-            email: customerEmail,
-            status: "active",
-            updated_at: new Date().toISOString(),
-          }, { onConflict: "email" });
-
-        // Also update the user's plan in the profiles table
-        await getSupabaseClient()
-          .from("profiles")
-          .update({
-            stripe_customer_id: customerId,
-            subscription_status: "active",
-          })
-          .eq("email", customerEmail);
-
-        console.log(`✅ Checkout completed for ${customerEmail}`);
+        console.log(`✅ Checkout completed for subscription ${subscription.id}`);
         break;
       }
 
       // ── Subscription created ───────────────────────────────────────────────
       case "customer.subscription.created": {
         const subscription = event.data.object as Stripe.Subscription;
-        const customerId = subscription.customer as string;
-        const priceId = subscription.items.data[0]?.price.id;
-        const plan = getPlanFromPriceId(priceId);
+        await syncSubscriptionToNeon(subscription);
 
-        // Get customer email from Stripe
-        const customer = await getStripeClient().customers.retrieve(customerId) as Stripe.Customer;
-        const email = customer.email;
-
-        if (!email) break;
-
-        await getSupabaseClient()
-          .from("subscriptions")
-          .upsert({
-            stripe_customer_id: customerId,
-            stripe_subscription_id: subscription.id,
-            email,
-            status: subscription.status,
-            plan,
-            current_period_end: new Date((subscription as unknown as { current_period_end: number }).current_period_end * 1000).toISOString(),
-            updated_at: new Date().toISOString(),
-          }, { onConflict: "stripe_subscription_id" });
-
-        await getSupabaseClient()
-          .from("profiles")
-          .update({ plan, subscription_status: subscription.status })
-          .eq("email", email);
-
-        console.log(`✅ Subscription created: ${email} → ${plan}`);
+        console.log(`✅ Subscription created: ${subscription.id}`);
         break;
       }
 
       // ── Subscription updated (plan change, renewal, etc.) ─────────────────
       case "customer.subscription.updated": {
         const subscription = event.data.object as Stripe.Subscription;
-        const customerId = subscription.customer as string;
-        const priceId = subscription.items.data[0]?.price.id;
-        const plan = getPlanFromPriceId(priceId);
+        await syncSubscriptionToNeon(subscription);
 
-        const customer = await getStripeClient().customers.retrieve(customerId) as Stripe.Customer;
-        const email = customer.email;
-
-        if (!email) break;
-
-        await getSupabaseClient()
-          .from("subscriptions")
-          .update({
-            status: subscription.status,
-            plan,
-            current_period_end: new Date((subscription as unknown as { current_period_end: number }).current_period_end * 1000).toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .eq("stripe_subscription_id", subscription.id);
-
-        await getSupabaseClient()
-          .from("profiles")
-          .update({ plan, subscription_status: subscription.status })
-          .eq("email", email);
-
-        console.log(`✅ Subscription updated: ${email} → ${plan} (${subscription.status})`);
+        console.log(`✅ Subscription updated: ${subscription.id} (${subscription.status})`);
         break;
       }
 
       // ── Subscription cancelled/deleted ────────────────────────────────────
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
-        const customerId = subscription.customer as string;
+        await syncSubscriptionToNeon(subscription);
 
-        const customer = await getStripeClient().customers.retrieve(customerId) as Stripe.Customer;
-        const email = customer.email;
-
-        if (!email) break;
-
-        await getSupabaseClient()
-          .from("subscriptions")
-          .update({
-            status: "canceled",
-            plan: "free",
-            updated_at: new Date().toISOString(),
-          })
-          .eq("stripe_subscription_id", subscription.id);
-
-        await getSupabaseClient()
-          .from("profiles")
-          .update({ plan: "free", subscription_status: "canceled" })
-          .eq("email", email);
-
-        console.log(`✅ Subscription cancelled: ${email}`);
+        console.log(`✅ Subscription cancelled: ${subscription.id}`);
         break;
       }
 
@@ -208,14 +232,7 @@ export async function POST(req: NextRequest) {
 
         // Update period end on renewal
         const subscription = await getStripeClient().subscriptions.retrieve(subscriptionId);
-        await getSupabaseClient()
-          .from("subscriptions")
-          .update({
-            status: "active",
-            current_period_end: new Date((subscription as unknown as { current_period_end: number }).current_period_end * 1000).toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .eq("stripe_subscription_id", subscriptionId);
+        await syncSubscriptionToNeon(subscription);
 
         console.log(`✅ Invoice paid for subscription: ${subscriptionId}`);
         break;
@@ -224,27 +241,14 @@ export async function POST(req: NextRequest) {
       // ── Invoice payment failed ────────────────────────────────────────────
       case "invoice.payment_failed": {
         const invoice = event.data.object as Stripe.Invoice;
-        const customerId = invoice.customer as string;
+        const subscriptionId = (invoice as unknown as { subscription?: string }).subscription as string | undefined;
 
-        const customer = await getStripeClient().customers.retrieve(customerId) as Stripe.Customer;
-        const email = customer.email;
+        if (subscriptionId) {
+          const subscription = await getStripeClient().subscriptions.retrieve(subscriptionId);
+          await syncSubscriptionToNeon(subscription);
+        }
 
-        if (!email) break;
-
-        await getSupabaseClient()
-          .from("subscriptions")
-          .update({
-            status: "past_due",
-            updated_at: new Date().toISOString(),
-          })
-          .eq("stripe_customer_id", customerId);
-
-        await getSupabaseClient()
-          .from("profiles")
-          .update({ subscription_status: "past_due" })
-          .eq("email", email);
-
-        console.log(`⚠️  Payment failed for: ${email}`);
+        console.log(`⚠️  Payment failed for subscription: ${subscriptionId ?? "unknown"}`);
         break;
       }
 
@@ -253,8 +257,7 @@ export async function POST(req: NextRequest) {
     }
   } catch (error) {
     console.error("❌ Error processing webhook event:", error);
-    // Still return 200 so Stripe doesn't keep retrying for logic errors
-    return NextResponse.json({ received: true, warning: "Processing error" }, { status: 200 });
+    return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });
   }
 
   // 4. Always return 200 so Stripe knows we received the event
