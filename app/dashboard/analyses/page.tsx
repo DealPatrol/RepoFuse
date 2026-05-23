@@ -10,8 +10,8 @@ export default async function AnalysesPage() {
   try {
     analyses = await getAllAnalyses()
     repositories = await getAllRepositories()
-  } catch {
-    // Database not available
+  } catch (error) {
+    console.error('[analyses] Failed to load page data:', error)
   }
 
   return <AnalysesList analyses={analyses} repositories={repositories} />

@@ -33,7 +33,8 @@ export default async function AnalysisDetailPage({
       getRepositoriesForAnalysis(id),
       getBlueprintsByAnalysis(id),
     ])
-  } catch {
+  } catch (error) {
+    console.error('[analysis-detail] Failed to load analysis data:', error)
     notFound()
   }
 
@@ -46,8 +47,8 @@ export default async function AnalysisDetailPage({
       userPlan = subscription?.plan || 'free'
       viewedBlueprintIds = viewedIds
       isTrialing = subscription?.status === 'trialing'
-    } catch {
-      // Subscription/views table not available yet — use free defaults
+    } catch (error) {
+      console.error('[analysis-detail] Failed to load subscription/views, using free defaults:', error)
     }
   }
 
