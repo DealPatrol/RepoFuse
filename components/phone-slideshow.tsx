@@ -9,18 +9,28 @@ const SLIDES = [
     label: 'DISCOVER',
     title: 'Ideas ranked by viability',
     desc: 'AI surfaces the best apps hiding in your code, scored and ready to build.',
+    desktop: false,
   },
   {
     src: '/screenshots/build-modal.png',
     label: 'BUILD',
     title: 'Generate all missing files',
     desc: 'Select an idea, pick GitHub or GitLab, and Claude writes every missing file.',
+    desktop: false,
   },
   {
     src: '/screenshots/build-progress.png',
     label: 'SHIP',
     title: 'Watch it deploy in 30 seconds',
     desc: 'File generation, repo creation, and push — all automated end-to-end.',
+    desktop: false,
+  },
+  {
+    src: '/screenshots/result.png',
+    label: 'LAUNCHED',
+    title: 'Your app, live',
+    desc: 'A real, working product — built from your existing code in one session.',
+    desktop: true,
   },
 ]
 
@@ -121,14 +131,45 @@ export function PhoneSlideshow() {
                   zIndex: i === current ? 10 : 1,
                 }}
               >
-                <Image
-                  src={slide.src}
-                  alt={slide.label}
-                  fill
-                  sizes="270px"
-                  className="object-cover object-top"
-                  priority={i === 0}
-                />
+                {slide.desktop ? (
+                  /* Desktop screenshot — shown scaled inside a mini browser chrome */
+                  <div className="absolute inset-0 bg-[#0d0d14] flex flex-col">
+                    {/* Mini browser chrome */}
+                    <div className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-[#1a1a2e] border-b border-white/8">
+                      <div className="w-2 h-2 rounded-full bg-red-500/70" />
+                      <div className="w-2 h-2 rounded-full bg-yellow-500/70" />
+                      <div className="w-2 h-2 rounded-full bg-green-500/70" />
+                      <div className="ml-2 flex-1 rounded bg-white/8 px-2 py-0.5 text-[8px] font-mono text-gray-500 truncate">
+                        memorialqr.com
+                      </div>
+                    </div>
+                    {/* Screenshot scaled to fit */}
+                    <div className="relative flex-1 overflow-hidden">
+                      <Image
+                        src={slide.src}
+                        alt={slide.label}
+                        fill
+                        sizes="270px"
+                        className="object-cover object-top"
+                        priority={false}
+                      />
+                      {/* "LIVE" badge overlay */}
+                      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-green-500/90 text-black text-[10px] font-bold px-3 py-1 rounded-full shadow-lg">
+                        <span className="w-1.5 h-1.5 rounded-full bg-black/60 animate-pulse" />
+                        LIVE
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <Image
+                    src={slide.src}
+                    alt={slide.label}
+                    fill
+                    sizes="270px"
+                    className="object-cover object-top"
+                    priority={i === 0}
+                  />
+                )}
               </div>
             ))}
 
@@ -141,7 +182,7 @@ export function PhoneSlideshow() {
       {/* Caption + nav */}
       <div className="flex flex-col gap-8 max-w-sm text-center md:text-left">
         <div className="space-y-1">
-          <p className="text-xs font-mono font-bold tracking-[0.2em] text-cyan-400 uppercase">
+          <p className={`text-xs font-mono font-bold tracking-[0.2em] uppercase ${SLIDES[current].desktop ? 'text-green-400' : 'text-cyan-400'}`}>
             {SLIDES[current].label}
           </p>
           <h3
@@ -167,11 +208,11 @@ export function PhoneSlideshow() {
             >
               <div
                 className={`w-1 self-stretch rounded-full flex-shrink-0 transition-colors duration-300 ${
-                  i === current ? 'bg-cyan-400' : 'bg-white/15'
+                  i === current ? (slide.desktop ? 'bg-green-400' : 'bg-cyan-400') : 'bg-white/15'
                 }`}
               />
               <div>
-                <p className={`text-xs font-mono font-bold tracking-wider uppercase mb-0.5 transition-colors ${i === current ? 'text-cyan-400' : 'text-gray-500'}`}>
+                <p className={`text-xs font-mono font-bold tracking-wider uppercase mb-0.5 transition-colors ${i === current ? (slide.desktop ? 'text-green-400' : 'text-cyan-400') : 'text-gray-500'}`}>
                   {slide.label}
                 </p>
                 <p className={`text-sm font-semibold transition-colors ${i === current ? 'text-white' : 'text-gray-400'}`}>
@@ -191,7 +232,7 @@ export function PhoneSlideshow() {
               aria-label={`Go to slide ${i + 1}`}
               className={`rounded-full transition-all duration-300 ${
                 i === current
-                  ? 'w-6 h-2 bg-cyan-400'
+                  ? `w-6 h-2 ${SLIDES[i].desktop ? 'bg-green-400' : 'bg-cyan-400'}`
                   : 'w-2 h-2 bg-white/20 hover:bg-white/40'
               }`}
             />
