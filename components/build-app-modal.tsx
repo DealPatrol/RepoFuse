@@ -87,7 +87,8 @@ export function BuildAppModal({ blueprint, open, onOpenChange }: BuildAppModalPr
 
       if (!res.ok || !res.body) {
         const data = await res.json().catch(() => ({}))
-        setStep({ id: 'error', message: (data as { error?: string }).error ?? 'Request failed' })
+        const fallback = `Request failed (HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ''})`
+        setStep({ id: 'error', message: (data as { error?: string }).error ?? fallback })
         return
       }
 
@@ -156,7 +157,7 @@ export function BuildAppModal({ blueprint, open, onOpenChange }: BuildAppModalPr
       setStep({
         id: 'error',
         message: msg === 'Load failed' || msg === 'Failed to fetch'
-          ? 'Connection timed out — please try again. Large projects can take up to 60 seconds.'
+          ? 'Connection timed out — please try again. Large projects can take up to 2 minutes.'
           : msg,
       })
     }
@@ -278,7 +279,7 @@ export function BuildAppModal({ blueprint, open, onOpenChange }: BuildAppModalPr
                 </div>
               </div>
 
-              {platform === 'github' && (
+              {platform === 'github' ? (
                 <Button
                   className="w-full shadow-lg shadow-primary/20"
                   onClick={() => setLaunchPreviewOpen(true)}
@@ -286,6 +287,11 @@ export function BuildAppModal({ blueprint, open, onOpenChange }: BuildAppModalPr
                   <Rocket className="h-4 w-4 mr-2" />
                   Launch Preview on Vercel
                 </Button>
+              ) : (
+                <p className="text-xs text-center text-muted-foreground">
+                  One-click Vercel preview is available for GitHub repositories. Deploy your
+                  GitLab repository from the Vercel dashboard.
+                </p>
               )}
 
               <Button variant={platform === 'github' ? 'outline' : 'default'} className="w-full" asChild>
