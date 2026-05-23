@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { RepoFuseLogo3D } from '@/components/repofuse-logo-3d'
 import { NavDropdown } from '@/components/nav-dropdown'
+import { PhoneSlideshow } from '@/components/phone-slideshow'
 import { Github, ArrowRight, AlertCircle, Zap } from 'lucide-react'
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -176,6 +177,24 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
                   <p className="text-xs text-gray-500 uppercase tracking-widest">{m.label}</p>
                 </div>
               ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Phone Slideshow — See it in action */}
+        <section className="py-20 border-b border-white/5">
+          <div className="container mx-auto px-4 max-w-5xl">
+            <div className="text-center mb-14">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 mb-5 text-xs font-mono text-gray-400">
+                SEE IT IN ACTION
+              </div>
+              <h2 className="text-4xl md:text-5xl font-black text-white mb-3">
+                From idea to GitHub<br />
+                <span className="text-cyan-400">in under a minute</span>
+              </h2>
+            </div>
+            <div className="flex justify-center">
+              <PhoneSlideshow />
             </div>
           </div>
         </section>
