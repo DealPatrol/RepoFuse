@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { getDb } from '@/lib/db'
 import { GITHUB_ACCESS_TOKEN_COOKIE } from '@/lib/auth'
 import { upsertSubscription } from '@/lib/queries'
+import { DEFAULT_GITHUB_RETURN_TO, getSafeRedirectPath } from '@/lib/redirects'
 
 function getBaseUrl(request: NextRequest) {
   return process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest) {
     const errorDescription = searchParams.get('error_description')
     const cookieStore = await cookies()
     const savedState = cookieStore.get('github_oauth_state')?.value
-    const returnTo = cookieStore.get('github_oauth_return_to')?.value || '/dashboard/repositories?connected=github'
+    const returnTo = getSafeRedirectPath(cookieStore.get('github_oauth_return_to')?.value, DEFAULT_GITHUB_RETURN_TO)
 
     if (error) {
       console.error('[v0] GitHub returned OAuth error:', error, errorDescription)
