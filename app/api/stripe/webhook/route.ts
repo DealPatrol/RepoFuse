@@ -1,268 +1,231 @@
-import { NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { NextRequest, NextResponse } from 'next/server'
+import { getStripe } from '@/lib/stripe'
+import {
+  getSubscriptionByStripeCustomerId,
+  getUserByGithubId,
+  updateUserBilling,
+  upsertSubscription,
+} from '@/lib/queries'
+import { CREDITS, grantCredits } from '@/lib/credits'
+import type Stripe from 'stripe'
 
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
-// ─── Lazy clients (avoid build-time evaluation) ──────────────────────────────
+const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing'])
 
-let _stripe: Stripe | null = null;
-function getStripeClient(): Stripe {
-  if (_stripe) return _stripe;
-  const key = process.env.STRIPE_SECRET_KEY;
-  if (!key) {
-    throw new Error("STRIPE_SECRET_KEY is not configured");
-  }
-  _stripe = new Stripe(key);
-  return _stripe;
+function getPeriodEnd(subscription: Stripe.Subscription): string | null {
+  const periodEnd = (subscription as unknown as { current_period_end?: number }).current_period_end
+  return periodEnd ? new Date(periodEnd * 1000).toISOString() : null
 }
 
-let _supabase: SupabaseClient | null = null;
-function getSupabaseClient(): SupabaseClient {
-  if (_supabase) return _supabase;
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceKey) {
-    throw new Error("Supabase env vars are not configured");
+function normalizeSubscriptionStatus(status: Stripe.Subscription.Status): 'active' | 'past_due' | 'canceled' | 'trialing' {
+  if (status === 'active' || status === 'trialing' || status === 'past_due') {
+    return status
   }
-  _supabase = createClient(url, serviceKey);
-  return _supabase;
+
+  return 'canceled'
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+async function syncBillingState({
+  githubId,
+  stripeCustomerId,
+  stripeSubscriptionId,
+  stripePriceId,
+  status,
+  currentPeriodEnd,
+}: {
+  githubId: number
+  stripeCustomerId?: string | null
+  stripeSubscriptionId?: string | null
+  stripePriceId?: string | null
+  status: Stripe.Subscription.Status
+  currentPeriodEnd?: string | null
+}) {
+  const plan = ACTIVE_SUBSCRIPTION_STATUSES.has(status) ? 'pro' : 'free'
+  const normalizedStatus = normalizeSubscriptionStatus(status)
 
-function getPlanFromPriceId(priceId: string): string {
-  const priceMap: Record<string, string> = {
-    [process.env.STRIPE_PRICE_PRO_MONTHLY || ""]: "pro",
-    [process.env.STRIPE_PRICE_PRO_YEARLY || ""]: "pro",
-    [process.env.STRIPE_PRICE_STARTER_MONTHLY || ""]: "starter",
-  };
-  return priceMap[priceId] || "free";
+  await upsertSubscription({
+    github_id: githubId,
+    stripe_customer_id: stripeCustomerId ?? null,
+    stripe_subscription_id: stripeSubscriptionId ?? null,
+    plan,
+    status: normalizedStatus,
+    current_period_end: currentPeriodEnd ?? null,
+  })
+
+  const user = await getUserByGithubId(githubId)
+  if (user) {
+    await updateUserBilling(user.id, {
+      stripe_customer_id: stripeCustomerId ?? null,
+      stripe_subscription_id: stripeSubscriptionId ?? null,
+      stripe_price_id: stripePriceId ?? null,
+      plan_tier: plan,
+      subscription_status: normalizedStatus,
+    })
+  }
+
+  return user
 }
 
-// ─── Webhook Handler ──────────────────────────────────────────────────────────
-
-export async function POST(req: NextRequest) {
-  // 1. Get the raw body — required for Stripe signature verification
-  const body = await req.text();
-  const sig = req.headers.get("stripe-signature");
-
-  if (!sig) {
-    console.error("⚠️  Missing stripe-signature header");
-    return NextResponse.json({ error: "Missing signature" }, { status: 400 });
-  }
-
-  if (!process.env.STRIPE_WEBHOOK_SECRET) {
-    console.error("⚠️  STRIPE_WEBHOOK_SECRET is not set in environment variables");
-    return NextResponse.json({ error: "Webhook secret not configured" }, { status: 500 });
-  }
-
-  // 2. Verify the event actually came from Stripe
-  let event: Stripe.Event;
+async function grantSignupCredits(githubId: number, customerId: string) {
   try {
-    event = getStripeClient().webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error(`⚠️  Webhook signature verification failed: ${message}`);
-    return NextResponse.json({ error: `Webhook Error: ${message}` }, { status: 400 });
+    const user = await getUserByGithubId(githubId)
+    if (!user) return
+
+    await grantCredits(user.id, CREDITS.INITIAL_GRANT, 'Pro plan signup bonus', {
+      stripe_customer_id: customerId,
+    })
+  } catch (error) {
+    console.error('[stripe-webhook] Failed to grant signup credits:', error)
+  }
+}
+
+async function grantRenewalCredits(githubId: number, invoice: Stripe.Invoice) {
+  try {
+    if (!invoice.number || invoice.number === '0001') return
+
+    const user = await getUserByGithubId(githubId)
+    if (!user) return
+
+    await grantCredits(user.id, CREDITS.MONTHLY_GRANT, 'Monthly subscription renewal', {
+      invoice_id: invoice.id,
+      stripe_customer_id: invoice.customer as string,
+    })
+  } catch (error) {
+    console.error('[stripe-webhook] Failed to grant renewal credits:', error)
+  }
+}
+
+export async function POST(request: NextRequest) {
+  const body = await request.text()
+  const signature = request.headers.get('stripe-signature')
+
+  if (!signature || !process.env.STRIPE_WEBHOOK_SECRET || !process.env.STRIPE_SECRET_KEY) {
+    return NextResponse.json({ error: 'Webhook not configured' }, { status: 400 })
   }
 
-  console.log(`✅ Stripe webhook received: ${event.type}`);
+  let stripe: ReturnType<typeof getStripe>
+  try {
+    stripe = getStripe()
+  } catch {
+    return NextResponse.json({ error: 'Stripe not configured' }, { status: 503 })
+  }
 
-  // 3. Handle each event type
+  let event: Stripe.Event
+  try {
+    event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET)
+  } catch (error) {
+    console.error('[stripe-webhook] Signature verification failed:', error)
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
+  }
+
   try {
     switch (event.type) {
+      case 'checkout.session.completed': {
+        const session = event.data.object as Stripe.Checkout.Session
+        if (session.mode !== 'subscription' || !session.customer || !session.subscription) {
+          break
+        }
 
-      // ── Checkout completed (first subscription purchase) ──────────────────
-      case "checkout.session.completed": {
-        const session = event.data.object as Stripe.Checkout.Session;
-        const customerId = session.customer as string;
-        const subscriptionId = session.subscription as string;
-        const customerEmail = session.customer_email || session.customer_details?.email;
+        const subscription = await stripe.subscriptions.retrieve(session.subscription as string)
+        const githubId = Number(subscription.metadata.github_id || session.metadata?.github_id)
+        if (!githubId) {
+          throw new Error(`Missing github_id metadata for checkout session ${session.id}`)
+        }
 
-        if (!customerEmail) break;
-
-        await getSupabaseClient()
-          .from("subscriptions")
-          .upsert({
-            stripe_customer_id: customerId,
-            stripe_subscription_id: subscriptionId,
-            email: customerEmail,
-            status: "active",
-            updated_at: new Date().toISOString(),
-          }, { onConflict: "email" });
-
-        // Also update the user's plan in the profiles table
-        await getSupabaseClient()
-          .from("profiles")
-          .update({
-            stripe_customer_id: customerId,
-            subscription_status: "active",
-          })
-          .eq("email", customerEmail);
-
-        console.log(`✅ Checkout completed for ${customerEmail}`);
-        break;
+        await syncBillingState({
+          githubId,
+          stripeCustomerId: session.customer as string,
+          stripeSubscriptionId: subscription.id,
+          stripePriceId: subscription.items.data[0]?.price.id ?? null,
+          status: subscription.status,
+          currentPeriodEnd: getPeriodEnd(subscription),
+        })
+        await grantSignupCredits(githubId, session.customer as string)
+        break
       }
 
-      // ── Subscription created ───────────────────────────────────────────────
-      case "customer.subscription.created": {
-        const subscription = event.data.object as Stripe.Subscription;
-        const customerId = subscription.customer as string;
-        const priceId = subscription.items.data[0]?.price.id;
-        const plan = getPlanFromPriceId(priceId);
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated': {
+        const subscription = event.data.object as Stripe.Subscription
+        const existing = await getSubscriptionByStripeCustomerId(subscription.customer as string)
+        const githubId = Number(subscription.metadata.github_id || existing?.github_id)
+        if (!githubId) {
+          throw new Error(`Missing github_id for subscription ${subscription.id}`)
+        }
 
-        // Get customer email from Stripe
-        const customer = await getStripeClient().customers.retrieve(customerId) as Stripe.Customer;
-        const email = customer.email;
-
-        if (!email) break;
-
-        await getSupabaseClient()
-          .from("subscriptions")
-          .upsert({
-            stripe_customer_id: customerId,
-            stripe_subscription_id: subscription.id,
-            email,
-            status: subscription.status,
-            plan,
-            current_period_end: new Date((subscription as unknown as { current_period_end: number }).current_period_end * 1000).toISOString(),
-            updated_at: new Date().toISOString(),
-          }, { onConflict: "stripe_subscription_id" });
-
-        await getSupabaseClient()
-          .from("profiles")
-          .update({ plan, subscription_status: subscription.status })
-          .eq("email", email);
-
-        console.log(`✅ Subscription created: ${email} → ${plan}`);
-        break;
+        await syncBillingState({
+          githubId,
+          stripeCustomerId: subscription.customer as string,
+          stripeSubscriptionId: subscription.id,
+          stripePriceId: subscription.items.data[0]?.price.id ?? null,
+          status: subscription.status,
+          currentPeriodEnd: getPeriodEnd(subscription),
+        })
+        break
       }
 
-      // ── Subscription updated (plan change, renewal, etc.) ─────────────────
-      case "customer.subscription.updated": {
-        const subscription = event.data.object as Stripe.Subscription;
-        const customerId = subscription.customer as string;
-        const priceId = subscription.items.data[0]?.price.id;
-        const plan = getPlanFromPriceId(priceId);
+      case 'customer.subscription.deleted': {
+        const subscription = event.data.object as Stripe.Subscription
+        const existing = await getSubscriptionByStripeCustomerId(subscription.customer as string)
+        const githubId = Number(subscription.metadata.github_id || existing?.github_id)
+        if (!githubId) {
+          throw new Error(`Missing github_id for deleted subscription ${subscription.id}`)
+        }
 
-        const customer = await getStripeClient().customers.retrieve(customerId) as Stripe.Customer;
-        const email = customer.email;
-
-        if (!email) break;
-
-        await getSupabaseClient()
-          .from("subscriptions")
-          .update({
-            status: subscription.status,
-            plan,
-            current_period_end: new Date((subscription as unknown as { current_period_end: number }).current_period_end * 1000).toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .eq("stripe_subscription_id", subscription.id);
-
-        await getSupabaseClient()
-          .from("profiles")
-          .update({ plan, subscription_status: subscription.status })
-          .eq("email", email);
-
-        console.log(`✅ Subscription updated: ${email} → ${plan} (${subscription.status})`);
-        break;
+        await syncBillingState({
+          githubId,
+          stripeCustomerId: subscription.customer as string,
+          stripeSubscriptionId: subscription.id,
+          stripePriceId: subscription.items.data[0]?.price.id ?? null,
+          status: 'canceled',
+          currentPeriodEnd: getPeriodEnd(subscription),
+        })
+        break
       }
 
-      // ── Subscription cancelled/deleted ────────────────────────────────────
-      case "customer.subscription.deleted": {
-        const subscription = event.data.object as Stripe.Subscription;
-        const customerId = subscription.customer as string;
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object as Stripe.Invoice
+        if (!invoice.customer) break
 
-        const customer = await getStripeClient().customers.retrieve(customerId) as Stripe.Customer;
-        const email = customer.email;
-
-        if (!email) break;
-
-        await getSupabaseClient()
-          .from("subscriptions")
-          .update({
-            status: "canceled",
-            plan: "free",
-            updated_at: new Date().toISOString(),
+        const existing = await getSubscriptionByStripeCustomerId(invoice.customer as string)
+        if (existing) {
+          await upsertSubscription({
+            github_id: existing.github_id,
+            status: 'past_due',
+            plan: 'free',
           })
-          .eq("stripe_subscription_id", subscription.id);
 
-        await getSupabaseClient()
-          .from("profiles")
-          .update({ plan: "free", subscription_status: "canceled" })
-          .eq("email", email);
-
-        console.log(`✅ Subscription cancelled: ${email}`);
-        break;
+          const user = await getUserByGithubId(existing.github_id)
+          if (user) {
+            await updateUserBilling(user.id, {
+              plan_tier: 'free',
+              subscription_status: 'past_due',
+            })
+          }
+        }
+        break
       }
 
-      // ── Invoice paid (recurring renewal) ─────────────────────────────────
-      case "invoice.payment_succeeded": {
-        const invoice = event.data.object as Stripe.Invoice;
-        const subscriptionId = (invoice as unknown as { subscription?: string }).subscription as string | undefined;
+      case 'invoice.payment_succeeded': {
+        const invoice = event.data.object as Stripe.Invoice
+        if (!invoice.customer) break
 
-        if (!subscriptionId) break;
-
-        // Update period end on renewal
-        const subscription = await getStripeClient().subscriptions.retrieve(subscriptionId);
-        await getSupabaseClient()
-          .from("subscriptions")
-          .update({
-            status: "active",
-            current_period_end: new Date((subscription as unknown as { current_period_end: number }).current_period_end * 1000).toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .eq("stripe_subscription_id", subscriptionId);
-
-        console.log(`✅ Invoice paid for subscription: ${subscriptionId}`);
-        break;
-      }
-
-      // ── Invoice payment failed ────────────────────────────────────────────
-      case "invoice.payment_failed": {
-        const invoice = event.data.object as Stripe.Invoice;
-        const customerId = invoice.customer as string;
-
-        const customer = await getStripeClient().customers.retrieve(customerId) as Stripe.Customer;
-        const email = customer.email;
-
-        if (!email) break;
-
-        await getSupabaseClient()
-          .from("subscriptions")
-          .update({
-            status: "past_due",
-            updated_at: new Date().toISOString(),
-          })
-          .eq("stripe_customer_id", customerId);
-
-        await getSupabaseClient()
-          .from("profiles")
-          .update({ subscription_status: "past_due" })
-          .eq("email", email);
-
-        console.log(`⚠️  Payment failed for: ${email}`);
-        break;
+        const existing = await getSubscriptionByStripeCustomerId(invoice.customer as string)
+        if (existing) {
+          await grantRenewalCredits(existing.github_id, invoice)
+        }
+        break
       }
 
       default:
-        console.log(`ℹ️  Unhandled event type: ${event.type}`);
+        break
     }
   } catch (error) {
-    console.error("❌ Error processing webhook event:", error);
-    // Still return 200 so Stripe doesn't keep retrying for logic errors
-    return NextResponse.json({ received: true, warning: "Processing error" }, { status: 200 });
+    console.error('[stripe-webhook] Handler error:', error)
+    return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 })
   }
 
-  // 4. Always return 200 so Stripe knows we received the event
-  return NextResponse.json({ received: true }, { status: 200 });
-}
-
-// ─── Block all other HTTP methods ─────────────────────────────────────────────
-// This prevents the 405 error Stripe was getting before
-export async function GET() {
-  return NextResponse.json({ error: "Method not allowed" }, { status: 405 });
+  return NextResponse.json({ received: true })
 }

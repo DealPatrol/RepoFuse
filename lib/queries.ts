@@ -350,15 +350,24 @@ export async function deleteBlueprintsByAnalysis(analysisId: string): Promise<vo
   await sql`DELETE FROM app_blueprints WHERE analysis_id = ${analysisId}`
 }
 
+export async function deleteBlueprintsByIds(ids: string[]): Promise<void> {
+  if (ids.length === 0) return
+
+  const sql = getDb()
+  for (const id of ids) {
+    await sql`DELETE FROM app_blueprints WHERE id = ${id}`
+  }
+}
+
 export async function updateUserBilling(userId: string, data: UserBillingUpdate): Promise<void> {
   const sql = getDb()
   await sql`
     UPDATE user_auth SET
       stripe_customer_id = COALESCE(${data.stripe_customer_id ?? null}, stripe_customer_id),
-      stripe_subscription_id = ${data.stripe_subscription_id ?? null},
-      stripe_price_id = ${data.stripe_price_id ?? null},
+      stripe_subscription_id = COALESCE(${data.stripe_subscription_id ?? null}, stripe_subscription_id),
+      stripe_price_id = COALESCE(${data.stripe_price_id ?? null}, stripe_price_id),
       plan_tier = COALESCE(${data.plan_tier ?? null}, plan_tier),
-      subscription_status = ${data.subscription_status ?? null},
+      subscription_status = COALESCE(${data.subscription_status ?? null}, subscription_status),
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ${userId}
   `

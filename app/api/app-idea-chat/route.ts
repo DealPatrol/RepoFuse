@@ -8,7 +8,7 @@ import {
 } from '@/lib/queries'
 import { getAnthropicModel } from '@/lib/anthropic-model'
 import { getCurrentUser } from '@/lib/auth'
-import { deductCredits, CREDITS } from '@/lib/credits'
+import { deductCredits, refundCredits, CREDITS } from '@/lib/credits'
 
 let __anthropicClient: Anthropic | null = null
 function getAnthropic(): Anthropic {
@@ -44,7 +44,24 @@ export interface ChatMessage {
   content: string
 }
 
+async function refundFailedChatCredits(
+  userId: string,
+  analysisId: string | undefined,
+  reason: string,
+) {
+  try {
+    await refundCredits(userId, CREDITS.PATTERN_ANALYZER_COST, reason, {
+      analysisId,
+      feature: 'app_idea_chat',
+    })
+  } catch (error) {
+    console.error('[app-idea-chat] failed to refund credits:', error)
+  }
+}
+
 export async function POST(request: NextRequest) {
+  let refundContext: { userId: string; analysisId?: string } | null = null
+
   try {
     const user = await getCurrentUser()
     if (!user) {
@@ -70,6 +87,7 @@ export async function POST(request: NextRequest) {
     if (!creditResult.success) {
       return NextResponse.json({ error: creditResult.error || 'Insufficient credits' }, { status: 402 })
     }
+    refundContext = { userId: user.id, analysisId }
 
     // Optionally load codebase context
     let codebaseContext = ''
@@ -164,12 +182,22 @@ Always respond with valid JSON only (no markdown fences):
     try {
       parsed = JSON.parse(jsonText)
     } catch {
+      await refundFailedChatCredits(user.id, analysisId, 'App Idea Chat returned an invalid AI response')
+      refundContext = null
       return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 })
     }
 
+    refundContext = null
     return NextResponse.json(parsed)
   } catch (error) {
     console.error('[app-idea-chat] error:', error)
+    if (refundContext) {
+      await refundFailedChatCredits(
+        refundContext.userId,
+        refundContext.analysisId,
+        'App Idea Chat failed before completing',
+      )
+    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
