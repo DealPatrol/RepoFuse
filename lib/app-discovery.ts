@@ -1,6 +1,15 @@
 import { Anthropic } from '@anthropic-ai/sdk'
 
-const anthropic = new Anthropic()
+let __anthropicClient: Anthropic | null = null
+function getAnthropic(): Anthropic {
+  if (__anthropicClient) return __anthropicClient
+  const key = process.env.ANTHROPIC_API_KEY
+  if (!key) {
+    throw new Error('ANTHROPIC_API_KEY is not configured')
+  }
+  __anthropicClient = new Anthropic({ apiKey: key })
+  return __anthropicClient
+}
 
 export interface DiscoveredApp {
   name: string
@@ -44,7 +53,7 @@ For each app, provide:
 
 Format as JSON array with objects containing these fields.`
 
-  const response = await anthropic.messages.create({
+  const response = await getAnthropic().messages.create({
     model: 'claude-3-5-sonnet-20241022',
     max_tokens: 8000,
     messages: [

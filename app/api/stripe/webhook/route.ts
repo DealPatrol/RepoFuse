@@ -182,3 +182,8 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({ received: true })
 }
+
+/** Stripe probes with GET; explicit 405 avoids ambiguous routing errors. */
+export async function GET() {
+  return NextResponse.json({ error: 'Method not allowed' }, { status: 405 })
+}

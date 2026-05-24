@@ -72,3 +72,15 @@ export type PlanId = keyof typeof PLANS
 export function getPriceId(): string {
   return process.env.STRIPE_PRO_PRICE_ID || ''
 }
+
+export function getProPriceId(): string {
+  const priceId = process.env.STRIPE_PRO_PRICE_ID
+  if (!priceId) {
+    throw new Error('STRIPE_PRO_PRICE_ID is not configured')
+  }
+  return priceId
+}
+
+export function getAppUrl(origin?: string): string {
+  return process.env.NEXT_PUBLIC_APP_URL || origin || 'http://localhost:3000'
+}

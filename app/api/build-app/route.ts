@@ -4,7 +4,16 @@ import { getCurrentUser } from '@/lib/auth'
 import { getAnthropicModel } from '@/lib/anthropic-model'
 import type { AppBlueprint } from '@/lib/queries'
 
-const anthropic = new Anthropic()
+let __anthropicClient: Anthropic | null = null
+function getAnthropic(): Anthropic {
+  if (__anthropicClient) return __anthropicClient
+  const key = process.env.ANTHROPIC_API_KEY
+  if (!key) {
+    throw new Error('ANTHROPIC_API_KEY is not configured')
+  }
+  __anthropicClient = new Anthropic({ apiKey: key })
+  return __anthropicClient
+}
 
 type Platform = 'github' | 'gitlab'
 
@@ -59,7 +68,7 @@ Rules:
 Return format: {"path/to/file.ts": "...full content...", "README.md": "..."}
 `
 
-  const response = await anthropic.messages.create({
+  const response = await getAnthropic().messages.create({
     model: getAnthropicModel(),
     max_tokens: 8192,
     messages: [{ role: 'user', content: prompt }],
