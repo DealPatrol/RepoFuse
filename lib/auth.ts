@@ -9,6 +9,11 @@ export interface AuthUser {
   github_username: string
   github_avatar_url: string | null
   access_token: string
+  stripe_customer_id: string | null
+  stripe_subscription_id: string | null
+  stripe_price_id: string | null
+  plan_tier: 'free' | 'pro' | null
+  subscription_status: string | null
 }
 
 async function fetchGitHubUserFromToken(accessToken: string): Promise<{
@@ -46,7 +51,8 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   try {
     const sql = getDb()
     const users = await sql`
-      SELECT id, github_id, github_username, github_avatar_url, access_token
+      SELECT id, github_id, github_username, github_avatar_url, access_token,
+             stripe_customer_id, stripe_subscription_id, stripe_price_id, plan_tier, subscription_status
       FROM user_auth
       WHERE github_id = ${githubId}
       LIMIT 1
@@ -63,6 +69,11 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
           access_token: tokenCookie,
           github_username: gh.login,
           github_avatar_url: gh.avatar_url,
+          stripe_customer_id: row.stripe_customer_id ?? null,
+          stripe_subscription_id: row.stripe_subscription_id ?? null,
+          stripe_price_id: row.stripe_price_id ?? null,
+          plan_tier: row.plan_tier ?? null,
+          subscription_status: row.subscription_status ?? null,
         }
       }
     }
@@ -79,6 +90,11 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
         github_username: gh.login,
         github_avatar_url: gh.avatar_url,
         access_token: tokenCookie,
+        stripe_customer_id: null,
+        stripe_subscription_id: null,
+        stripe_price_id: null,
+        plan_tier: null,
+        subscription_status: null,
       }
     }
   }

@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAllRepositories, createRepository, getSubscriptionByGithubId, upsertSubscription } from '@/lib/queries'
 import { getCurrentUser } from '@/lib/auth'
+import { isPaidPlan, PLANS } from '@/lib/stripe'
 import { PLANS } from '@/lib/stripe'
+import { createRepositoryRequestSchema, parseGitHubRepositoryUrl } from '@/lib/schemas'
 
 export async function GET() {
   try {
+    const user = await getCurrentUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
     const repositories = await getAllRepositories()
     return NextResponse.json(repositories)
   } catch (error) {
@@ -21,7 +29,7 @@ export async function POST(request: NextRequest) {
       if (!sub) {
         sub = await upsertSubscription({ github_id: user.github_id }).catch(() => null)
       }
-      if (sub && sub.plan !== 'pro') {
+      if (sub && !isPaidPlan(sub.plan)) {
         const repos = await getAllRepositories()
         if (repos.length >= PLANS.free.repos_limit) {
           return NextResponse.json(
@@ -29,33 +37,49 @@ export async function POST(request: NextRequest) {
             { status: 403 },
           )
         }
+
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    let sub = await getSubscriptionByGithubId(user.github_id).catch(() => null)
+    if (!sub) {
+      sub = await upsertSubscription({ github_id: user.github_id }).catch(() => null)
+    }
+    if (sub && sub.plan !== 'pro') {
+      const repos = await getAllRepositories()
+      if (repos.length >= PLANS.free.repos_limit) {
+        return NextResponse.json(
+          { error: `Free plan is limited to ${PLANS.free.repos_limit} repositories. Upgrade to Pro for unlimited repos.` },
+          { status: 403 },
+        )
       }
     }
 
-    const body = await request.json()
-    const { url } = body
+    const parsedBody = createRepositoryRequestSchema.safeParse(await request.json())
 
-    if (!url) {
-      return NextResponse.json({ error: 'Repository URL is required' }, { status: 400 })
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: parsedBody.error.issues[0]?.message ?? 'Invalid repository URL' }, { status: 400 })
     }
 
-    const match = url.match(/github\.com\/([^\/]+)\/([^\/]+)/i)
-    if (!match) {
+    const parsedRepo = parseGitHubRepositoryUrl(parsedBody.data.url)
+
+    if (!parsedRepo) {
       return NextResponse.json({ error: 'Invalid GitHub repository URL' }, { status: 400 })
     }
 
-    const [, owner, repo] = match
-    const repoName = repo.replace(/\.git$/, '')
+    const { owner, repo } = parsedRepo
 
-    const githubRes = await fetch(`https://api.github.com/repos/${owner}/${repoName}`, {
+    const githubRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
       headers: {
-        'Accept': 'application/vnd.github.v3+json',
+        Authorization: `Bearer ${user.access_token}`,
+        Accept: 'application/vnd.github.v3+json',
         'User-Agent': 'RepoFuse',
       },
     })
 
     if (!githubRes.ok) {
-      if (githubRes.status === 404) {
+      if (githubRes.status === 404 || githubRes.status === 403) {
         return NextResponse.json({ error: 'Repository not found' }, { status: 404 })
       }
       return NextResponse.json({ error: 'Failed to fetch repository from GitHub' }, { status: 500 })

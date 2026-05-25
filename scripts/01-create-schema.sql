@@ -8,9 +8,20 @@ CREATE TABLE IF NOT EXISTS user_auth (
   github_username VARCHAR(255) NOT NULL,
   github_avatar_url TEXT,
   access_token TEXT NOT NULL,
+  stripe_customer_id TEXT,
+  stripe_subscription_id TEXT,
+  stripe_price_id TEXT,
+  plan_tier VARCHAR(20) DEFAULT 'free' CHECK (plan_tier IN ('free', 'pro')),
+  subscription_status VARCHAR(50),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE user_auth ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;
+ALTER TABLE user_auth ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;
+ALTER TABLE user_auth ADD COLUMN IF NOT EXISTS stripe_price_id TEXT;
+ALTER TABLE user_auth ADD COLUMN IF NOT EXISTS plan_tier VARCHAR(20) DEFAULT 'free';
+ALTER TABLE user_auth ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(50);
 
 -- Repositories table (GitHub repos added by users)
 CREATE TABLE IF NOT EXISTS repositories (
@@ -92,7 +103,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   github_id BIGINT NOT NULL UNIQUE REFERENCES user_auth(github_id),
   stripe_customer_id VARCHAR(255) UNIQUE,
   stripe_subscription_id VARCHAR(255) UNIQUE,
-  plan VARCHAR(50) DEFAULT 'free' CHECK (plan IN ('free', 'pro')),
+  plan VARCHAR(50) DEFAULT 'free' CHECK (plan IN ('free', 'byok', 'pro', 'scale')),
   status VARCHAR(50) DEFAULT 'active' CHECK (status IN ('active', 'past_due', 'canceled', 'trialing')),
   current_period_end TIMESTAMP WITH TIME ZONE,
   analyses_used_this_month INTEGER DEFAULT 0,

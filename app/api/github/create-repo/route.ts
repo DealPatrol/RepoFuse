@@ -1,22 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUser } from '@/lib/auth'
-
-interface TemplateApp {
-  app_name: string
-  app_type: string
-  description: string
-  technologies: string[]
-  difficulty_level: string
-  ai_explanation: string
-  missing_files: string[]
-}
+import { getCurrentAccessToken } from '@/lib/auth'
+import { requirePro } from '@/lib/billing'
+import { createGitHubRepositoryFromBlueprint } from '@/lib/repofuse-core.js'
+import { createGitHubRepositoryRequestSchema } from '@/lib/schemas'
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getCurrentUser()
+    const [accessToken, proAccess] = await Promise.all([
+      getCurrentAccessToken(),
+      requirePro(),
+    ])
 
-    if (!user) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    if (!proAccess.ok) {
+      return proAccess.response
     }
 
     const { app, repoName, scaffoldFiles } = (await request.json()) as {
@@ -27,30 +23,14 @@ export async function POST(request: NextRequest) {
 
     if (!repoName || repoName.trim().length === 0) {
       return NextResponse.json({ error: 'Repository name required' }, { status: 400 })
+    if (!accessToken) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    const accessToken = user.access_token
-    const githubUsername = user.github_username
+    const parsedBody = createGitHubRepositoryRequestSchema.safeParse(await request.json())
 
-    // Create repository on GitHub
-    const createRepoRes = await fetch('https://api.github.com/user/repos', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Accept': 'application/vnd.github+json',
-      },
-      body: JSON.stringify({
-        name: repoName,
-        description: app.description,
-        private: false,
-        auto_init: true,
-        gitignore_template: app.app_type === 'React App' ? 'Node' : 'Node',
-      }),
-    })
-
-    if (!createRepoRes.ok) {
-      const error = await createRepoRes.json()
-      return NextResponse.json({ error: error.message }, { status: 400 })
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: parsedBody.error.issues[0]?.message ?? 'Invalid repository request' }, { status: 400 })
     }
 
     const newRepo = await createRepoRes.json()
@@ -69,14 +49,17 @@ export async function POST(request: NextRequest) {
         accessToken
       )
     }
+    const result = await createGitHubRepositoryFromBlueprint({
+      accessToken,
+      repoName: parsedBody.data.repoName,
+      app: parsedBody.data.app,
+      privateRepo: false,
+    })
 
     return NextResponse.json({
       success: true,
-      repository: {
-        name: newRepo.name,
-        url: newRepo.html_url,
-        clone_url: newRepo.clone_url,
-      },
+      repository: result.repository,
+      filesCreated: result.files_created,
     })
   } catch (error) {
     console.error('Error creating repository:', error)
@@ -173,5 +156,9 @@ build/
 *.log
 .DS_Store
 `,
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to create repository' },
+      { status: 500 },
+    )
   }
 }
