@@ -1,5 +1,5 @@
 import { getCurrentUser } from '@/lib/auth'
-import { getAllAnalyses, getSubscriptionByGithubId, type Analysis } from '@/lib/queries'
+import { getAllAnalyses, getSubscriptionByGithubId } from '@/lib/queries'
 import { isPaidPlan } from '@/lib/stripe'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'

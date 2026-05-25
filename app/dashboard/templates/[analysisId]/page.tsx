@@ -3,9 +3,8 @@ import Link from 'next/link'
 import { ArrowLeft, Rocket, Zap, Lightbulb } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { TemplateAssemblyCard } from '@/components/template-assembly-card'
-import { getAllAnalyses, getAllTemplates, type Template } from '@/lib/queries'
+import { getAllAnalyses, getAllTemplates, type Analysis, type Template } from '@/lib/queries'
 import { getCurrentUser } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
@@ -24,9 +23,9 @@ function LoadingSkeleton() {
 }
 
 async function TemplatesByAnalysisContent({ analysisId }: { analysisId: string }) {
-  let analyses = []
+  let analyses: Analysis[] = []
   let allTemplates: Template[] = []
-  let currentAnalysis = null
+  let currentAnalysis: Analysis | null = null
   let filteredTemplates: Template[] = []
 
   try {
@@ -38,37 +37,7 @@ async function TemplatesByAnalysisContent({ analysisId }: { analysisId: string }
       ])
     }
 
-    currentAnalysis = analyses.find(a => a.id === analysisId)
-    
-    if (!currentAnalysis) {
-      return (
-        <div className="space-y-6">
-          <div className="flex items-center gap-3">
-            <Link href="/dashboard/templates/browse">
-              <Button variant="ghost" size="icon">
-                <ArrowLeft className="w-4 h-4" />
-              </Button>
-            </Link>
-            <div>
-              <h1 className="text-3xl font-bold">Analysis not found</h1>
-            </div>
-          </div>
-
-          <Card className="p-12 text-center border-2 border-dashed">
-            <Lightbulb className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <h2 className="text-2xl font-bold mb-2">Analysis not found</h2>
-            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-              The analysis you&apos;re looking for doesn&apos;t exist or has been removed.
-            </p>
-            <Button asChild>
-              <Link href="/dashboard/templates/browse">
-                Back to Templates
-              </Link>
-            </Button>
-          </Card>
-        </div>
-      )
-    }
+    currentAnalysis = analyses.find(a => a.id === analysisId) ?? null
 
     // Filter templates - get blueprints for this analysis and find templates that use them
     // Since we don't have direct analysis->blueprint relation, we filter by checking if templates

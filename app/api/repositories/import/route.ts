@@ -19,15 +19,17 @@ export async function POST(request: NextRequest) {
     }
 
     const user = await getCurrentUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
     let repoLimit = -1
-    if (user) {
-      let sub = await getSubscriptionByGithubId(user.github_id).catch(() => null)
-      if (!sub) {
-        sub = await upsertSubscription({ github_id: user.github_id }).catch(() => null)
-      }
-      if (sub && !isPaidPlan(sub.plan)) {
-        repoLimit = PLANS.free.repos_limit
-      }
+    let sub = await getSubscriptionByGithubId(user.github_id).catch(() => null)
+    if (!sub) {
+      sub = await upsertSubscription({ github_id: user.github_id }).catch(() => null)
+    }
+    if (sub && !isPaidPlan(sub.plan)) {
+      repoLimit = PLANS.free.repos_limit
     }
 
     if (repoLimit > 0) {

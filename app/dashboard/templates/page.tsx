@@ -3,7 +3,6 @@ import Link from 'next/link'
 import { ArrowLeft, Rocket, Zap, Lightbulb } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { TemplateAssemblyCard } from '@/components/template-assembly-card'
 import { CreateTemplateModal } from '@/components/create-template-modal'
 import { getAllTemplates, getFeaturedTemplates, type Template } from '@/lib/queries'
@@ -124,7 +123,7 @@ async function TemplateHubContent() {
               <div>
                 <p className="font-semibold text-sm text-green-900">Ship Faster</p>
                 <p className="text-xs text-green-700/80">
-                  Templates show exactly what's needed to launch
+                  Templates show exactly what&apos;s needed to launch
                 </p>
               </div>
             </div>

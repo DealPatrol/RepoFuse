@@ -157,7 +157,6 @@ export async function POST(
         }
 
         const user = await getCurrentUser()
-        const user = await getCurrentUser()
         if (!user) {
           send({ error: 'Sign in with GitHub before running an analysis.' })
           controller.close()

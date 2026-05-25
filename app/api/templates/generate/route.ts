@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate aggregate metrics from blueprints
-    let totalFiles = 0
+    const totalFiles = 0
     let totalMissingFiles = 0
     let totalEstimatedHours = 0
     let totalReuse = 0

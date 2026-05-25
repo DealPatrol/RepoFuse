@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic'
 export default async function BrowseTemplatesPage() {
   let analyses: Analysis[] = []
   let templates: Template[] = []
-  let templateCounts: Record<string, number> = {}
+  const templateCounts: Record<string, number> = {}
 
   try {
     const user = await getCurrentUser()

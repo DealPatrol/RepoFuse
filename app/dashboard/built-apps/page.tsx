@@ -1,9 +1,9 @@
 import { getCurrentUser } from '@/lib/auth'
-import { getAllAnalyses, type Analysis } from '@/lib/queries'
+import { getAllAnalyses } from '@/lib/queries'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { AppWindow, ExternalLink, Github, ArrowRight, Sparkles } from 'lucide-react'
+import { AppWindow, Github, ArrowRight, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'

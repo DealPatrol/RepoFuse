@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { GapPriorityMatrix } from '@/components/gap-priority-matrix'
 import { MissingFileCard } from '@/components/missing-file-card'
-import { getAllMissingGaps, getGapSummary, getSubscriptionByGithubId } from '@/lib/queries'
+import { getAllMissingGaps, getGapSummary, getSubscriptionByGithubId, type GapSummary, type MissingFileGap } from '@/lib/queries'
 import { groupGapsByPriority, calculateTotalEffort, gapCategories } from '@/lib/gap-priorities'
 import { getCurrentUser } from '@/lib/auth'
 import { isPaidPlan } from '@/lib/stripe'
@@ -123,8 +123,8 @@ function LoadingSkeleton() {
 }
 
 async function GapsDashboardContent({ userId }: { userId: string }) {
-  let gaps: any[] = []
-  let summary: any = { total_gaps: 0, blocking_gaps: 0, total_hours: 0, by_category: {}, completed_count: 0 }
+  let gaps: MissingFileGap[] = []
+  let summary: GapSummary = { total_gaps: 0, blocking_gaps: 0, total_hours: 0, by_category: {}, completed_count: 0 }
   let setupRequired = false
 
   try {
@@ -268,7 +268,7 @@ async function GapsDashboardContent({ userId }: { userId: string }) {
       {/* Priority Groups */}
       <div className="space-y-6">
         {Object.entries(priorityCounts)
-          .filter(([_, count]) => count > 0)
+          .filter((entry) => entry[1] > 0)
           .map(([priority, count]) => (
             <div key={priority} className="space-y-3">
               <div className="flex items-center gap-2">
@@ -306,7 +306,7 @@ async function GapsDashboardContent({ userId }: { userId: string }) {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {Object.entries(categoryGroups).map(([category, categoryGaps]) => {
               const cat = gapCategories[category] || gapCategories.other
-              const gaps_array = categoryGaps as any[]
+              const gaps_array = categoryGaps as MissingFileGap[]
               return (
                 <Card key={category} className="p-3">
                   <div className="flex items-start gap-2">
