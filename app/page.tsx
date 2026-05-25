@@ -3,6 +3,8 @@ import { Button } from '@/components/ui/button'
 import { RepoFuseLogo3D } from '@/components/repofuse-logo-3d'
 import { NavDropdown } from '@/components/nav-dropdown'
 import { Github, ArrowRight, AlertCircle, Zap } from 'lucide-react'
+import { ImpactStats } from '@/components/impact-stats'
+import { Testimonials } from '@/components/testimonials'
 
 const ERROR_MESSAGES: Record<string, string> = {
   auth_required: 'You must sign in to access the dashboard.',
@@ -35,6 +37,26 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         backgroundSize: '256px'
       }} />
 
+      {/* Post-launch offer */}
+      <div className="relative z-30 border-b border-white/10 bg-white/5 px-4 py-4 text-center">
+        <div className="max-w-3xl mx-auto flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8">
+          <RepoFuseLogo3D className="h-12 w-12 shrink-0" />
+          <div className="space-y-1">
+            <p className="text-base sm:text-lg font-bold text-white">
+              Now live — start free today
+            </p>
+            <p className="text-sm text-gray-400">
+              <span className="text-cyan-400 font-semibold">14-day Pro trial</span>
+              {' · '}
+              free tier includes repo scans and blueprint previews
+            </p>
+          </div>
+          <Button size="sm" className="bg-cyan-500 hover:bg-cyan-400 text-black font-bold shrink-0" asChild>
+            <Link href="/pricing">View pricing</Link>
+          </Button>
+        </div>
+      </div>
+
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-white/5 bg-[#0a0a0f]/95 backdrop-blur-xl">
         <div className="container mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
@@ -65,15 +87,12 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         </div>
       </header>
 
-      {/* Hero Section */}
       <main>
         <section className="relative overflow-hidden pt-16 pb-12 sm:pt-20 sm:pb-16">
-          {/* Subtle radial glow */}
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-cyan-500/8 rounded-full blur-3xl -z-10 pointer-events-none" />
           <div className="absolute bottom-0 left-1/4 w-64 h-64 bg-cyan-500/5 rounded-full blur-3xl -z-10 pointer-events-none" />
 
           <div className="container mx-auto px-4 max-w-3xl text-center">
-            {/* Trust badge */}
             <div className="inline-flex items-center gap-3 px-4 py-2.5 rounded-full bg-white/5 border border-white/10 text-sm text-gray-300 mb-10">
               <span className="flex items-center gap-1.5 text-cyan-400 font-semibold">
                 <Zap className="h-3.5 w-3.5" />
@@ -83,19 +102,16 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
               The #1 Repo Intelligence Platform
             </div>
 
-            {/* Headline */}
             <h1 className="text-5xl sm:text-6xl md:text-7xl font-black tracking-tight leading-[1.05] mb-6">
               <span className="block text-white">Your repos are hiding</span>
               <span className="block text-cyan-400 mt-2">buildable apps</span>
             </h1>
 
-            {/* Subheading */}
             <p className="text-lg sm:text-xl text-gray-400 max-w-xl mx-auto leading-relaxed mb-10">
               RepoFuse scans your GitHub and GitLab repos, surfaces project ideas, and turns scattered code into your next launch —{' '}
               <strong className="text-gray-200 font-semibold">automatically.</strong>
             </p>
 
-            {/* Primary CTA */}
             <a
               href="/api/auth/github/login"
               className="inline-flex items-center justify-center gap-2.5 w-full sm:w-auto sm:min-w-72 bg-cyan-500 hover:bg-cyan-400 active:bg-cyan-600 text-black font-bold text-lg px-8 py-4 rounded-2xl transition-all shadow-xl shadow-cyan-500/30 hover:shadow-cyan-400/40 hover:-translate-y-0.5"
@@ -104,24 +120,20 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
               Scan My Repos Free
             </a>
 
-            {/* Sub-text */}
             <p className="text-sm text-gray-500 mt-4">
               Connect in seconds. No credit card required.
             </p>
 
-            {/* Social proof */}
             <div className="flex items-center justify-center gap-2 mt-6 text-xs text-gray-500">
               <div className="flex -space-x-1">
-                {['#22d3ee','#a78bfa','#fb923c','#4ade80'].map((c, i) => (
+                {['#22d3ee', '#a78bfa', '#fb923c', '#4ade80'].map((c, i) => (
                   <div key={i} className="w-6 h-6 rounded-full border-2 border-[#0a0a0f]" style={{ backgroundColor: c + '60' }} />
                 ))}
               </div>
-              <span><strong className="text-cyan-400">2,400+</strong> developers already scanning</span>
+              <span>Join developers turning repos into shippable products</span>
             </div>
 
-            {/* Terminal preview */}
             <div className="mt-14 text-left rounded-2xl overflow-hidden border border-white/10 bg-[#0d0d14] shadow-2xl shadow-black/60">
-              {/* Window chrome */}
               <div className="flex items-center gap-2 px-5 py-3.5 border-b border-white/8 bg-white/3">
                 <div className="w-3 h-3 rounded-full bg-red-500/80" />
                 <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
@@ -133,7 +145,6 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
                 </div>
               </div>
 
-              {/* Content */}
               <div className="p-6 font-mono text-sm space-y-3">
                 <div className="flex gap-3 text-gray-400">
                   <span className="text-cyan-500">$</span>
@@ -161,26 +172,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           </div>
         </section>
 
-        {/* Metrics Strip */}
-        <section className="border-y border-white/5 py-12">
-          <div className="container mx-auto px-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-3xl mx-auto text-center">
-              {[
-                { val: '12k+', label: 'Repos Scanned', color: 'text-cyan-400' },
-                { val: '4.1k', label: 'Ideas Found', color: 'text-orange-400' },
-                { val: '89%', label: 'Code Reuse', color: 'text-purple-400' },
-                { val: '<30s', label: 'Analysis Time', color: 'text-cyan-400' },
-              ].map((m) => (
-                <div key={m.label} className="space-y-1">
-                  <p className={`text-3xl md:text-4xl font-black tabular-nums ${m.color}`}>{m.val}</p>
-                  <p className="text-xs text-gray-500 uppercase tracking-widest">{m.label}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
+        <ImpactStats variant="marketing" />
 
-        {/* How It Works */}
         <section id="how" className="py-20 border-b border-white/5">
           <div className="container mx-auto px-4 max-w-5xl">
             <div className="text-center mb-14">
@@ -211,7 +204,6 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           </div>
         </section>
 
-        {/* Feature Grid */}
         <section id="features" className="py-20">
           <div className="container mx-auto px-4 max-w-5xl">
             <div className="text-center mb-14">
@@ -243,7 +235,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           </div>
         </section>
 
-        {/* Bottom CTA */}
+        <Testimonials variant="marketing" />
+
         <section className="py-20 border-t border-white/5">
           <div className="container mx-auto px-4 max-w-xl text-center">
             <h2 className="text-4xl md:text-5xl font-black text-white mb-4">
@@ -251,7 +244,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
               <span className="text-cyan-400">already in your repos</span>
             </h2>
             <p className="text-lg text-gray-400 mb-8">
-              Join 2,400+ developers who've stopped guessing and started shipping.
+              Connect your repos and get your first blueprint in minutes.
             </p>
             <a
               href="/api/auth/github/login"
@@ -268,10 +261,9 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         </section>
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-white/5 py-8">
         <div className="container mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-600">
-          <span>© 2025 RepoFuse. Built by developers, for developers.</span>
+          <span>© 2026 RepoFuse. Built by developers, for developers.</span>
           <div className="flex items-center gap-4">
             <Link href="/pricing" className="hover:text-gray-400 transition-colors">Pricing</Link>
             <Link href="/dashboard" className="hover:text-gray-400 transition-colors">Dashboard</Link>

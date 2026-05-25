@@ -1,8 +1,7 @@
 'use client'
 
-import * as React from 'react'
 import Link from 'next/link'
-import { ChevronDown, FolderGit2, LineChart, AppWindow, Star, Layout, FileCode, CheckCircle2, AlertTriangle, Lock } from 'lucide-react'
+import { ChevronDown, Lock } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,87 +11,21 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
-
-interface NavItem {
-  label: string
-  href: string
-  icon: React.ElementType
-  description: string
-  isPro: boolean
-}
-
-const NAV_ITEMS: NavItem[] = [
-  {
-    label: 'My Repos',
-    href: '/dashboard/repositories',
-    icon: FolderGit2,
-    description: 'Connected GitHub & GitLab repos',
-    isPro: false,
-  },
-  {
-    label: 'Analysis',
-    href: '/dashboard/analyses',
-    icon: LineChart,
-    description: 'AI-powered repo scans',
-    isPro: false, // Free gets 3, Pro unlimited
-  },
-  {
-    label: 'Already Built Apps',
-    href: '/dashboard/built-apps',
-    icon: AppWindow,
-    description: 'Existing apps detected in your repos',
-    isPro: false,
-  },
-  {
-    label: 'My Most Desired',
-    href: '/dashboard/most-desired',
-    icon: Star,
-    description: 'Your saved and prioritized ideas',
-    isPro: true,
-  },
-  {
-    label: 'Templates',
-    href: '/dashboard/templates/browse',
-    icon: Layout,
-    description: 'Browse AI-generated templates',
-    isPro: false, // Limited for free
-  },
-  {
-    label: 'Blueprints',
-    href: '/dashboard/blueprints',
-    icon: FileCode,
-    description: 'Full project blueprints',
-    isPro: true, // Pro only
-  },
-  {
-    label: 'Completed Projects',
-    href: '/dashboard/completed',
-    icon: CheckCircle2,
-    description: 'Projects you marked as shipped',
-    isPro: false,
-  },
-  {
-    label: 'Missing Code',
-    href: '/dashboard/gaps',
-    icon: AlertTriangle,
-    description: 'Gaps to fill before shipping',
-    isPro: true, // Pro only - high value feature
-  },
-]
+import { MARKETING_DASHBOARD_NAV } from '@/lib/dashboard-nav'
 
 export function NavDropdown() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button 
-          variant="ghost" 
+        <Button
+          variant="ghost"
           className="text-xs font-mono tracking-widest text-cyan-400/60 hover:text-cyan-300 hover:bg-cyan-950/30 uppercase gap-1"
         >
           Dashboard
           <ChevronDown className="h-3 w-3" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent 
+      <DropdownMenuContent
         className="w-72 bg-black/95 border-cyan-500/30 backdrop-blur-xl"
         align="end"
       >
@@ -100,10 +33,10 @@ export function NavDropdown() {
           Your Workspace
         </DropdownMenuLabel>
         <DropdownMenuSeparator className="bg-cyan-500/20" />
-        
-        {NAV_ITEMS.map((item) => (
+
+        {MARKETING_DASHBOARD_NAV.map((item) => (
           <DropdownMenuItem key={item.href} asChild>
-            <Link 
+            <Link
               href={item.href}
               className="flex items-start gap-3 p-3 cursor-pointer hover:bg-cyan-950/30 rounded-md group"
             >
@@ -122,18 +55,16 @@ export function NavDropdown() {
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-gray-500 truncate">
-                  {item.description}
-                </p>
+                <p className="text-xs text-gray-500 truncate">{item.description}</p>
               </div>
             </Link>
           </DropdownMenuItem>
         ))}
-        
+
         <DropdownMenuSeparator className="bg-cyan-500/20" />
-        
+
         <div className="p-3">
-          <Link 
+          <Link
             href="/pricing"
             className="flex items-center justify-center gap-2 w-full py-2 px-4 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 text-black font-bold text-xs rounded-md transition-all uppercase tracking-wide"
           >

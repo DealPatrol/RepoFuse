@@ -112,8 +112,11 @@ export default function PricingPage() {
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-cyan-500/20 bg-black/95 backdrop-blur-xl">
         <div className="container mx-auto px-6 py-3 flex items-center justify-between">
-          <Link href="/" className="flex items-center mt-5">
+          <Link href="/" className="flex items-center gap-2 mt-5">
             <RepoFuseLogo3D className="h-10 w-10" />
+            <span className="text-sm font-mono font-semibold tracking-widest text-cyan-400/80 uppercase hidden sm:inline">
+              RepoFuse
+            </span>
           </Link>
           <nav className="flex items-center gap-4">
             <Link href="/dashboard" className="text-xs font-mono tracking-widest text-cyan-400/60 hover:text-cyan-300 transition-colors uppercase">
