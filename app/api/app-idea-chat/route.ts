@@ -75,11 +75,11 @@ export async function POST(request: NextRequest) {
     let codebaseContext = ''
     if (analysisId) {
       try {
-        const analysis = await getAnalysisById(analysisId)
+        const analysis = await getAnalysisById(analysisId, user.id)
         if (analysis && analysis.status === 'complete') {
           const [repositories, blueprints] = await Promise.all([
-            getRepositoriesForAnalysis(analysisId),
-            getBlueprintsByAnalysis(analysisId),
+            getRepositoriesForAnalysis(analysisId, user.id),
+            getBlueprintsByAnalysis(analysisId, user.id),
           ])
 
           const allFiles = (

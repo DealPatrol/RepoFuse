@@ -6,9 +6,10 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { GapPriorityMatrix } from '@/components/gap-priority-matrix'
 import { MissingFileCard } from '@/components/missing-file-card'
-import { getAllMissingGaps, getGapSummary } from '@/lib/queries'
+import { getAllMissingGaps, getGapSummary, getSubscriptionByGithubId } from '@/lib/queries'
 import { groupGapsByPriority, calculateTotalEffort, gapCategories } from '@/lib/gap-priorities'
 import { getCurrentUser } from '@/lib/auth'
+import { isPaidPlan } from '@/lib/stripe'
 
 export const dynamic = 'force-dynamic'
 
@@ -121,15 +122,15 @@ function LoadingSkeleton() {
   )
 }
 
-async function GapsDashboardContent() {
+async function GapsDashboardContent({ userId }: { userId: string }) {
   let gaps: any[] = []
   let summary: any = { total_gaps: 0, blocking_gaps: 0, total_hours: 0, by_category: {}, completed_count: 0 }
   let setupRequired = false
 
   try {
     [gaps, summary] = await Promise.all([
-      getAllMissingGaps(),
-      getGapSummary(),
+      getAllMissingGaps(userId),
+      getGapSummary(userId),
     ])
   } catch (error) {
     console.error('[v0] Failed to fetch gaps:', error)
@@ -169,8 +170,8 @@ async function GapsDashboardContent() {
 
   try {
     ;[gaps, summary] = await Promise.all([
-      getAllMissingGaps(),
-      getGapSummary(),
+      getAllMissingGaps(userId),
+      getGapSummary(userId),
     ])
   } catch {
     // Database tables may not exist yet
@@ -335,9 +336,10 @@ async function GapsDashboardContent() {
 export default async function GapsDashboardPage() {
   // Check if user is Pro
   const user = await getCurrentUser()
-  const isPro = false // In production: check user?.subscription_tier === 'pro'
+  const subscription = user ? await getSubscriptionByGithubId(user.github_id).catch(() => null) : null
+  const isPro = isPaidPlan(subscription?.plan)
 
-  if (!isPro) {
+  if (!user || !isPro) {
     return (
       <div className="p-6 space-y-6">
         <ProUpgradeGate />
@@ -348,7 +350,7 @@ export default async function GapsDashboardPage() {
   return (
     <div className="p-6 space-y-6">
       <Suspense fallback={<LoadingSkeleton />}>
-        <GapsDashboardContent />
+        <GapsDashboardContent userId={user.id} />
       </Suspense>
     </div>
   )

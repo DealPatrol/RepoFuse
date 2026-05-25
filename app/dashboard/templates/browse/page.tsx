@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { AnalysisSelector } from '@/components/analysis-selector'
 import { getAllAnalyses, getAllTemplates, type Analysis, type Template } from '@/lib/queries'
 import { ArrowLeft } from 'lucide-react'
+import { getCurrentUser } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,10 +13,13 @@ export default async function BrowseTemplatesPage() {
   let templateCounts: Record<string, number> = {}
 
   try {
-    ;[analyses, templates] = await Promise.all([
-      getAllAnalyses(),
-      getAllTemplates(),
-    ])
+    const user = await getCurrentUser()
+    if (user) {
+      ;[analyses, templates] = await Promise.all([
+        getAllAnalyses(user.id),
+        getAllTemplates(user.id),
+      ])
+    }
 
     // Count templates per analysis by checking blueprint_ids overlap
     for (const analysis of analyses) {

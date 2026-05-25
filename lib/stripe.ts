@@ -69,6 +69,10 @@ export const PLANS = {
 
 export type PlanId = keyof typeof PLANS
 
+export function isPaidPlan(plan: string | null | undefined): plan is Exclude<PlanId, 'free'> {
+  return plan === 'pro' || plan === 'scale' || plan === 'byok'
+}
+
 export function getPriceId(): string {
   return process.env.STRIPE_PRO_PRICE_ID || ''
 }

@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { TemplateAssemblyCard } from '@/components/template-assembly-card'
 import { getAllAnalyses, getAllTemplates, type Template } from '@/lib/queries'
+import { getCurrentUser } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,10 +30,13 @@ async function TemplatesByAnalysisContent({ analysisId }: { analysisId: string }
   let filteredTemplates: Template[] = []
 
   try {
-    ;[analyses, allTemplates] = await Promise.all([
-      getAllAnalyses(),
-      getAllTemplates(),
-    ])
+    const user = await getCurrentUser()
+    if (user) {
+      ;[analyses, allTemplates] = await Promise.all([
+        getAllAnalyses(user.id),
+        getAllTemplates(user.id),
+      ])
+    }
 
     currentAnalysis = analyses.find(a => a.id === analysisId)
     

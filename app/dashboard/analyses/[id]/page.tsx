@@ -20,6 +20,10 @@ export default async function AnalysisDetailPage({
   const { id } = await params
   const user = await getCurrentUser()
 
+  if (!user) {
+    notFound()
+  }
+
   let analysis = null
   let repositories: any[] = []
   let blueprints: any[] = []
@@ -29,9 +33,9 @@ export default async function AnalysisDetailPage({
 
   try {
     ;[analysis, repositories, blueprints] = await Promise.all([
-      getAnalysisById(id),
-      getRepositoriesForAnalysis(id),
-      getBlueprintsByAnalysis(id),
+      getAnalysisById(id, user.id),
+      getRepositoriesForAnalysis(id, user.id),
+      getBlueprintsByAnalysis(id, user.id),
     ])
   } catch {
     notFound()

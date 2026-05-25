@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: creditResult.error || 'Insufficient credits' }, { status: 402 })
     }
 
-    const analysis = await getAnalysisById(analysisId)
+    const analysis = await getAnalysisById(analysisId, user.id)
     if (!analysis) {
       return NextResponse.json({ error: 'Analysis not found' }, { status: 404 })
     }
@@ -72,8 +72,8 @@ export async function POST(request: NextRequest) {
 
     // Gather repo files and blueprints
     const [repositories, blueprints] = await Promise.all([
-      getRepositoriesForAnalysis(analysisId),
-      getBlueprintsByAnalysis(analysisId),
+      getRepositoriesForAnalysis(analysisId, user.id),
+      getBlueprintsByAnalysis(analysisId, user.id),
     ])
 
     const allFiles = (

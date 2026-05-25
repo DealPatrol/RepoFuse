@@ -1,4 +1,5 @@
 import { getAllRepositories, getAllAnalyses, getGapSummary, type Analysis, type Repository } from '@/lib/queries'
+import { getCurrentUser } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { FolderGit2, Sparkles, Code2, Plus, ArrowRight, Zap, AlertCircle, Lightbulb } from 'lucide-react'
@@ -12,9 +13,12 @@ export default async function DashboardPage() {
   let gapSummary = { total_gaps: 0, blocking_gaps: 0, total_hours: 0, completed_count: 0, by_category: {} }
 
   try {
-    repositories = await getAllRepositories()
-    analyses = await getAllAnalyses()
-    gapSummary = await getGapSummary()
+    const user = await getCurrentUser()
+    if (user) {
+      repositories = await getAllRepositories(user.id)
+      analyses = await getAllAnalyses(user.id)
+      gapSummary = await getGapSummary(user.id)
+    }
   } catch {
     // Database not available yet
   }

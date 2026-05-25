@@ -1,5 +1,6 @@
 import { getCurrentUser } from '@/lib/auth'
-import { getAllAnalyses, type Analysis } from '@/lib/queries'
+import { getAllAnalyses, getSubscriptionByGithubId, type Analysis } from '@/lib/queries'
+import { isPaidPlan } from '@/lib/stripe'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -20,8 +21,8 @@ interface Blueprint {
   generatedAt: string
 }
 
-async function getBlueprintsFromAnalyses(): Promise<Blueprint[]> {
-  const analyses = await getAllAnalyses()
+async function getBlueprintsFromAnalyses(userId: string): Promise<Blueprint[]> {
+  const analyses = await getAllAnalyses(userId)
   
   if (analyses.length === 0) return []
   
@@ -46,13 +47,15 @@ export default async function BlueprintsPage() {
   let blueprints: Blueprint[] = []
 
   try {
-    blueprints = await getBlueprintsFromAnalyses()
+    if (user) {
+      blueprints = await getBlueprintsFromAnalyses(user.id)
+    }
   } catch {
     // Database not available
   }
   
-  // Check if user is Pro
-  const isPro = false // In production: check user.subscription_tier === 'pro'
+  const subscription = user ? await getSubscriptionByGithubId(user.github_id).catch(() => null) : null
+  const isPro = isPaidPlan(subscription?.plan)
 
   if (!isPro) {
     return (

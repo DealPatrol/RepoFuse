@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { TemplateAssemblyCard } from '@/components/template-assembly-card'
 import { CreateTemplateModal } from '@/components/create-template-modal'
 import { getAllTemplates, getFeaturedTemplates, type Template } from '@/lib/queries'
+import { getCurrentUser } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,9 +30,13 @@ async function TemplateHubContent() {
   let setupRequired = false
 
   try {
+    const user = await getCurrentUser()
+    if (!user) {
+      return null
+    }
     const result = await Promise.all([
-      getFeaturedTemplates(),
-      getAllTemplates(),
+      getFeaturedTemplates(user.id),
+      getAllTemplates(user.id),
     ])
     featured = result[0]
     all = result[1]
@@ -76,9 +81,13 @@ async function TemplateHubContent() {
   }
 
   try {
+    const user = await getCurrentUser()
+    if (!user) {
+      return null
+    }
     ;[featured, all] = await Promise.all([
-      getFeaturedTemplates(),
-      getAllTemplates(),
+      getFeaturedTemplates(user.id),
+      getAllTemplates(user.id),
     ])
   } catch {
     // Database tables may not exist yet
