@@ -21,6 +21,7 @@ import {
 } from '@/lib/queries'
 import { getAnthropicModel } from '@/lib/anthropic-model'
 import { PLANS, isPaidPlan } from '@/lib/stripe'
+import { generateGapsFromBlueprint, generateTemplatesFromBlueprints } from '@/lib/gap-generation'
 
 // Schema for AI-generated app blueprints
 const complexityEnum = z.preprocess((val) => {
@@ -444,8 +445,12 @@ Constraints:
           console.error('[analysis] Failed to increment usage:', e)
         )
 
-        // Get final blueprints
+        // Get final blueprints and hydrate recurring-value surfaces from them.
         const finalBlueprints = await getBlueprintsByAnalysis(id, user.id)
+        for (const blueprint of finalBlueprints) {
+          await generateGapsFromBlueprint(blueprint)
+        }
+        await generateTemplatesFromBlueprints(finalBlueprints)
 
         send({ status: 'complete', progress: 100, blueprints: finalBlueprints })
         controller.close()
