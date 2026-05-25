@@ -22,6 +22,7 @@ import {
   Lock,
   Crown,
   Hammer,
+  Rocket,
 } from 'lucide-react'
 import type { Analysis, Repository, AppBlueprint } from '@/lib/queries'
 import { BuildAppModal } from '@/components/build-app-modal'
@@ -35,6 +36,9 @@ import {
   getOpportunityScore,
   getSuggestedFirstStep,
 } from '@/lib/opportunity-metrics'
+import { ThoughtStream } from '@/components/thought-stream'
+import { InsightRail } from '@/components/insight-rail'
+import { useFounderPreferences, getFounderInsights, FounderReasoningBadges } from '@/components/founder-preferences'
 
 interface AnalysisDetailProps {
   analysis: Analysis
@@ -90,6 +94,8 @@ export function AnalysisDetail({
   )
   const [localBlueprints, setLocalBlueprints] = useState(blueprints)
   const [runErrorMessage, setRunErrorMessage] = useState<string | null>(analysis.error_message)
+  const [thoughts, setThoughts] = useState<string[]>([])
+  const { prefs: founderPrefs } = useFounderPreferences()
 
   useEffect(() => {
     setStatus(analysis.status)
@@ -224,6 +230,7 @@ export function AnalysisDetail({
     setProgress(0)
     setRunErrorMessage(null)
     setLocalBlueprints([])
+    setThoughts([])
 
     try {
       const response = await fetch(`/api/analyses/${analysis.id}/run`, {
@@ -263,6 +270,7 @@ export function AnalysisDetail({
               progress?: number
               blueprints?: AppBlueprint[]
               error?: string
+              thought?: string
             }
 
             if (typeof data.error === 'string') {
@@ -280,6 +288,7 @@ export function AnalysisDetail({
               setStatus(data.status)
             }
             if (data.progress !== undefined) setProgress(data.progress)
+            if (data.thought) setThoughts(prev => [...prev, data.thought!])
             if (data.blueprints) setLocalBlueprints(data.blueprints)
           } catch {
             /* incomplete JSON chunk — wait for next read */
@@ -346,19 +355,22 @@ export function AnalysisDetail({
         </Card>
       )}
 
-      {/* Progress */}
+      {/* Progress + AI Thought Stream */}
       {isInProgress && (
-        <Card className="p-6">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">
-                {status === 'scanning' ? 'Scanning repositories...' : 'AI analyzing files...'}
-              </span>
-              <span className="font-medium">{progress}%</span>
+        <div className="space-y-4">
+          <Card className="p-6">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">
+                  {status === 'scanning' ? 'Scanning repositories...' : 'AI analyzing files...'}
+                </span>
+                <span className="font-medium">{progress}%</span>
+              </div>
+              <Progress value={progress} className="h-2" />
             </div>
-            <Progress value={progress} className="h-2" />
-          </div>
-        </Card>
+          </Card>
+          <ThoughtStream thoughts={thoughts} isActive={isInProgress} />
+        </div>
       )}
 
       {/* Repositories */}
@@ -380,8 +392,9 @@ export function AnalysisDetail({
         </div>
       </section>
 
-      {/* App Blueprints */}
-      <section className="space-y-4">
+      {/* App Blueprints + Insight Rail */}
+      <div className="flex flex-col lg:flex-row gap-6">
+      <section className="space-y-4 flex-1 min-w-0">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-lg font-semibold text-foreground">Discovered App Blueprints</h2>
           <div className="flex flex-wrap items-center gap-2">
@@ -589,12 +602,14 @@ export function AnalysisDetail({
                           )}
                         </div>
 
+                        <FounderReasoningBadges insights={getFounderInsights(founderPrefs, blueprint)} />
+
                         <Button
-                          className="mt-4 w-full"
+                          className="mt-4 w-full bg-cyan-600 hover:bg-cyan-500 text-white shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/30 transition-all"
                           onClick={() => setBuildModalBlueprint(blueprint)}
                         >
-                          <Hammer className="h-4 w-4 mr-2" />
-                          Build This App
+                          <Rocket className="h-4 w-4 mr-2" />
+                          Build This
                         </Button>
 
                         {blueprint.missing_files.length > 0 ? (
@@ -643,6 +658,14 @@ export function AnalysisDetail({
           </div>
         )}
       </section>
+
+      {/* Right Insight Rail — CTO Whisper */}
+      {(localBlueprints.length > 0 || isInProgress) && (
+        <aside className="lg:w-72 xl:w-80 shrink-0 space-y-4">
+          <InsightRail blueprints={localBlueprints} isAnalyzing={isInProgress} />
+        </aside>
+      )}
+      </div>
 
       {buildModalBlueprint && (
         <BuildAppModal

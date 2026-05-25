@@ -3,11 +3,10 @@
 // Stages: analyzing → fixing → deploying → live
 
 import { NextRequest } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getCurrentAccessToken } from "@/lib/auth";
 import Anthropic from "@anthropic-ai/sdk";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+function getAnthropic() { return new Anthropic() }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -26,9 +25,8 @@ interface SSEEvent {
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  // 1. Auth — grab the GitHub access token from the session
-  const session = await getServerSession(authOptions);
-  const accessToken = (session as any)?.accessToken;
+  // 1. Auth — grab the GitHub access token from cookies
+  const accessToken = await getCurrentAccessToken();
   if (!accessToken) {
     return new Response("Unauthorized", { status: 401 });
   }
@@ -207,7 +205,7 @@ async function fixDependencies(rawPackageJson: string): Promise<FixResult> {
     return { fixedPackageJson: {}, changes: ["Could not parse package.json"] };
   }
 
-  const response = await anthropic.messages.create({
+  const response = await getAnthropic().messages.create({
     model: "claude-opus-4-5",
     max_tokens: 2048,
     messages: [

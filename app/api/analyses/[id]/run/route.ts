@@ -196,6 +196,7 @@ export async function POST(
         await updateAnalysisStatus(id, 'scanning')
         await deleteBlueprintsByAnalysis(id)
         send({ status: 'scanning', progress: 10 })
+        send({ thought: 'Connecting to GitHub repositories...' })
 
         // Fetch file trees from GitHub for each repository
         const allFiles: { repo: string; path: string; type: string }[] = []
@@ -203,6 +204,7 @@ export async function POST(
 
         for (const repo of repositories) {
           try {
+            send({ thought: `Scanning file tree for ${repo.full_name}...` })
             let treeData: Awaited<ReturnType<typeof getGitHubRepositoryTreeFromBranch>>
             try {
               treeData = await getGitHubRepositoryTreeFromBranch(
@@ -261,15 +263,17 @@ export async function POST(
           return
         }
 
-        send({ status: 'scanning', progress: 40 })
+        send({ status: 'scanning', progress: 40, thought: `Found ${allFiles.length} source files across ${repositories.length} repositories` })
 
         // Update to analyzing
         await updateAnalysisStatus(id, 'analyzing', { total_files: allFiles.length })
-        send({ status: 'analyzing', progress: 50 })
+        send({ status: 'analyzing', progress: 50, thought: 'Evaluating architecture patterns and reusable modules...' })
 
         // Build file summary for AI (cap at 400 files to keep prompt reasonable)
         const filesToSend = allFiles.slice(0, 400)
         const fileSummary = filesToSend.map(f => `- ${f.repo}: ${f.path}`).join('\n')
+
+        send({ thought: 'Identifying component boundaries and shared dependencies...' })
 
         // Use Claude to analyze and discover app blueprints (structured tool output)
         const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -374,7 +378,7 @@ Constraints:
           ],
         })
 
-        send({ status: 'analyzing', progress: 80 })
+        send({ status: 'analyzing', progress: 80, thought: 'Ranking blueprints by opportunity score and feasibility...' })
 
         // Check if response was truncated (hit max_tokens)
         if (aiResponse.stop_reason === 'max_tokens') {
