@@ -77,7 +77,7 @@ export interface Subscription {
   github_id: number
   stripe_customer_id: string | null
   stripe_subscription_id: string | null
-  plan: 'free' | 'byok' | 'pro'
+  plan: 'free' | 'byok' | 'pro' | 'scale'
   status: 'active' | 'past_due' | 'canceled' | 'trialing'
   current_period_end: string | null
   analyses_used_this_month: number
@@ -113,7 +113,7 @@ export async function upsertSubscription(data: {
   github_id: number
   stripe_customer_id?: string | null
   stripe_subscription_id?: string | null
-  plan?: 'free' | 'byok' | 'pro'
+  plan?: 'free' | 'byok' | 'pro' | 'scale'
   status?: 'active' | 'past_due' | 'canceled' | 'trialing'
   current_period_end?: string | null
 }): Promise<Subscription> {

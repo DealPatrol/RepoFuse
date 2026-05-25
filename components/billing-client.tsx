@@ -94,7 +94,6 @@ export function BillingClient({
   currentPeriodEnd,
   hasStripeCustomer,
   userId,
-  isTrialing = false,
 }: BillingClientProps) {
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [portalLoading, setPortalLoading] = useState(false)
