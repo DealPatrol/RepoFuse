@@ -47,10 +47,10 @@ export default async function BlueprintsPage() {
 
   try {
     blueprints = await getBlueprintsFromAnalyses()
-  } catch {
-    // Database not available
+  } catch (error) {
+    console.error('[blueprints] Failed to load blueprints:', error)
   }
-  
+
   // Check if user is Pro
   const isPro = false // In production: check user.subscription_tier === 'pro'
 

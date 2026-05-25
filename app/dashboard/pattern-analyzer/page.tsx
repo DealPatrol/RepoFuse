@@ -9,8 +9,8 @@ export default async function PatternAnalyzerPage() {
   try {
     const all = await getAllAnalyses()
     analyses = all.filter((a) => a.status === 'complete')
-  } catch {
-    // Database not available
+  } catch (error) {
+    console.error('[pattern-analyzer] Failed to load analyses:', error)
   }
 
   return <PatternAnalyzer completedAnalyses={analyses} />

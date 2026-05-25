@@ -80,8 +80,8 @@ async function TemplateHubContent() {
       getFeaturedTemplates(),
       getAllTemplates(),
     ])
-  } catch {
-    // Database tables may not exist yet
+  } catch (error) {
+    console.error('[templates] Failed to re-fetch templates:', error)
   }
 
   const nonFeatured = all.filter(t => !featured.some(f => f.id === t.id))

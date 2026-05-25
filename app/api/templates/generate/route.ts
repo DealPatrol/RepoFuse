@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createTemplate, getMissingGapsByBlueprint } from '@/lib/queries'
 import { getCurrentUser } from '@/lib/auth'
-import { deductCredits, CREDITS } from '@/lib/credits'
+import { getCreditBalance, deductCredits, CREDITS } from '@/lib/credits'
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,15 +26,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const creditResult = await deductCredits(
-      user.id,
-      CREDITS.PATTERN_ANALYZER_COST,
-      'pattern_analyzer',
-      { action: 'create_template' },
-    )
-    if (!creditResult.success) {
+    const balance = await getCreditBalance(user.id)
+    if (balance < CREDITS.PATTERN_ANALYZER_COST) {
       return NextResponse.json(
-        { error: creditResult.error ?? 'Insufficient credits.' },
+        { error: `Insufficient credits. Required: ${CREDITS.PATTERN_ANALYZER_COST}, Available: ${balance}` },
         { status: 402 }
       )
     }
@@ -50,7 +45,8 @@ export async function POST(request: NextRequest) {
         totalMissingFiles += gaps.length
         totalEstimatedHours += gaps.reduce((sum, g) => sum + g.estimated_hours, 0)
       }
-    } catch {
+    } catch (gapError) {
+      console.error('[templates/generate] getMissingGapsByBlueprint failed:', gapError)
       // missing_file_gaps table not yet created — metrics default to 0
     }
 
@@ -69,6 +65,12 @@ export async function POST(request: NextRequest) {
       featured: false,
     })
 
+    try {
+      await deductCredits(user.id, CREDITS.PATTERN_ANALYZER_COST, 'pattern_analyzer', { action: 'create_template' })
+    } catch (creditError) {
+      console.error('[templates/generate] credit deduction failed after successful creation:', creditError)
+    }
+
     return NextResponse.json({ template }, { status: 201 })
   } catch (error) {
     console.error('[templates/generate] error:', error)
@@ -81,7 +83,7 @@ export async function POST(request: NextRequest) {
       )
     }
     return NextResponse.json(
-      { error: 'Failed to generate template' },
+      { error: `Failed to generate template: ${msg}` },
       { status: 500 }
     )
   }

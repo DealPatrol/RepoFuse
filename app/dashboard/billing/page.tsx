@@ -14,8 +14,8 @@ export default async function BillingPage() {
     try {
       subscription = await getSubscriptionByGithubId(user.github_id)
       blueprintViewCount = await countUserBlueprintViews(user.id)
-    } catch {
-      // DB or table not available yet
+    } catch (error) {
+      console.error('[billing] Failed to load subscription data:', error)
     }
   }
 

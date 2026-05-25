@@ -15,8 +15,8 @@ export default async function DashboardPage() {
     repositories = await getAllRepositories()
     analyses = await getAllAnalyses()
     gapSummary = await getGapSummary()
-  } catch {
-    // Database not available yet
+  } catch (error) {
+    console.error('[dashboard] Failed to load page data:', error)
   }
 
   const completedAnalyses = analyses.filter((analysis) => analysis.status === 'complete')

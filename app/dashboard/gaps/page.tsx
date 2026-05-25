@@ -172,8 +172,8 @@ async function GapsDashboardContent() {
       getAllMissingGaps(),
       getGapSummary(),
     ])
-  } catch {
-    // Database tables may not exist yet
+  } catch (error) {
+    console.error('[gaps] Failed to re-fetch gaps:', error)
   }
 
   const gapsByPriority = groupGapsByPriority(gaps)

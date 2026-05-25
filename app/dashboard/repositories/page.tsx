@@ -20,8 +20,8 @@ export default async function RepositoriesPage() {
 
   try {
     repositories = await getAllRepositories()
-  } catch {
-    // Database not available yet
+  } catch (error) {
+    console.error('[repositories] Failed to load repositories:', error)
   }
 
   return (

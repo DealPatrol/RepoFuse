@@ -54,8 +54,8 @@ export default async function BuiltAppsPage() {
 
   try {
     detectedApps = await getDetectedApps()
-  } catch {
-    // Database not available
+  } catch (error) {
+    console.error('[built-apps] Failed to load apps:', error)
   }
 
   return (

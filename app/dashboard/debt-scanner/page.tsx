@@ -8,8 +8,8 @@ export default async function DebtScannerPage() {
   try {
     const all = await getAllAnalyses()
     analyses = all.filter((a) => a.status === 'complete')
-  } catch {
-    // Return empty list if queries fail — client handles it gracefully
+  } catch (error) {
+    console.error('[debt-scanner] Failed to load analyses:', error)
   }
 
   return <DebtScannerClient completedAnalyses={analyses} />
