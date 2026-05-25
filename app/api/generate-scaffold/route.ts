@@ -16,10 +16,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { appName, description, technologies, existingFiles, missingFiles, userId } = await request.json()
+    const { appName, description, technologies, existingFiles, missingFiles } = await request.json()
     const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json({ error: 'Sign in with GitHub to generate scaffolds.' }, { status: 401 })
+    }
+    if (!user.id) {
+      return NextResponse.json({ error: 'Unable to load your account. Please sign in again.' }, { status: 401 })
     }
 
     let sub = await getSubscriptionByGithubId(user.github_id).catch(() => null)
@@ -38,19 +41,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Check credit balance before proceeding
-    if (userId) {
-      const currentBalance = await getCreditBalance(userId)
-      if (currentBalance < CREDITS.SCAFFOLD_COST) {
-        return NextResponse.json(
-          {
-            error: 'Insufficient credits',
-            required: CREDITS.SCAFFOLD_COST,
-            available: currentBalance,
-            message: 'Upgrade to Pro to get unlimited scaffold generation with 5,000 monthly credits.',
-          },
-          { status: 402 }
-        )
-      }
+    const currentBalance = await getCreditBalance(user.id)
+    if (currentBalance < CREDITS.SCAFFOLD_COST) {
+      return NextResponse.json(
+        {
+          error: 'Insufficient credits',
+          required: CREDITS.SCAFFOLD_COST,
+          available: currentBalance,
+          message: 'Upgrade to Pro to get unlimited scaffold generation with 5,000 monthly credits.',
+        },
+        { status: 402 }
+      )
     }
 
     console.log('[v0] Generating scaffold for app:', appName)
@@ -138,17 +139,20 @@ Example structure:
 
     // Deduct credits after successful generation
     let creditsUsed = 0
-    if (userId) {
-      const deductResult = await deductCredits(userId, CREDITS.SCAFFOLD_COST, 'scaffold', {
-        appName,
-        technologies,
-      })
-      
-      if (deductResult.success) {
-        creditsUsed = CREDITS.SCAFFOLD_COST
-        console.log(`[v0] Deducted ${CREDITS.SCAFFOLD_COST} credits from user ${userId}`)
-      }
+    const deductResult = await deductCredits(user.id, CREDITS.SCAFFOLD_COST, 'scaffold', {
+      appName,
+      technologies,
+    })
+
+    if (!deductResult.success) {
+      return NextResponse.json(
+        { error: deductResult.error ?? 'Failed to deduct scaffold credits' },
+        { status: 402 }
+      )
     }
+
+    creditsUsed = CREDITS.SCAFFOLD_COST
+    console.log(`[v0] Deducted ${CREDITS.SCAFFOLD_COST} credits from user ${user.id}`)
 
     return NextResponse.json({
       success: true,
