@@ -26,7 +26,7 @@ See `.env.example` for the full list. Critical ones:
 
 ```bash
 pnpm dev        # starts Next.js dev server on port 3000
-pnpm lint       # ESLint (2 pre-existing errors: prefer-const in run route, set-state-in-effect in analysis-detail)
+pnpm lint       # ESLint (pre-existing: 45 errors, 56 warnings — all from existing code)
 npx tsc --noEmit  # TypeScript type check
 pnpm build      # production build (requires valid DATABASE_URL at build time)
 ```
@@ -42,7 +42,7 @@ pnpm build      # production build (requires valid DATABASE_URL at build time)
 
 - No automated test suite exists in this repo.
 - Manual testing flow: Sign in via GitHub OAuth → Add repositories → Create analysis → Run analysis → View blueprints.
-- The `pnpm lint` command has pre-existing errors (10 errors, 24 warnings) that are not caused by agent changes. The original note about "2 pre-existing errors" undercounts; the actual count as of the current codebase is higher.
+- The `pnpm lint` command has pre-existing errors (45 errors, 56 warnings) that are not caused by agent changes.
 
 ### Dev server startup notes
 
