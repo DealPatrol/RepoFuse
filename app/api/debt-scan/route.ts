@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Anthropic } from '@anthropic-ai/sdk'
+import Anthropic from '@anthropic-ai/sdk'
 import {
   getAnalysisById,
   getRepositoriesForAnalysis,
@@ -8,7 +8,7 @@ import {
 } from '@/lib/queries'
 import { getAnthropicModel } from '@/lib/anthropic-model'
 import { getCurrentUser } from '@/lib/auth'
-import { deductCredits, CREDITS } from '@/lib/credits'
+import { deductCredits, getCreditBalance, CREDITS } from '@/lib/credits'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,14 +43,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'analysisId is required' }, { status: 400 })
     }
 
-    const creditResult = await deductCredits(
-      user.id,
-      CREDITS.DEBT_SCAN_COST,
-      'debt_scan',
-      { analysisId },
-    )
-    if (!creditResult.success) {
-      return NextResponse.json({ error: creditResult.error || 'Insufficient credits' }, { status: 402 })
+    const balance = await getCreditBalance(user.id)
+    if (balance < CREDITS.DEBT_SCAN_COST) {
+      return NextResponse.json(
+        { error: `Insufficient credits. Required: ${CREDITS.DEBT_SCAN_COST}, Available: ${balance}` },
+        { status: 402 },
+      )
     }
 
     const analysis = await getAnalysisById(analysisId)
@@ -137,6 +135,12 @@ Rules:
       parsed = JSON.parse(jsonText)
     } catch {
       return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 })
+    }
+
+    try {
+      await deductCredits(user.id, CREDITS.DEBT_SCAN_COST, 'debt_scan', { analysisId })
+    } catch (e) {
+      console.error('[debt-scan] credit deduction failed:', e)
     }
 
     return NextResponse.json(parsed)

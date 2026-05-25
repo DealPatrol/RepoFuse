@@ -273,9 +273,7 @@ export async function trackTokenUsage(
         tokens_used INT,
         estimated_cost DECIMAL(10, 4),
         model_used VARCHAR(100),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (analysis_id) REFERENCES analyses(id) ON DELETE CASCADE
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `
   } catch (e) {

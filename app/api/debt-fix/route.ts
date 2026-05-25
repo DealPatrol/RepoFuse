@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { getCurrentUser } from '@/lib/auth'
 import { getAnthropicModel } from '@/lib/anthropic-model'
-import { deductCredits, CREDITS } from '@/lib/credits'
+import { deductCredits, getCreditBalance, CREDITS } from '@/lib/credits'
 import type { DebtIssue } from '@/app/api/debt-scan/route'
 
 export const maxDuration = 60
@@ -182,15 +182,10 @@ export async function POST(request: NextRequest) {
           return
         }
 
-        // Deduct credits before any AI work
-        const creditResult = await deductCredits(
-          user.id,
-          CREDITS.DEBT_FIX_COST,
-          'debt_fix',
-          { issueId: issue.id, repoOwner, repoName },
-        )
-        if (!creditResult.success) {
-          send({ step: 'error', message: creditResult.error ?? 'Insufficient credits' })
+        // Check credit balance before any work
+        const balance = await getCreditBalance(user.id)
+        if (balance < CREDITS.DEBT_FIX_COST) {
+          send({ step: 'error', message: `Insufficient credits. Required: ${CREDITS.DEBT_FIX_COST}, Available: ${balance}` })
           controller.close()
           return
         }
@@ -247,6 +242,12 @@ export async function POST(request: NextRequest) {
           })
           controller.close()
           return
+        }
+
+        try {
+          await deductCredits(user.id, CREDITS.DEBT_FIX_COST, 'debt_fix', { issueId: issue.id, repoOwner, repoName })
+        } catch (e) {
+          console.error('[debt-fix] credit deduction failed:', e)
         }
 
         send({ step: 'done', message: 'Pull request created!', prUrl })
