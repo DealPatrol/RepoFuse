@@ -1,20 +1,16 @@
 // app/api/preview/route.ts
-// Ephemeral Preview feature — streams progress back to the client via SSE
+// Ephemeral Preview — streams progress back to the client via SSE
 // Stages: analyzing → fixing → deploying → live
 
 import { NextRequest } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 import Anthropic from "@anthropic-ai/sdk";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 interface GitHubFile {
   path: string;
-  content: string;       // decoded string (not base64)
-  encoding?: string;
+  content: string;
 }
 
 interface SSEEvent {
@@ -23,13 +19,10 @@ interface SSEEvent {
   url?: string;
 }
 
-// ─── Main handler ─────────────────────────────────────────────────────────────
-
 export async function POST(req: NextRequest) {
-  // 1. Auth — grab the GitHub access token from the session
-  const session = await getServerSession(authOptions);
-  const accessToken = (session as any)?.accessToken;
-  if (!accessToken) {
+  // Auth — uses RepoFuse's cookie-based system
+  const user = await getCurrentUser();
+  if (!user?.access_token) {
     return new Response("Unauthorized", { status: 401 });
   }
 
@@ -38,12 +31,11 @@ export async function POST(req: NextRequest) {
     return new Response("Missing owner or repo", { status: 400 });
   }
 
+  const accessToken = user.access_token;
   const encoder = new TextEncoder();
 
-  // 2. Build a Server-Sent Events stream
   const stream = new ReadableStream({
     async start(controller) {
-      // Helper: push an SSE event to the client
       const send = (event: SSEEvent) => {
         controller.enqueue(
           encoder.encode(`data: ${JSON.stringify(event)}\n\n`)
@@ -51,7 +43,7 @@ export async function POST(req: NextRequest) {
       };
 
       try {
-        // ── STAGE 1: ANALYZE ──────────────────────────────────────────────────
+        // ── STAGE 1: ANALYZE ─────────────────────────────────────────────────
         send({ stage: "analyzing", message: "Fetching repository files…" });
 
         const files = await fetchRepoFiles(owner, repo, accessToken);
@@ -71,15 +63,11 @@ export async function POST(req: NextRequest) {
         // ── STAGE 2: FIX DEPS WITH CLAUDE ────────────────────────────────────
         send({ stage: "fixing", message: "Analyzing dependencies with AI…" });
 
-        const { fixedPackageJson, changes } = await fixDependencies(
-          packageJsonFile.content
-        );
+        const { fixedPackageJson, changes } = await fixDependencies(packageJsonFile.content);
 
-        // Stream each change to the terminal
         for (const change of changes) {
           send({ stage: "fixing", message: change });
         }
-
         if (changes.length === 0) {
           send({ stage: "fixing", message: "All dependencies look healthy ✓" });
         }
@@ -87,30 +75,22 @@ export async function POST(req: NextRequest) {
         // ── STAGE 3: DEPLOY TO VERCEL ─────────────────────────────────────────
         send({ stage: "deploying", message: "Preparing files for deployment…" });
 
-        // Replace package.json with the fixed version; keep everything else
         const deployFiles = buildDeployFiles(files, fixedPackageJson);
+        const deploymentName = `repofuse-${repo.toLowerCase().replace(/[^a-z0-9]/g, "-")}`;
+        const framework = detectFramework(fixedPackageJson);
 
         send({ stage: "deploying", message: "Pushing to Vercel API…" });
 
-        const framework = detectFramework(fixedPackageJson);
-        const deploymentName = `repofuse-${repo.toLowerCase().replace(/[^a-z0-9]/g, "-")}`;
-
-        const deploymentId = await createVercelDeployment(
-          deploymentName,
-          deployFiles,
-          framework
-        );
+        const deploymentId = await createVercelDeployment(deploymentName, deployFiles, framework);
 
         send({ stage: "deploying", message: "Building project on Vercel…" });
 
-        // Poll until the deployment is ready (up to ~90 seconds)
         const previewUrl = await pollUntilReady(deploymentId);
 
-        // ── LIVE ──────────────────────────────────────────────────────────────
         send({ stage: "live", url: `https://${previewUrl}` });
 
       } catch (err: any) {
-        console.error("[preview] Error:", err);
+        console.error("[preview]", err);
         send({ stage: "error", message: err.message ?? "An unexpected error occurred." });
       } finally {
         controller.close();
@@ -129,17 +109,7 @@ export async function POST(req: NextRequest) {
 
 // ─── GitHub helpers ───────────────────────────────────────────────────────────
 
-/**
- * Fetches a flat list of text files from a GitHub repo.
- * Skips binaries, node_modules, .git, and files over 100 KB.
- * Reuses your existing lib/github.ts pattern.
- */
-async function fetchRepoFiles(
-  owner: string,
-  repo: string,
-  token: string
-): Promise<GitHubFile[]> {
-  // Get the default branch's tree (recursive)
+async function fetchRepoFiles(owner: string, repo: string, token: string): Promise<GitHubFile[]> {
   const treeRes = await ghFetch(
     `https://api.github.com/repos/${owner}/${repo}/git/trees/HEAD?recursive=1`,
     token
@@ -147,24 +117,18 @@ async function fetchRepoFiles(
   const tree = await treeRes.json();
 
   const SKIP = ["node_modules", ".git", "dist", "build", ".next", "coverage"];
-  const TEXT_EXTS = [
-    ".ts", ".tsx", ".js", ".jsx", ".json", ".css", ".scss",
-    ".html", ".md", ".env.example", ".gitignore", "Dockerfile",
-  ];
+  const TEXT_EXTS = [".ts", ".tsx", ".js", ".jsx", ".json", ".css", ".scss", ".html", ".md"];
 
   const textFiles = (tree.tree ?? []).filter((item: any) => {
     if (item.type !== "blob") return false;
     if (SKIP.some((s) => item.path.includes(s))) return false;
-    if (item.size > 100_000) return false; // skip large files
+    if (item.size > 100_000) return false;
     const ext = "." + item.path.split(".").pop();
-    return TEXT_EXTS.includes(ext) || item.path.includes("package.json");
+    return TEXT_EXTS.includes(ext) || item.path === "package.json";
   });
 
-  // Fetch up to 80 files in parallel (Vercel limit)
-  const sliced = textFiles.slice(0, 80);
-
   const results = await Promise.allSettled(
-    sliced.map(async (item: any) => {
+    textFiles.slice(0, 80).map(async (item: any) => {
       const res = await ghFetch(
         `https://api.github.com/repos/${owner}/${repo}/contents/${item.path}`,
         token
@@ -188,18 +152,14 @@ function ghFetch(url: string, token: string) {
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github+json",
+      "User-Agent": "RepoFuse",
     },
   });
 }
 
 // ─── Claude dep-fixer ────────────────────────────────────────────────────────
 
-interface FixResult {
-  fixedPackageJson: Record<string, any>;
-  changes: string[];
-}
-
-async function fixDependencies(rawPackageJson: string): Promise<FixResult> {
+async function fixDependencies(rawPackageJson: string) {
   let parsed: Record<string, any>;
   try {
     parsed = JSON.parse(rawPackageJson);
@@ -208,51 +168,39 @@ async function fixDependencies(rawPackageJson: string): Promise<FixResult> {
   }
 
   const response = await anthropic.messages.create({
-    model: "claude-opus-4-5",
+    model: "claude-sonnet-4-20250514",
     max_tokens: 2048,
-    messages: [
-      {
-        role: "user",
-        content: `You are a Node.js expert. Analyze this package.json and fix any deprecated, broken, insecure, or unmaintained dependencies. Update them to the latest stable versions.
+    messages: [{
+      role: "user",
+      content: `You are a Node.js expert. Fix any deprecated, broken, or unmaintained dependencies in this package.json.
 
-Return ONLY a raw JSON object (no markdown fences, no explanation) with exactly two keys:
-- "packageJson": the complete fixed package.json as a JSON object
-- "changes": an array of short human-readable strings like "react-scripts → vite@5.2.0" describing each change. Empty array if nothing needed fixing.
+Return ONLY a raw JSON object (no markdown, no explanation) with exactly two keys:
+- "packageJson": the complete fixed package.json as a JSON object  
+- "changes": array of short strings like "react-scripts → vite@5.2.0". Empty array if nothing needed fixing.
 
 package.json:
 ${JSON.stringify(parsed, null, 2)}`,
-      },
-    ],
+    }],
   });
 
-  const text =
-    response.content[0].type === "text" ? response.content[0].text : "{}";
-
+  const text = response.content[0].type === "text" ? response.content[0].text : "{}";
   try {
-    const clean = text.replace(/```json|```/g, "").trim();
-    const result = JSON.parse(clean);
+    const result = JSON.parse(text.replace(/```json|```/g, "").trim());
     return {
       fixedPackageJson: result.packageJson ?? parsed,
       changes: Array.isArray(result.changes) ? result.changes : [],
     };
   } catch {
-    // If Claude's response can't be parsed, return original unchanged
     return { fixedPackageJson: parsed, changes: [] };
   }
 }
 
 // ─── Vercel helpers ───────────────────────────────────────────────────────────
 
-function buildDeployFiles(
-  files: GitHubFile[],
-  fixedPackageJson: Record<string, any>
-) {
+function buildDeployFiles(files: GitHubFile[], fixedPackageJson: Record<string, any>) {
   return files.map((f) => ({
     file: f.path,
-    data:
-      f.path === "package.json"
-        ? JSON.stringify(fixedPackageJson, null, 2)
-        : f.content,
+    data: f.path === "package.json" ? JSON.stringify(fixedPackageJson, null, 2) : f.content,
   }));
 }
 
@@ -263,7 +211,6 @@ function detectFramework(pkg: Record<string, any>): string | null {
   if (deps["vite"]) return "vite";
   if (deps["@remix-run/node"]) return "remix";
   if (deps["nuxt"]) return "nuxtjs";
-  if (deps["@sveltejs/kit"]) return "sveltekit";
   if (deps["astro"]) return "astro";
   return null;
 }
@@ -273,21 +220,12 @@ async function createVercelDeployment(
   files: { file: string; data: string }[],
   framework: string | null
 ): Promise<string> {
-  const body: Record<string, any> = {
-    name,
-    files,
-    target: "preview",
-    projectSettings: {},
-  };
-
-  if (framework) {
-    body.projectSettings.framework = framework;
-  }
-
-  // Add team if configured
   const url = process.env.VERCEL_TEAM_ID
     ? `https://api.vercel.com/v13/deployments?teamId=${process.env.VERCEL_TEAM_ID}`
     : "https://api.vercel.com/v13/deployments";
+
+  const body: Record<string, any> = { name, files, target: "preview", projectSettings: {} };
+  if (framework) body.projectSettings.framework = framework;
 
   const res = await fetch(url, {
     method: "POST",
@@ -300,47 +238,25 @@ async function createVercelDeployment(
 
   if (!res.ok) {
     const err = await res.json();
-    throw new Error(
-      err?.error?.message ?? `Vercel API error: ${res.status}`
-    );
+    throw new Error(err?.error?.message ?? `Vercel API error: ${res.status}`);
   }
 
   const data = await res.json();
   return data.id as string;
 }
 
-/**
- * Polls the Vercel deployment endpoint every 4 seconds until READY or ERROR.
- * Times out after 30 attempts (~2 minutes).
- */
 async function pollUntilReady(deploymentId: string): Promise<string> {
-  const MAX_ATTEMPTS = 30;
-  const INTERVAL_MS = 4000;
-
-  for (let i = 0; i < MAX_ATTEMPTS; i++) {
-    await new Promise((r) => setTimeout(r, INTERVAL_MS));
-
-    const res = await fetch(
-      `https://api.vercel.com/v13/deployments/${deploymentId}`,
-      {
-        headers: { Authorization: `Bearer ${process.env.VERCEL_TOKEN}` },
-      }
-    );
-
+  for (let i = 0; i < 30; i++) {
+    await new Promise((r) => setTimeout(r, 4000));
+    const res = await fetch(`https://api.vercel.com/v13/deployments/${deploymentId}`, {
+      headers: { Authorization: `Bearer ${process.env.VERCEL_TOKEN}` },
+    });
     if (!res.ok) continue;
-
     const data = await res.json();
-
-    if (data.readyState === "READY") {
-      return data.url as string; // e.g. "my-app-abc123.vercel.app"
-    }
-
+    if (data.readyState === "READY") return data.url as string;
     if (data.readyState === "ERROR" || data.readyState === "CANCELED") {
-      throw new Error(`Deployment failed with state: ${data.readyState}`);
+      throw new Error(`Deployment failed: ${data.readyState}`);
     }
-
-    // INITIALIZING or BUILDING — keep polling
   }
-
   throw new Error("Deployment timed out after 2 minutes.");
 }
