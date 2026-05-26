@@ -16,22 +16,34 @@ export interface AuthUser {
   subscription_status: string | null
 }
 
-export function sanitizeReturnTo(returnTo: string | null | undefined, fallback = '/dashboard/repositories?connected=github') {
+export function sanitizeReturnTo(
+  returnTo: string | null | undefined,
+  fallback = '/dashboard/repositories?connected=github',
+) {
   if (!returnTo) {
     return fallback
   }
 
   const trimmed = returnTo.trim()
-  if (!trimmed.startsWith('/') || trimmed.startsWith('//')) {
+
+  // Reject protocol-relative and backslash-normalized paths (e.g. `/\\evil.com` -> `//evil.com`).
+  if (trimmed.includes('\\') || !trimmed.startsWith('/') || trimmed.startsWith('//')) {
     return fallback
   }
 
   try {
-    const parsed = new URL(trimmed, 'http://repofuse.local')
-    if (parsed.origin !== 'http://repofuse.local') {
+    const base = 'http://repofuse.local'
+    const parsed = new URL(trimmed, base)
+    if (parsed.origin !== base) {
       return fallback
     }
-    return `${parsed.pathname}${parsed.search}${parsed.hash}`
+
+    const normalized = `${parsed.pathname}${parsed.search}${parsed.hash}`
+    if (!normalized.startsWith('/') || normalized.startsWith('//')) {
+      return fallback
+    }
+
+    return normalized
   } catch {
     return fallback
   }
