@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAllRepositories, createRepository, getSubscriptionByGithubId, upsertSubscription } from '@/lib/queries'
 import { getCurrentUser } from '@/lib/auth'
+import { PLANS, isPaidPlan } from '@/lib/stripe'
 import { isPaidPlan, PLANS } from '@/lib/stripe'
 import { PLANS } from '@/lib/stripe'
 import { createRepositoryRequestSchema, parseGitHubRepositoryUrl } from '@/lib/schemas'
@@ -13,7 +14,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    const repositories = await getAllRepositories()
+    const repositories = await getAllRepositories(user.id)
     return NextResponse.json(repositories)
   } catch (error) {
     console.error('Error fetching repositories:', error)
@@ -46,8 +47,8 @@ export async function POST(request: NextRequest) {
     if (!sub) {
       sub = await upsertSubscription({ github_id: user.github_id }).catch(() => null)
     }
-    if (sub && sub.plan !== 'pro') {
-      const repos = await getAllRepositories()
+    if (sub && !isPaidPlan(sub.plan)) {
+      const repos = await getAllRepositories(user.id)
       if (repos.length >= PLANS.free.repos_limit) {
         return NextResponse.json(
           { error: `Free plan is limited to ${PLANS.free.repos_limit} repositories. Upgrade to Pro for unlimited repos.` },
@@ -88,6 +89,7 @@ export async function POST(request: NextRequest) {
     const githubData = await githubRes.json()
 
     const repository = await createRepository({
+      user_id: user.id,
       github_id: githubData.id,
       name: githubData.name,
       full_name: githubData.full_name,

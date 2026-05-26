@@ -63,6 +63,7 @@ export async function generateTemplatesFromBlueprints(blueprints: AppBlueprint[]
 
     if (shipReady.length >= 2) {
       const template = await createTemplate({
+        user_id: shipReady[0]?.user_id ?? null,
         name: 'Ship-Ready Combination',
         description: `Combine your ${shipReady.length} ship-ready projects for maximum impact`,
         blueprint_ids: shipReady.map(b => b.id),
@@ -79,6 +80,7 @@ export async function generateTemplatesFromBlueprints(blueprints: AppBlueprint[]
 
     if (complementary.length >= 2) {
       const template = await createTemplate({
+        user_id: complementary[0]?.user_id ?? null,
         name: 'Full-Stack Combination',
         description: `Assemble these complementary projects into one product`,
         blueprint_ids: complementary.map(b => b.id),

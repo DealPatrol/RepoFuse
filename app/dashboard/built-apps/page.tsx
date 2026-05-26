@@ -1,9 +1,9 @@
 import { getCurrentUser } from '@/lib/auth'
-import { getAllAnalyses, type Analysis } from '@/lib/queries'
+import { getAllAnalyses } from '@/lib/queries'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { AppWindow, ExternalLink, Github, ArrowRight, Sparkles } from 'lucide-react'
+import { AppWindow, Github, ArrowRight, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'
@@ -20,10 +20,10 @@ interface DetectedApp {
   features: string[]
 }
 
-async function getDetectedApps(): Promise<DetectedApp[]> {
+async function getDetectedApps(userId: string): Promise<DetectedApp[]> {
   // In production, this would query analyzed repos for existing app patterns
   // For now, we generate mock data based on analyses
-  const analyses = await getAllAnalyses()
+  const analyses = await getAllAnalyses(userId)
   
   if (analyses.length === 0) return []
   
@@ -53,7 +53,9 @@ export default async function BuiltAppsPage() {
   let detectedApps: DetectedApp[] = []
 
   try {
-    detectedApps = await getDetectedApps()
+    if (user) {
+      detectedApps = await getDetectedApps(user.id)
+    }
   } catch {
     // Database not available
   }

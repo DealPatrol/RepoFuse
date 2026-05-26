@@ -5,12 +5,13 @@ export interface UserBillingUpdate {
   stripe_customer_id?: string | null
   stripe_subscription_id?: string | null
   stripe_price_id?: string | null
-  plan_tier?: 'free' | 'pro' | null
+  plan_tier?: 'free' | 'pro' | 'scale' | 'byok' | null
   subscription_status?: string | null
 }
 
 export interface Repository {
   id: string
+  user_id: string | null
   github_id: number
   name: string
   full_name: string
@@ -45,6 +46,7 @@ export interface RepoFile {
 
 export interface Analysis {
   id: string
+  user_id: string | null
   name: string
   status: 'pending' | 'scanning' | 'analyzing' | 'complete' | 'failed'
   total_files: number
@@ -58,6 +60,7 @@ export interface Analysis {
 export interface AppBlueprint {
   id: string
   analysis_id: string
+  user_id: string | null
   name: string
   description: string | null
   app_type: string | null
@@ -177,19 +180,24 @@ export async function resetMonthlyUsage(githubId: number): Promise<void> {
 }
 
 // Repository queries
-export async function getAllRepositories(): Promise<Repository[]> {
+export async function getAllRepositories(userId?: string): Promise<Repository[]> {
   const sql = getDb()
-  const repos = await sql`SELECT * FROM repositories ORDER BY created_at DESC`
+  const repos = userId
+    ? await sql`SELECT * FROM repositories WHERE user_id = ${userId} ORDER BY created_at DESC`
+    : await sql`SELECT * FROM repositories ORDER BY created_at DESC`
   return repos as Repository[]
 }
 
-export async function getRepositoryById(id: string): Promise<Repository | null> {
+export async function getRepositoryById(id: string, userId?: string): Promise<Repository | null> {
   const sql = getDb()
-  const repos = await sql`SELECT * FROM repositories WHERE id = ${id}`
+  const repos = userId
+    ? await sql`SELECT * FROM repositories WHERE id = ${id} AND user_id = ${userId}`
+    : await sql`SELECT * FROM repositories WHERE id = ${id}`
   return repos[0] as Repository || null
 }
 
 export async function createRepository(data: {
+  user_id: string
   github_id: number
   name: string
   full_name: string
@@ -201,9 +209,9 @@ export async function createRepository(data: {
 }): Promise<Repository> {
   const sql = getDb()
   const result = await sql`
-    INSERT INTO repositories (github_id, name, full_name, description, url, default_branch, language, stars)
-    VALUES (${data.github_id}, ${data.name}, ${data.full_name}, ${data.description}, ${data.url}, ${data.default_branch}, ${data.language}, ${data.stars})
-    ON CONFLICT (github_id) DO UPDATE SET
+    INSERT INTO repositories (user_id, github_id, name, full_name, description, url, default_branch, language, stars)
+    VALUES (${data.user_id}, ${data.github_id}, ${data.name}, ${data.full_name}, ${data.description}, ${data.url}, ${data.default_branch}, ${data.language}, ${data.stars})
+    ON CONFLICT (user_id, github_id) WHERE user_id IS NOT NULL DO UPDATE SET
       name = EXCLUDED.name,
       full_name = EXCLUDED.full_name,
       description = EXCLUDED.description,
@@ -217,8 +225,12 @@ export async function createRepository(data: {
   return result[0] as Repository
 }
 
-export async function deleteRepository(id: string): Promise<void> {
+export async function deleteRepository(id: string, userId?: string): Promise<void> {
   const sql = getDb()
+  if (userId) {
+    await sql`DELETE FROM repositories WHERE id = ${id} AND user_id = ${userId}`
+    return
+  }
   await sql`DELETE FROM repositories WHERE id = ${id}`
 }
 
@@ -277,23 +289,27 @@ export async function updateFileAnalysis(id: string, data: {
 }
 
 // Analysis queries
-export async function getAllAnalyses(): Promise<Analysis[]> {
+export async function getAllAnalyses(userId?: string): Promise<Analysis[]> {
   const sql = getDb()
-  const analyses = await sql`SELECT * FROM analyses ORDER BY created_at DESC`
+  const analyses = userId
+    ? await sql`SELECT * FROM analyses WHERE user_id = ${userId} ORDER BY created_at DESC`
+    : await sql`SELECT * FROM analyses ORDER BY created_at DESC`
   return analyses as Analysis[]
 }
 
-export async function getAnalysisById(id: string): Promise<Analysis | null> {
+export async function getAnalysisById(id: string, userId?: string): Promise<Analysis | null> {
   const sql = getDb()
-  const analyses = await sql`SELECT * FROM analyses WHERE id = ${id}`
+  const analyses = userId
+    ? await sql`SELECT * FROM analyses WHERE id = ${id} AND user_id = ${userId}`
+    : await sql`SELECT * FROM analyses WHERE id = ${id}`
   return analyses[0] as Analysis || null
 }
 
-export async function createAnalysis(name: string): Promise<Analysis> {
+export async function createAnalysis(name: string, userId: string): Promise<Analysis> {
   const sql = getDb()
   const result = await sql`
-    INSERT INTO analyses (name, status)
-    VALUES (${name}, 'pending')
+    INSERT INTO analyses (name, user_id, status)
+    VALUES (${name}, ${userId}, 'pending')
     RETURNING *
   `
   return result[0] as Analysis
@@ -328,20 +344,34 @@ export async function linkAnalysisToRepository(analysisId: string, repositoryId:
   `
 }
 
-export async function getRepositoriesForAnalysis(analysisId: string): Promise<Repository[]> {
+export async function getRepositoriesForAnalysis(analysisId: string, userId?: string): Promise<Repository[]> {
   const sql = getDb()
-  const repos = await sql`
-    SELECT r.* FROM repositories r
-    JOIN analysis_repositories ar ON r.id = ar.repository_id
-    WHERE ar.analysis_id = ${analysisId}
-  `
+  const repos = userId
+    ? await sql`
+      SELECT r.* FROM repositories r
+      JOIN analysis_repositories ar ON r.id = ar.repository_id
+      JOIN analyses a ON a.id = ar.analysis_id
+      WHERE ar.analysis_id = ${analysisId} AND a.user_id = ${userId} AND r.user_id = ${userId}
+    `
+    : await sql`
+      SELECT r.* FROM repositories r
+      JOIN analysis_repositories ar ON r.id = ar.repository_id
+      WHERE ar.analysis_id = ${analysisId}
+    `
   return repos as Repository[]
 }
 
 // Blueprint queries
-export async function getBlueprintsByAnalysis(analysisId: string): Promise<AppBlueprint[]> {
+export async function getBlueprintsByAnalysis(analysisId: string, userId?: string): Promise<AppBlueprint[]> {
   const sql = getDb()
-  const blueprints = await sql`SELECT * FROM app_blueprints WHERE analysis_id = ${analysisId} ORDER BY reuse_percentage DESC`
+  const blueprints = userId
+    ? await sql`
+      SELECT b.* FROM app_blueprints b
+      JOIN analyses a ON a.id = b.analysis_id
+      WHERE b.analysis_id = ${analysisId} AND a.user_id = ${userId}
+      ORDER BY b.reuse_percentage DESC
+    `
+    : await sql`SELECT * FROM app_blueprints WHERE analysis_id = ${analysisId} ORDER BY reuse_percentage DESC`
   return blueprints as AppBlueprint[]
 }
 
@@ -366,6 +396,7 @@ export async function updateUserBilling(userId: string, data: UserBillingUpdate)
 
 export async function createBlueprint(data: {
   analysis_id: string
+  user_id: string
   name: string
   description: string | null
   app_type: string | null
@@ -380,11 +411,11 @@ export async function createBlueprint(data: {
   const sql = getDb()
   const result = await sql`
     INSERT INTO app_blueprints (
-      analysis_id, name, description, app_type, complexity, reuse_percentage,
+      analysis_id, user_id, name, description, app_type, complexity, reuse_percentage,
       existing_files, missing_files, estimated_effort, technologies, ai_explanation
     )
     VALUES (
-      ${data.analysis_id}, ${data.name}, ${data.description}, ${data.app_type}, ${data.complexity},
+      ${data.analysis_id}, ${data.user_id}, ${data.name}, ${data.description}, ${data.app_type}, ${data.complexity},
       ${data.reuse_percentage}, ${JSON.stringify(data.existing_files)}::jsonb, ${JSON.stringify(data.missing_files)}::jsonb,
       ${data.estimated_effort}, ${JSON.stringify(data.technologies)}::jsonb, ${data.ai_explanation}
     )
@@ -414,12 +445,14 @@ export interface CompletedGap {
   id: string
   gap_id: string
   blueprint_id: string
+  user_id: string | null
   completed_at: string
   created_at: string
 }
 
 export interface Template {
   id: string
+  user_id: string | null
   name: string
   description: string | null
   blueprint_ids: string[] // which blueprints this template combines
@@ -443,22 +476,38 @@ export interface GapSummary {
 }
 
 // Gap queries
-export async function getMissingGapsByBlueprint(blueprintId: string): Promise<MissingFileGap[]> {
+export async function getMissingGapsByBlueprint(blueprintId: string, userId?: string): Promise<MissingFileGap[]> {
   const sql = getDb()
-  const gaps = await sql`
-    SELECT * FROM missing_file_gaps 
-    WHERE blueprint_id = ${blueprintId}
-    ORDER BY is_blocking DESC, complexity DESC
-  `
+  const gaps = userId
+    ? await sql`
+      SELECT g.* FROM missing_file_gaps g
+      JOIN app_blueprints b ON b.id = g.blueprint_id
+      JOIN analyses a ON a.id = b.analysis_id
+      WHERE g.blueprint_id = ${blueprintId} AND a.user_id = ${userId}
+      ORDER BY g.is_blocking DESC, g.complexity DESC
+    `
+    : await sql`
+      SELECT * FROM missing_file_gaps 
+      WHERE blueprint_id = ${blueprintId}
+      ORDER BY is_blocking DESC, complexity DESC
+    `
   return gaps as MissingFileGap[]
 }
 
-export async function getAllMissingGaps(): Promise<MissingFileGap[]> {
+export async function getAllMissingGaps(userId?: string): Promise<MissingFileGap[]> {
   const sql = getDb()
-  const gaps = await sql`
-    SELECT * FROM missing_file_gaps 
-    ORDER BY is_blocking DESC, complexity DESC, created_at DESC
-  `
+  const gaps = userId
+    ? await sql`
+      SELECT g.* FROM missing_file_gaps g
+      JOIN app_blueprints b ON b.id = g.blueprint_id
+      JOIN analyses a ON a.id = b.analysis_id
+      WHERE a.user_id = ${userId}
+      ORDER BY g.is_blocking DESC, g.complexity DESC, g.created_at DESC
+    `
+    : await sql`
+      SELECT * FROM missing_file_gaps 
+      ORDER BY is_blocking DESC, complexity DESC, created_at DESC
+    `
   return gaps as MissingFileGap[]
 }
 
@@ -499,11 +548,11 @@ export async function createMissingGap(data: {
   return result[0] as MissingFileGap
 }
 
-export async function markGapAsComplete(gapId: string, blueprintId: string): Promise<CompletedGap> {
+export async function markGapAsComplete(gapId: string, blueprintId: string, userId: string): Promise<CompletedGap> {
   const sql = getDb()
   const result = await sql`
-    INSERT INTO completed_gaps (gap_id, blueprint_id)
-    VALUES (${gapId}, ${blueprintId})
+    INSERT INTO completed_gaps (gap_id, blueprint_id, user_id)
+    VALUES (${gapId}, ${blueprintId}, ${userId})
     ON CONFLICT DO NOTHING
     RETURNING *
   `
@@ -518,31 +567,62 @@ export async function getCompletedGapCount(blueprintId: string): Promise<number>
   return result[0].count as number
 }
 
-export async function getGapSummary(): Promise<GapSummary> {
+export async function getGapSummary(userId?: string): Promise<GapSummary> {
   const sql = getDb()
-  const gaps = await sql`
-    SELECT 
-      COUNT(*) as total_gaps,
-      COUNT(CASE WHEN is_blocking THEN 1 END) as blocking_gaps,
-      SUM(estimated_hours) as total_hours,
-      json_object_agg(category, category_count) as by_category
-    FROM (
-      SELECT category, COUNT(*) as category_count FROM missing_file_gaps GROUP BY category
-    ) subq
-  `
-  const completed = await sql`SELECT COUNT(*) as count FROM completed_gaps`
+  const gaps = userId
+    ? await sql`
+      SELECT 
+        COUNT(*) as total_gaps,
+        COUNT(CASE WHEN g.is_blocking THEN 1 END) as blocking_gaps,
+        COALESCE(SUM(g.estimated_hours), 0) as total_hours
+      FROM missing_file_gaps g
+      JOIN app_blueprints b ON b.id = g.blueprint_id
+      JOIN analyses a ON a.id = b.analysis_id
+      WHERE a.user_id = ${userId}
+    `
+    : await sql`
+      SELECT 
+        COUNT(*) as total_gaps,
+        COUNT(CASE WHEN is_blocking THEN 1 END) as blocking_gaps,
+        COALESCE(SUM(estimated_hours), 0) as total_hours
+      FROM missing_file_gaps
+    `
+  const categories = userId
+    ? await sql`
+      SELECT g.category, COUNT(*) as count
+      FROM missing_file_gaps g
+      JOIN app_blueprints b ON b.id = g.blueprint_id
+      JOIN analyses a ON a.id = b.analysis_id
+      WHERE a.user_id = ${userId}
+      GROUP BY g.category
+    `
+    : await sql`
+      SELECT category, COUNT(*) as count
+      FROM missing_file_gaps
+      GROUP BY category
+    `
+  const completed = userId
+    ? await sql`
+      SELECT COUNT(*) as count
+      FROM completed_gaps c
+      JOIN app_blueprints b ON b.id = c.blueprint_id
+      JOIN analyses a ON a.id = b.analysis_id
+      WHERE a.user_id = ${userId}
+    `
+    : await sql`SELECT COUNT(*) as count FROM completed_gaps`
   
   return {
     total_gaps: gaps[0]?.total_gaps || 0,
     blocking_gaps: gaps[0]?.blocking_gaps || 0,
     total_hours: gaps[0]?.total_hours || 0,
-    by_category: gaps[0]?.by_category || {},
+    by_category: Object.fromEntries((categories as Array<{ category: string; count: number }>).map((row) => [row.category, Number(row.count)])),
     completed_count: completed[0]?.count || 0,
   }
 }
 
 // Template queries
 export async function createTemplate(data: {
+  user_id?: string | null
   name: string
   description: string | null
   blueprint_ids: string[]
@@ -557,11 +637,11 @@ export async function createTemplate(data: {
   const sql = getDb()
   const result = await sql`
     INSERT INTO templates (
-      name, description, blueprint_ids, tech_stack, estimated_hours, reuse_percentage,
+      user_id, name, description, blueprint_ids, tech_stack, estimated_hours, reuse_percentage,
       total_files, missing_files, tier, featured
     )
     VALUES (
-      ${data.name}, ${data.description}, ${JSON.stringify(data.blueprint_ids)}::jsonb,
+      ${data.user_id ?? null}, ${data.name}, ${data.description}, ${JSON.stringify(data.blueprint_ids)}::jsonb,
       ${JSON.stringify(data.tech_stack)}::jsonb, ${data.estimated_hours}, ${data.reuse_percentage},
       ${data.total_files}, ${data.missing_files}, ${data.tier}, ${data.featured ?? false}
     )
@@ -570,22 +650,34 @@ export async function createTemplate(data: {
   return result[0] as Template
 }
 
-export async function getFeaturedTemplates(): Promise<Template[]> {
+export async function getFeaturedTemplates(userId?: string): Promise<Template[]> {
   const sql = getDb()
-  const templates = await sql`
-    SELECT * FROM templates 
-    WHERE featured = true
-    ORDER BY tier, estimated_hours ASC
-  `
+  const templates = userId
+    ? await sql`
+      SELECT * FROM templates 
+      WHERE featured = true AND user_id = ${userId}
+      ORDER BY tier, estimated_hours ASC
+    `
+    : await sql`
+      SELECT * FROM templates 
+      WHERE featured = true
+      ORDER BY tier, estimated_hours ASC
+    `
   return templates as Template[]
 }
 
-export async function getAllTemplates(): Promise<Template[]> {
+export async function getAllTemplates(userId?: string): Promise<Template[]> {
   const sql = getDb()
-  const templates = await sql`
-    SELECT * FROM templates 
-    ORDER BY tier, estimated_hours ASC
-  `
+  const templates = userId
+    ? await sql`
+      SELECT * FROM templates 
+      WHERE user_id = ${userId}
+      ORDER BY tier, estimated_hours ASC
+    `
+    : await sql`
+      SELECT * FROM templates 
+      ORDER BY tier, estimated_hours ASC
+    `
   return templates as Template[]
 }
 

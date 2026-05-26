@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS user_auth (
   stripe_customer_id TEXT,
   stripe_subscription_id TEXT,
   stripe_price_id TEXT,
-  plan_tier VARCHAR(20) DEFAULT 'free' CHECK (plan_tier IN ('free', 'pro')),
+  plan_tier VARCHAR(20) DEFAULT 'free' CHECK (plan_tier IN ('free', 'pro', 'scale', 'byok')),
   subscription_status VARCHAR(50),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -26,7 +26,8 @@ ALTER TABLE user_auth ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(50);
 -- Repositories table (GitHub repos added by users)
 CREATE TABLE IF NOT EXISTS repositories (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  github_id BIGINT NOT NULL UNIQUE,
+  user_id UUID REFERENCES user_auth(id) ON DELETE CASCADE,
+  github_id BIGINT NOT NULL,
   name VARCHAR(255) NOT NULL,
   full_name VARCHAR(500) NOT NULL,
   description TEXT,
@@ -63,6 +64,7 @@ CREATE TABLE IF NOT EXISTS repo_files (
 -- Analyses table (a code analysis run across selected repos)
 CREATE TABLE IF NOT EXISTS analyses (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES user_auth(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'scanning', 'analyzing', 'complete', 'failed')),
   total_files INTEGER DEFAULT 0,
@@ -84,6 +86,7 @@ CREATE TABLE IF NOT EXISTS analysis_repositories (
 CREATE TABLE IF NOT EXISTS app_blueprints (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   analysis_id UUID NOT NULL REFERENCES analyses(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES user_auth(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   description TEXT,
   app_type VARCHAR(100),
@@ -103,6 +106,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   github_id BIGINT NOT NULL UNIQUE REFERENCES user_auth(github_id),
   stripe_customer_id VARCHAR(255) UNIQUE,
   stripe_subscription_id VARCHAR(255) UNIQUE,
+  plan VARCHAR(50) DEFAULT 'free' CHECK (plan IN ('free', 'pro', 'scale', 'byok')),
   plan VARCHAR(50) DEFAULT 'free' CHECK (plan IN ('free', 'byok', 'pro', 'scale')),
   status VARCHAR(50) DEFAULT 'active' CHECK (status IN ('active', 'past_due', 'canceled', 'trialing')),
   current_period_end TIMESTAMP WITH TIME ZONE,
@@ -119,11 +123,15 @@ CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_subscription_id ON subscript
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_user_auth_github_id ON user_auth(github_id);
 CREATE INDEX IF NOT EXISTS idx_repositories_github_id ON repositories(github_id);
+CREATE INDEX IF NOT EXISTS idx_repositories_user_id ON repositories(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_repositories_user_github_id ON repositories(user_id, github_id) WHERE user_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_repositories_full_name ON repositories(full_name);
 CREATE INDEX IF NOT EXISTS idx_repo_files_repository_id ON repo_files(repository_id);
 CREATE INDEX IF NOT EXISTS idx_repo_files_file_type ON repo_files(file_type);
 CREATE INDEX IF NOT EXISTS idx_analyses_status ON analyses(status);
+CREATE INDEX IF NOT EXISTS idx_analyses_user_id ON analyses(user_id);
 CREATE INDEX IF NOT EXISTS idx_analyses_created_at ON analyses(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_analysis_repositories_analysis_id ON analysis_repositories(analysis_id);
 CREATE INDEX IF NOT EXISTS idx_app_blueprints_analysis_id ON app_blueprints(analysis_id);
+CREATE INDEX IF NOT EXISTS idx_app_blueprints_user_id ON app_blueprints(user_id);
 CREATE INDEX IF NOT EXISTS idx_app_blueprints_reuse_percentage ON app_blueprints(reuse_percentage DESC);
