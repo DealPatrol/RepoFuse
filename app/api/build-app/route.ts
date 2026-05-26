@@ -2,6 +2,9 @@ import { NextRequest } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { getCurrentUser } from '@/lib/auth'
 import { getAnthropicModel } from '@/lib/anthropic-model'
+import type { AppBlueprint } from '@/lib/queries'
+
+const anthropic = new Anthropic()
 import { getSubscriptionByGithubId, upsertSubscription, type AppBlueprint } from '@/lib/queries'
 import { isPaidPlan } from '@/lib/stripe'
 
@@ -69,6 +72,7 @@ Rules:
 Return format: {"path/to/file.ts": "...full content...", "README.md": "..."}
 `
 
+  const response = await anthropic.messages.create({
   const response = await getAnthropic().messages.create({
     model: getAnthropicModel(),
     max_tokens: 8192,
