@@ -23,15 +23,27 @@ async function run() {
         github_username VARCHAR(255) NOT NULL,
         github_avatar_url TEXT,
         access_token TEXT NOT NULL,
+        stripe_customer_id TEXT,
+        stripe_subscription_id TEXT,
+        stripe_price_id TEXT,
+        plan_tier VARCHAR(20) DEFAULT 'free' CHECK (plan_tier IN ('free', 'pro', 'scale', 'byok')),
+        subscription_status VARCHAR(50),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
     `
 
+    await sql`ALTER TABLE user_auth ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`
+    await sql`ALTER TABLE user_auth ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT`
+    await sql`ALTER TABLE user_auth ADD COLUMN IF NOT EXISTS stripe_price_id TEXT`
+    await sql`ALTER TABLE user_auth ADD COLUMN IF NOT EXISTS plan_tier VARCHAR(20) DEFAULT 'free'`
+    await sql`ALTER TABLE user_auth ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(50)`
+
     await sql`
       CREATE TABLE IF NOT EXISTS repositories (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        github_id BIGINT NOT NULL UNIQUE,
+        user_id UUID REFERENCES user_auth(id) ON DELETE CASCADE,
+        github_id BIGINT NOT NULL,
         name VARCHAR(255) NOT NULL,
         full_name VARCHAR(500) NOT NULL,
         description TEXT,
@@ -70,6 +82,7 @@ async function run() {
     await sql`
       CREATE TABLE IF NOT EXISTS analyses (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES user_auth(id) ON DELETE CASCADE,
         name VARCHAR(255) NOT NULL,
         status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'scanning', 'analyzing', 'complete', 'failed')),
         total_files INTEGER DEFAULT 0,
@@ -93,6 +106,7 @@ async function run() {
       CREATE TABLE IF NOT EXISTS app_blueprints (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         analysis_id UUID NOT NULL REFERENCES analyses(id) ON DELETE CASCADE,
+        user_id UUID REFERENCES user_auth(id) ON DELETE CASCADE,
         name VARCHAR(255) NOT NULL,
         description TEXT,
         app_type VARCHAR(100),
@@ -107,13 +121,18 @@ async function run() {
       )
     `
 
+    await sql`ALTER TABLE repositories ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES user_auth(id) ON DELETE CASCADE`
+    await sql`ALTER TABLE analyses ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES user_auth(id) ON DELETE CASCADE`
+    await sql`ALTER TABLE app_blueprints ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES user_auth(id) ON DELETE CASCADE`
+
     await sql`
       CREATE TABLE IF NOT EXISTS subscriptions (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         github_id BIGINT NOT NULL UNIQUE,
         stripe_customer_id VARCHAR(255) UNIQUE,
         stripe_subscription_id VARCHAR(255) UNIQUE,
-        plan VARCHAR(50) DEFAULT 'free' CHECK (plan IN ('free', 'pro')),
+        plan VARCHAR(50) DEFAULT 'free' CHECK (plan IN ('free', 'pro', 'scale', 'byok')),
+        plan VARCHAR(50) DEFAULT 'free' CHECK (plan IN ('free', 'byok', 'pro', 'scale')),
         status VARCHAR(50) DEFAULT 'active' CHECK (status IN ('active', 'past_due', 'canceled', 'trialing')),
         current_period_end TIMESTAMP WITH TIME ZONE,
         analyses_used_this_month INTEGER DEFAULT 0,
@@ -123,15 +142,34 @@ async function run() {
       )
     `
 
+    await sql`ALTER TABLE subscriptions DROP CONSTRAINT IF EXISTS subscriptions_plan_check`
+    await sql`ALTER TABLE subscriptions ADD CONSTRAINT subscriptions_plan_check CHECK (plan IN ('free', 'pro', 'scale', 'byok'))`
+
     await sql`CREATE INDEX IF NOT EXISTS idx_subscriptions_github_id ON subscriptions(github_id)`
     await sql`CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_customer_id ON subscriptions(stripe_customer_id)`
 
     await sql`CREATE INDEX IF NOT EXISTS idx_user_auth_github_id ON user_auth(github_id)`
     await sql`CREATE INDEX IF NOT EXISTS idx_repositories_github_id ON repositories(github_id)`
+    await sql`CREATE INDEX IF NOT EXISTS idx_repositories_user_id ON repositories(user_id)`
+    await sql`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'repositories_github_id_key'
+            AND conrelid = 'repositories'::regclass
+        ) THEN
+          ALTER TABLE repositories DROP CONSTRAINT repositories_github_id_key;
+        END IF;
+      END $$;
+    `
+    await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_repositories_user_github_id ON repositories(user_id, github_id) WHERE user_id IS NOT NULL`
     await sql`CREATE INDEX IF NOT EXISTS idx_repositories_full_name ON repositories(full_name)`
     await sql`CREATE INDEX IF NOT EXISTS idx_repo_files_repository_id ON repo_files(repository_id)`
     await sql`CREATE INDEX IF NOT EXISTS idx_analyses_status ON analyses(status)`
+    await sql`CREATE INDEX IF NOT EXISTS idx_analyses_user_id ON analyses(user_id)`
     await sql`CREATE INDEX IF NOT EXISTS idx_app_blueprints_analysis_id ON app_blueprints(analysis_id)`
+    await sql`CREATE INDEX IF NOT EXISTS idx_app_blueprints_user_id ON app_blueprints(user_id)`
 
     return NextResponse.json({ success: true, message: 'Database schema initialized successfully.' })
   } catch (err) {

@@ -3,10 +3,10 @@ import Link from 'next/link'
 import { ArrowLeft, Rocket, Zap, Lightbulb } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { TemplateAssemblyCard } from '@/components/template-assembly-card'
 import { CreateTemplateModal } from '@/components/create-template-modal'
 import { getAllTemplates, getFeaturedTemplates, type Template } from '@/lib/queries'
+import { getCurrentUser } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,9 +29,13 @@ async function TemplateHubContent() {
   let setupRequired = false
 
   try {
+    const user = await getCurrentUser()
+    if (!user) {
+      return null
+    }
     const result = await Promise.all([
-      getFeaturedTemplates(),
-      getAllTemplates(),
+      getFeaturedTemplates(user.id),
+      getAllTemplates(user.id),
     ])
     featured = result[0]
     all = result[1]
@@ -76,9 +80,13 @@ async function TemplateHubContent() {
   }
 
   try {
+    const user = await getCurrentUser()
+    if (!user) {
+      return null
+    }
     ;[featured, all] = await Promise.all([
-      getFeaturedTemplates(),
-      getAllTemplates(),
+      getFeaturedTemplates(user.id),
+      getAllTemplates(user.id),
     ])
   } catch {
     // Database tables may not exist yet
@@ -115,7 +123,7 @@ async function TemplateHubContent() {
               <div>
                 <p className="font-semibold text-sm text-green-900">Ship Faster</p>
                 <p className="text-xs text-green-700/80">
-                  Templates show exactly what's needed to launch
+                  Templates show exactly what&apos;s needed to launch
                 </p>
               </div>
             </div>
