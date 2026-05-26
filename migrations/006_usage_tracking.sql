@@ -4,7 +4,7 @@
 -- Table to track blueprint views per user
 CREATE TABLE IF NOT EXISTS blueprint_views (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES user_auth(id) ON DELETE CASCADE,
   blueprint_id UUID NOT NULL REFERENCES app_blueprints(id) ON DELETE CASCADE,
   first_viewed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   view_count INTEGER NOT NULL DEFAULT 1,

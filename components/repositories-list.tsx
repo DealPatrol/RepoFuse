@@ -73,6 +73,14 @@ export function RepositoriesList({ repositories }: RepositoriesListProps) {
     if (selectableGithubIds.length === 0) return false
     return selectableGithubIds.every((id) => selectedRepos.includes(id))
   }, [selectableGithubIds, selectedRepos])
+  const trackedLanguages = useMemo(
+    () => Array.from(new Set(repositories.map((repo) => repo.language).filter(Boolean))),
+    [repositories],
+  )
+  const totalStars = useMemo(
+    () => repositories.reduce((sum, repo) => sum + repo.stars, 0),
+    [repositories],
+  )
   const oauthError = searchParams.get('error')
   const oauthConnected = searchParams.get('connected')
 
@@ -217,41 +225,92 @@ export function RepositoriesList({ repositories }: RepositoriesListProps) {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Repositories</h1>
-          <p className="text-muted-foreground">Sign in with GitHub, import repositories, and track them in RepoFuse.</p>
-        </div>
-        {loadingAuth ? (
-          <Button variant="outline" disabled>
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            Checking GitHub
-          </Button>
-        ) : auth?.authenticated ? (
-          <div className="flex items-center gap-3">
-            <div className="text-sm text-muted-foreground">
-              Signed in as <span className="font-medium text-foreground">@{auth.user?.github_username}</span>
+      <Card className="overflow-hidden border-cyan-500/20 bg-gradient-to-br from-cyan-950/30 via-card to-card p-0">
+        <div className="grid gap-6 p-6 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div>
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-xs font-medium text-cyan-300">
+              <FolderGit2 className="h-3.5 w-3.5" />
+              Repo workspace
             </div>
-            <Button
-              variant="outline"
-              onClick={async () => {
-                await fetch('/api/auth/logout', { method: 'POST' })
-                setAuth({ authenticated: false })
-                setGitHubRepos([])
-                setSelectedRepos([])
-              }}
-            >
-              Sign out
-            </Button>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">Repositories</h1>
+            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+              Connect your code sources, import the repos RepoFuse can analyze, and turn existing files into VibeCoding build blocks.
+            </p>
           </div>
-        ) : (
-          <Button asChild>
-            <a href="/api/auth/github/login">
-              <Github className="h-4 w-4 mr-2" />
-              Sign in with GitHub
-            </a>
-          </Button>
-        )}
+          {loadingAuth ? (
+            <Button variant="outline" disabled>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Checking GitHub
+            </Button>
+          ) : auth?.authenticated ? (
+            <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-background/60 p-4 sm:min-w-72">
+              <div className="text-sm text-muted-foreground">
+                Connected as <span className="font-medium text-foreground">@{auth.user?.github_username}</span>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => void loadGitHubRepos()} disabled={loadingGitHubRepos}>
+                  {loadingGitHubRepos ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Github className="h-4 w-4 mr-2" />}
+                  Sync repos
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={async () => {
+                    await fetch('/api/auth/logout', { method: 'POST' })
+                    setAuth({ authenticated: false })
+                    setGitHubRepos([])
+                    setSelectedRepos([])
+                  }}
+                >
+                  Sign out
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button asChild>
+              <a href="/api/auth/github/login">
+                <Github className="h-4 w-4 mr-2" />
+                Sign in with GitHub
+              </a>
+            </Button>
+          )}
+        </div>
+      </Card>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-chart-1/10">
+              <FolderGit2 className="h-5 w-5 text-chart-1" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold tabular-nums text-foreground">{repositories.length}</p>
+              <p className="text-xs text-muted-foreground">Tracked repos</p>
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-chart-2/10">
+              <Star className="h-5 w-5 text-chart-2" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold tabular-nums text-foreground">{totalStars.toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground">Stars imported</p>
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-chart-4/10">
+              <GitBranch className="h-5 w-5 text-chart-4" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold tabular-nums text-foreground">{trackedLanguages.length}</p>
+              <p className="text-xs text-muted-foreground">Languages detected</p>
+            </div>
+          </div>
+        </Card>
       </div>
 
       {(oauthConnected || error || auth?.error || oauthError) && (
@@ -262,12 +321,12 @@ export function RepositoriesList({ repositories }: RepositoriesListProps) {
         </Card>
       )}
 
-      <Card className="p-6 space-y-4">
+      <Card className="p-6 space-y-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-foreground">GitHub import</h2>
+            <h2 className="text-lg font-semibold text-foreground">Import from GitHub</h2>
             <p className="text-sm text-muted-foreground">
-              Connect GitHub to import public and private repositories directly into the app.
+              Choose public or private repositories to make available for scans, app ideas, and code assembly.
             </p>
           </div>
           {auth?.authenticated ? (
@@ -341,7 +400,7 @@ export function RepositoriesList({ repositories }: RepositoriesListProps) {
               {githubRepos.map((repo) => {
                 const alreadyImported = importedGithubIds.has(repo.id)
                 return (
-                  <Card key={repo.id} className="p-4">
+                  <Card key={repo.id} className="p-4 transition-colors hover:border-cyan-500/30">
                     <label className="flex cursor-pointer items-start gap-3">
                       <Checkbox
                         checked={alreadyImported || selectedRepos.includes(repo.id)}
@@ -382,10 +441,10 @@ export function RepositoriesList({ repositories }: RepositoriesListProps) {
         )}
       </Card>
 
-      <Card className="p-6 space-y-4">
+      <Card className="p-6 space-y-5">
         <div>
           <h2 className="text-lg font-semibold text-foreground">Tracked repositories</h2>
-          <p className="text-sm text-muted-foreground">These are the repositories RepoFuse can analyze right now.</p>
+          <p className="text-sm text-muted-foreground">These repos power analyses, VibeCoding Chat context, and build plans.</p>
         </div>
 
         <div className="space-y-3">

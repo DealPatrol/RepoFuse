@@ -1,5 +1,6 @@
 import { getAllAnalyses, getAllRepositories, type Analysis, type Repository } from '@/lib/queries'
 import { AnalysesList } from '@/components/analyses-list'
+import { getCurrentUser } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,8 +9,11 @@ export default async function AnalysesPage() {
   let repositories: Repository[] = []
 
   try {
-    analyses = await getAllAnalyses()
-    repositories = await getAllRepositories()
+    const user = await getCurrentUser()
+    if (user) {
+      analyses = await getAllAnalyses(user.id)
+      repositories = await getAllRepositories(user.id)
+    }
   } catch {
     // Database not available
   }

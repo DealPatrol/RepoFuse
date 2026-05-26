@@ -20,7 +20,9 @@ import {
   incrementAnalysisUsage,
 } from '@/lib/queries'
 import { getAnthropicModel } from '@/lib/anthropic-model'
-import { PLANS } from '@/lib/stripe'
+import { PLANS, isPaidPlan } from '@/lib/stripe'
+import { generateGapsFromBlueprint, generateTemplatesFromBlueprints } from '@/lib/gap-generation'
+import { isPaidPlan, PLANS } from '@/lib/stripe'
 
 // Schema for AI-generated app blueprints
 const complexityEnum = z.preprocess((val) => {
@@ -157,12 +159,28 @@ export async function POST(
         }
 
         const user = await getCurrentUser()
+        if (!user) {
+          send({ error: 'Sign in with GitHub before running an analysis.' })
+          controller.close()
+          return
+        }
+
+        let sub = await getSubscriptionByGithubId(user.github_id).catch(() => null)
+        if (!sub) {
+          sub = await upsertSubscription({ github_id: user.github_id }).catch(() => null)
+        }
+        if (sub && !isPaidPlan(sub.plan)) {
+          const limit = PLANS.free.analyses_per_month
+          if (sub.analyses_used_this_month >= limit) {
+            send({ error: `You've reached your free plan limit of ${limit} analyses per month. Upgrade to Pro for unlimited analyses.`, status: 'failed' })
+            controller.close()
+            return
         if (user) {
           let sub = await getSubscriptionByGithubId(user.github_id).catch(() => null)
           if (!sub) {
             sub = await upsertSubscription({ github_id: user.github_id }).catch(() => null)
           }
-          if (sub && sub.plan !== 'pro') {
+          if (sub && !isPaidPlan(sub.plan)) {
             const limit = PLANS.free.analyses_per_month
             if (sub.analyses_used_this_month >= limit) {
               send({ error: `You've reached your free plan limit of ${limit} analyses per month. Upgrade to Pro for unlimited analyses.`, status: 'failed' })
@@ -173,7 +191,7 @@ export async function POST(
         }
 
         // Get analysis and repositories
-        const analysis = await getAnalysisById(id)
+        const analysis = await getAnalysisById(id, user.id)
         if (!analysis) {
           send({ error: 'Analysis not found' })
           controller.close()
@@ -185,7 +203,7 @@ export async function POST(
           return
         }
 
-        const repositories = await getRepositoriesForAnalysis(id)
+        const repositories = await getRepositoriesForAnalysis(id, user.id)
         if (repositories.length === 0) {
           send({ error: 'No repositories linked to this analysis' })
           controller.close()
@@ -418,6 +436,7 @@ Constraints:
           for (const bp of rankedBlueprints) {
             await createBlueprint({
               analysis_id: id,
+              user_id: user.id,
               name: bp.name.slice(0, 255),
               description: bp.description,
               app_type: bp.app_type?.slice(0, 100) ?? null,
@@ -435,14 +454,16 @@ Constraints:
         // Update to complete
         await updateAnalysisStatus(id, 'complete', { analyzed_files: allFiles.length })
 
-        if (user) {
-          await incrementAnalysisUsage(user.github_id).catch((e) =>
-            console.error('[analysis] Failed to increment usage:', e)
-          )
-        }
+        await incrementAnalysisUsage(user.github_id).catch((e) =>
+          console.error('[analysis] Failed to increment usage:', e)
+        )
 
-        // Get final blueprints
-        const finalBlueprints = await getBlueprintsByAnalysis(id)
+        // Get final blueprints and hydrate recurring-value surfaces from them.
+        const finalBlueprints = await getBlueprintsByAnalysis(id, user.id)
+        for (const blueprint of finalBlueprints) {
+          await generateGapsFromBlueprint(blueprint)
+        }
+        await generateTemplatesFromBlueprints(finalBlueprints)
 
         send({ status: 'complete', progress: 100, blueprints: finalBlueprints })
         controller.close()

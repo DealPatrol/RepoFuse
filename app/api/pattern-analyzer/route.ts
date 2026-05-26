@@ -7,8 +7,19 @@ import {
   getFilesByRepository,
 } from '@/lib/queries'
 import { getAnthropicModel } from '@/lib/anthropic-model'
+import { getCurrentUser } from '@/lib/auth'
+import { deductCredits, CREDITS } from '@/lib/credits'
 
-const anthropic = new Anthropic()
+let __anthropicClient: Anthropic | null = null
+function getAnthropic(): Anthropic {
+  if (__anthropicClient) return __anthropicClient
+  const key = process.env.ANTHROPIC_API_KEY
+  if (!key) {
+    throw new Error('ANTHROPIC_API_KEY is not configured')
+  }
+  __anthropicClient = new Anthropic({ apiKey: key })
+  return __anthropicClient
+}
 
 export interface ProjectSuggestion {
   name: string
@@ -32,13 +43,23 @@ export interface PatternAnalyzerResult {
 
 export async function POST(request: NextRequest) {
   try {
+    const user = await getCurrentUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
     const { analysisId } = (await request.json()) as { analysisId: string }
 
     if (!analysisId) {
       return NextResponse.json({ error: 'analysisId is required' }, { status: 400 })
     }
 
-    const analysis = await getAnalysisById(analysisId)
+    const creditResult = await deductCredits(user.id, CREDITS.PATTERN_ANALYZER_COST, 'pattern_analyzer', { analysisId })
+    if (!creditResult.success) {
+      return NextResponse.json({ error: creditResult.error || 'Insufficient credits' }, { status: 402 })
+    }
+
+    const analysis = await getAnalysisById(analysisId, user.id)
     if (!analysis) {
       return NextResponse.json({ error: 'Analysis not found' }, { status: 404 })
     }
@@ -51,8 +72,8 @@ export async function POST(request: NextRequest) {
 
     // Gather repo files and blueprints
     const [repositories, blueprints] = await Promise.all([
-      getRepositoriesForAnalysis(analysisId),
-      getBlueprintsByAnalysis(analysisId),
+      getRepositoriesForAnalysis(analysisId, user.id),
+      getBlueprintsByAnalysis(analysisId, user.id),
     ])
 
     const allFiles = (
@@ -142,7 +163,7 @@ Respond ONLY with a valid JSON object (no markdown fences) matching this exact s
   ]
 }`
 
-    const response = await anthropic.messages.create({
+    const response = await getAnthropic().messages.create({
       model: getAnthropicModel(),
       max_tokens: 4096,
       messages: [{ role: 'user', content: prompt }],

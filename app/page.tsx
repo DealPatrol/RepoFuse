@@ -1,9 +1,7 @@
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
 import { RepoFuseLogo3D } from '@/components/repofuse-logo-3d'
 import { NavDropdown } from '@/components/nav-dropdown'
-import { Github, ArrowRight, AlertCircle, Shield, Zap, GitBranch, Rocket, Code2, Sparkles } from 'lucide-react'
-import { LaunchSignupModal } from '@/components/launch-signup-modal'
+import { Github, ArrowRight, AlertCircle, Zap } from 'lucide-react'
 
 const ERROR_MESSAGES: Record<string, string> = {
   auth_required: 'You must sign in to access the dashboard.',
@@ -22,7 +20,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const errorMessage = error ? ERROR_MESSAGES[error] ?? 'An unexpected error occurred.' : null
 
   return (
-    <div className="min-h-screen bg-black text-white overflow-x-hidden">
+    <div className="min-h-screen bg-[#0a0a0f] text-white overflow-x-hidden">
       {errorMessage && (
         <div className="bg-red-950/50 border-b border-red-500/30 px-4 py-3 flex items-center gap-3 text-sm text-red-300">
           <AlertCircle className="h-4 w-4 flex-shrink-0" />
@@ -30,195 +28,132 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         </div>
       )}
 
-      {/* Animated scanlines overlay */}
-      <div className="fixed inset-0 pointer-events-none z-50 opacity-5" style={{
-        backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.3) 2px, rgba(0,0,0,0.3) 4px)'
-      }} />
-
       {/* Noise overlay */}
-      <div className="fixed inset-0 pointer-events-none z-40 opacity-[0.02]" style={{
+      <div className="fixed inset-0 pointer-events-none z-40 opacity-[0.025]" style={{
         backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
         backgroundSize: '256px'
       }} />
 
-      {/* Launch Day Banner - Compelling Headline */}
-      <div className="relative z-30 border-b border-red-500/30 bg-gradient-to-r from-black via-red-950/30 to-black px-4 py-6 text-center">
-        <div className="max-w-4xl mx-auto space-y-4">
-          <div className="flex items-center justify-center gap-6">
-            <div className="text-center">
-              <RepoFuseLogo3D className="h-20 w-20 mx-auto" />
-            </div>
-            <div className="text-left">
-              <p className="text-2xl sm:text-3xl font-black text-red-500 uppercase tracking-tighter drop-shadow-[0_0_10px_rgba(239,68,68,0.5)]">
-                FULL LAUNCH
-              </p>
-              <p className="text-base sm:text-lg font-bold text-red-400 uppercase">
-                5/12/2026
-              </p>
-            </div>
-          </div>
-          <div className="space-y-3 mt-4">
-            <p className="text-sm sm:text-base font-bold text-cyan-200 uppercase tracking-widest">
-              First 1,000 Developers Get:
-            </p>
-            <p className="text-lg sm:text-xl font-bold text-white">
-              <span className="text-yellow-300">14 Days Free</span> OR <span className="text-yellow-300">3 Analyses + 1 Blueprint</span>
-            </p>
-            <p className="text-xs sm:text-sm text-cyan-300">
-              Lock in lifetime pricing. Link GitHub or GitLab today.
-            </p>
-          </div>
-        </div>
-      </div>
-
       {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-cyan-500/20 bg-black/95 backdrop-blur-xl">
+      <header className="sticky top-0 z-50 border-b border-white/5 bg-[#0a0a0f]/95 backdrop-blur-xl">
         <div className="container mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
-          <Link href="/" className="flex items-center flex-shrink-0">
-            <RepoFuseLogo3D className="h-10 w-10" />
+          <Link href="/" className="flex items-center gap-2.5 flex-shrink-0">
+            <RepoFuseLogo3D className="h-9 w-9 mt-4" />
+            <span className="text-sm font-bold text-white hidden sm:block">RepoFuse</span>
           </Link>
-          
-          <nav className="flex items-center gap-2 sm:gap-4 md:gap-6">
-            {/* Desktop nav links */}
-            <a href="#features" className="text-xs font-mono tracking-widest text-cyan-400/60 hover:text-cyan-300 transition-colors hidden lg:block uppercase">
-              Features
-            </a>
-            <a href="#how" className="text-xs font-mono tracking-widest text-cyan-400/60 hover:text-cyan-300 transition-colors hidden lg:block uppercase">
-              How It Works
-            </a>
-            <Link href="/pricing" className="text-xs font-mono tracking-widest text-cyan-400/60 hover:text-cyan-300 transition-colors hidden lg:block uppercase">
-              Pricing
-            </Link>
-            
-            {/* Dashboard Dropdown */}
+
+          <nav className="hidden md:flex items-center gap-6">
+            <a href="#features" className="text-xs font-medium text-gray-400 hover:text-white transition-colors">Features</a>
+            <a href="#how" className="text-xs font-medium text-gray-400 hover:text-white transition-colors">How It Works</a>
+            <Link href="/pricing" className="text-xs font-medium text-gray-400 hover:text-white transition-colors">Pricing</Link>
             <NavDropdown />
-            
-            {/* Auth buttons - GitHub & GitLab */}
-            <div className="flex items-center gap-2">
-              <Button size="sm" className="bg-[#24292e] hover:bg-[#2f363d] text-white border border-gray-700 hover:border-gray-600 gap-1.5" asChild>
-                <Link href="/api/auth/github/login">
-                  <Github className="h-4 w-4" />
-                  <span className="hidden sm:inline">GitHub</span>
-                </Link>
-              </Button>
-              <Button size="sm" className="bg-[#fc6d26] hover:bg-[#e24329] text-white gap-1.5" asChild>
-                <Link href="/api/auth/gitlab/login">
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M23.6 6.15 12 0 .4 6.15a.88.88 0 0 0-.3 1.1l1.88 5.77H0v4.27h2.58l2.4 7.38a.88.88 0 0 0 .83.56h12.38a.88.88 0 0 0 .83-.56l2.4-7.38H24v-4.27h-2.08l1.88-5.77a.88.88 0 0 0-.28-1.1z"/>
-                  </svg>
-                  <span className="hidden sm:inline">GitLab</span>
-                </Link>
-              </Button>
-            </div>
           </nav>
+
+          <div className="flex items-center gap-3">
+            <div className="md:hidden">
+              <NavDropdown />
+            </div>
+            <a
+              href="/api/auth/github/login"
+              className="inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-sm px-4 py-2 rounded-full transition-colors shadow-lg shadow-cyan-500/25"
+            >
+              <Github className="h-4 w-4" />
+              Get Started
+            </a>
+          </div>
         </div>
       </header>
 
       {/* Hero Section */}
       <main>
-        <section className="relative overflow-hidden pt-16 pb-20">
-          {/* Animated grid background */}
-          <div className="absolute inset-0 -z-10" style={{
-            backgroundImage: 'linear-gradient(rgba(0,229,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,255,0.04) 1px, transparent 1px)',
-            backgroundSize: '60px 60px',
-            animation: 'gridDrift 20s linear infinite'
-          }} />
+        <section className="relative overflow-hidden pt-16 pb-12 sm:pt-20 sm:pb-16">
+          {/* Subtle radial glow */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-cyan-500/8 rounded-full blur-3xl -z-10 pointer-events-none" />
+          <div className="absolute bottom-0 left-1/4 w-64 h-64 bg-cyan-500/5 rounded-full blur-3xl -z-10 pointer-events-none" />
 
-          {/* Glowing orbs */}
-          <div className="absolute -top-32 -left-32 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl -z-10 animate-pulse" />
-          <div className="absolute -bottom-32 right-1/4 w-96 h-96 bg-orange-500/5 rounded-full blur-3xl -z-10 opacity-50" style={{ animation: 'pulse 4s ease-in-out infinite 1s' }} />
-          <div className="absolute top-1/2 -right-32 w-72 h-72 bg-magenta-500/5 rounded-full blur-3xl -z-10 opacity-40" style={{ animation: 'pulse 5s ease-in-out infinite 2s' }} />
+          <div className="container mx-auto px-4 max-w-3xl text-center">
+            {/* Trust badge */}
+            <div className="inline-flex items-center gap-3 px-4 py-2.5 rounded-full bg-white/5 border border-white/10 text-sm text-gray-300 mb-10">
+              <span className="flex items-center gap-1.5 text-cyan-400 font-semibold">
+                <Zap className="h-3.5 w-3.5" />
+                AI-POWERED
+              </span>
+              <span className="w-px h-4 bg-white/20" />
+              The #1 Repo Intelligence Platform
+            </div>
 
-          <div className="container mx-auto px-4 pt-8 pb-12">
-            <div className="grid lg:grid-cols-2 gap-12 items-center max-w-6xl mx-auto">
-              {/* Left content */}
-              <div className="space-y-8 z-10">
-                {/* Badge */}
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-cyan-500/30 bg-cyan-950/30 text-xs font-mono text-cyan-300 w-fit">
-                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-                  Now in Public Beta
-                </div>
-                
-                {/* Heading */}
-                <div className="space-y-4">
-                  <h1 className="text-5xl lg:text-6xl xl:text-7xl font-black tracking-tight leading-tight">
-                    <span className="block text-white">Everything your</span>
-                    <span className="block mt-2">
-                      <span className="text-cyan-300">repos</span>
-                      <span className="text-white mx-3">have been</span>
-                    </span>
-                    <span className="block mt-2">
-                      <span className="text-orange-300">waiting</span>
-                      <span className="text-orange-200">for</span>
-                    </span>
-                  </h1>
-                </div>
-                
-                {/* Subheading */}
-                <p className="text-lg text-cyan-200/70 max-w-lg leading-relaxed">
-                  RepoFuse scans your connected GitHub or GitLab repos and surfaces buildable project ideas, detects hidden potential, and turns scattered code into your next big launch — automatically.
-                </p>
+            {/* Headline */}
+            <h1 className="text-5xl sm:text-6xl md:text-7xl font-black tracking-tight leading-[1.05] mb-6">
+              <span className="block text-white">Your repos are hiding</span>
+              <span className="block text-cyan-400 mt-2">buildable apps</span>
+            </h1>
 
-                {/* CTA Buttons */}
-                <div className="flex flex-col sm:flex-row gap-4 pt-6">
-                  <LaunchSignupModal>
-                    <Button size="lg" className="bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-black font-bold text-base h-12 shadow-lg shadow-yellow-500/40 cursor-pointer">
-                      <Rocket className="h-5 w-5 mr-2" />
-                      Lock In Launch Pricing
-                      <ArrowRight className="h-4 w-4 ml-2" />
-                    </Button>
-                  </LaunchSignupModal>
-                  <Button size="lg" className="bg-cyan-950/40 border border-cyan-500/40 hover:bg-cyan-950/60 hover:border-cyan-400/60 text-cyan-300 font-bold text-base h-12" asChild>
-                    <Link href="/api/auth/github/login">
-                      <Github className="h-5 w-5 mr-2" />
-                      Or Link Repo Free
-                    </Link>
-                  </Button>
-                </div>
+            {/* Subheading */}
+            <p className="text-lg sm:text-xl text-gray-400 max-w-xl mx-auto leading-relaxed mb-10">
+              RepoFuse scans your GitHub and GitLab repos, surfaces project ideas, and turns scattered code into your next launch —{' '}
+              <strong className="text-gray-200 font-semibold">automatically.</strong>
+            </p>
 
-                {/* Social proof */}
-                <div className="pt-4 text-xs text-cyan-400/50 font-mono">
-                  <span className="text-cyan-300">2,400+</span> developers already on the waitlist
+            {/* Primary CTA */}
+            <a
+              href="/api/auth/github/login"
+              className="inline-flex items-center justify-center gap-2.5 w-full sm:w-auto sm:min-w-72 bg-cyan-500 hover:bg-cyan-400 active:bg-cyan-600 text-black font-bold text-lg px-8 py-4 rounded-2xl transition-all shadow-xl shadow-cyan-500/30 hover:shadow-cyan-400/40 hover:-translate-y-0.5"
+            >
+              <Github className="h-5 w-5" />
+              Scan My Repos Free
+            </a>
+
+            {/* Sub-text */}
+            <p className="text-sm text-gray-500 mt-4">
+              Connect in seconds. No credit card required.
+            </p>
+
+            {/* Social proof */}
+            <div className="flex items-center justify-center gap-2 mt-6 text-xs text-gray-500">
+              <div className="flex -space-x-1">
+                {['#22d3ee','#a78bfa','#fb923c','#4ade80'].map((c, i) => (
+                  <div key={i} className="w-6 h-6 rounded-full border-2 border-[#0a0a0f]" style={{ backgroundColor: c + '60' }} />
+                ))}
+              </div>
+              <span><strong className="text-cyan-400">2,400+</strong> developers already scanning</span>
+            </div>
+
+            {/* Terminal preview */}
+            <div className="mt-14 text-left rounded-2xl overflow-hidden border border-white/10 bg-[#0d0d14] shadow-2xl shadow-black/60">
+              {/* Window chrome */}
+              <div className="flex items-center gap-2 px-5 py-3.5 border-b border-white/8 bg-white/3">
+                <div className="w-3 h-3 rounded-full bg-red-500/80" />
+                <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
+                <div className="w-3 h-3 rounded-full bg-green-500/80" />
+                <span className="ml-3 text-xs font-mono text-gray-500">RepoFuse Dashboard</span>
+                <div className="ml-auto flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                  <span className="text-xs font-mono text-green-400">Online</span>
                 </div>
               </div>
 
-              {/* Right: Terminal window */}
-              <div className="relative z-10">
-                <div className="bg-black/80 border border-cyan-500/30 rounded-lg overflow-hidden shadow-2xl shadow-cyan-500/20 backdrop-blur-sm">
-                  {/* Terminal header */}
-                  <div className="bg-cyan-950/40 border-b border-cyan-500/20 px-4 py-3 flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-red-500" />
-                    <div className="w-3 h-3 rounded-full bg-yellow-500" />
-                    <div className="w-3 h-3 rounded-full bg-green-500" />
-                    <span className="ml-4 text-xs font-mono text-cyan-400">repofuse — repo-scanner</span>
-                  </div>
-
-                  {/* Terminal body */}
-                  <div className="p-6 font-mono text-sm space-y-2 h-72 overflow-hidden">
-                    <div className="flex gap-3">
-                      <span className="text-cyan-400">$</span>
-                      <span className="text-white">repofuse scan --org DealPatrol</span>
-                    </div>
-                    <div className="pt-2 space-y-1 text-cyan-300/70">
-                      <div>▸ Connecting to GitHub API...</div>
-                      <div className="text-cyan-300">✓ Found 14 repositories</div>
-                      <div>▸ Analyzing code patterns...</div>
-                    </div>
-                    <div className="pt-3 text-cyan-200/80 space-y-1">
-                      <div>📦 repo-app-architect</div>
-                      <div className="text-orange-400 ml-2">⚡ 3 buildable ideas detected</div>
-                      <div className="text-cyan-300 ml-3">→ SaaS: AI Code Review Tool</div>
-                      <div className="text-cyan-300 ml-3">→ Tool: Repo Health Dashboard</div>
-                      <div className="text-cyan-300 ml-3">→ API: Webhook Automation Kit</div>
-                    </div>
-                    <div className="pt-3 text-cyan-300/70">
-                      <div>▸ Generating project briefs...</div>
-                    </div>
-                    <div className="pt-2 flex gap-2">
-                      <span className="text-cyan-400">$</span>
-                      <span className="w-2 h-5 bg-cyan-400 animate-pulse" />
-                    </div>
-                  </div>
+              {/* Content */}
+              <div className="p-6 font-mono text-sm space-y-3">
+                <div className="flex gap-3 text-gray-400">
+                  <span className="text-cyan-500">$</span>
+                  <span className="text-white">repofuse scan --org DealPatrol --all-repos</span>
+                </div>
+                <div className="space-y-1.5 text-gray-500 pl-6">
+                  <div>▸ Connecting to GitHub API...</div>
+                  <div className="text-cyan-400">✓ Found 14 repositories</div>
+                  <div>▸ Analyzing code patterns &amp; dependencies...</div>
+                </div>
+                <div className="pl-6 space-y-1 pt-1">
+                  <div className="text-gray-300">📦 <span className="text-white">repo-app-architect</span></div>
+                  <div className="text-orange-400 pl-4">⚡ 3 buildable ideas detected</div>
+                  <div className="text-cyan-400 pl-6">→ SaaS: AI Code Review Tool</div>
+                  <div className="text-cyan-400 pl-6">→ Tool: Repo Health Dashboard</div>
+                  <div className="text-cyan-400 pl-6">→ API: Webhook Automation Kit</div>
+                </div>
+                <div className="pl-6 text-gray-500">▸ Generating full project briefs...</div>
+                <div className="flex gap-3 text-gray-400 pl-0 pt-1">
+                  <span className="text-cyan-500">$</span>
+                  <span className="w-2 h-4 bg-cyan-400 animate-pulse inline-block" />
                 </div>
               </div>
             </div>
@@ -226,69 +161,49 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         </section>
 
         {/* Metrics Strip */}
-        <section className="border-y border-cyan-500/20 bg-gradient-to-b from-cyan-950/10 to-transparent py-12">
+        <section className="border-y border-white/5 py-12">
           <div className="container mx-auto px-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-4xl mx-auto text-center">
-              <div className="space-y-2">
-                <p className="text-3xl md:text-4xl font-black text-cyan-300 tabular-nums">12k+</p>
-                <p className="text-xs text-cyan-400/60 font-mono uppercase tracking-widest">Repos Scanned</p>
-              </div>
-              <div className="space-y-2">
-                <p className="text-3xl md:text-4xl font-black text-orange-300 tabular-nums">4.1k</p>
-                <p className="text-xs text-orange-400/60 font-mono uppercase tracking-widest">Ideas Found</p>
-              </div>
-              <div className="space-y-2">
-                <p className="text-3xl md:text-4xl font-black text-magenta-300 tabular-nums">89%</p>
-                <p className="text-xs text-magenta-400/60 font-mono uppercase tracking-widest">Code Reuse</p>
-              </div>
-              <div className="space-y-2">
-                <p className="text-3xl md:text-4xl font-black text-cyan-300 tabular-nums">&lt;30s</p>
-                <p className="text-xs text-cyan-400/60 font-mono uppercase tracking-widest">Analysis Time</p>
-              </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-3xl mx-auto text-center">
+              {[
+                { val: '12k+', label: 'Repos Scanned', color: 'text-cyan-400' },
+                { val: '4.1k', label: 'Ideas Found', color: 'text-orange-400' },
+                { val: '89%', label: 'Code Reuse', color: 'text-purple-400' },
+                { val: '<30s', label: 'Analysis Time', color: 'text-cyan-400' },
+              ].map((m) => (
+                <div key={m.label} className="space-y-1">
+                  <p className={`text-3xl md:text-4xl font-black tabular-nums ${m.color}`}>{m.val}</p>
+                  <p className="text-xs text-gray-500 uppercase tracking-widest">{m.label}</p>
+                </div>
+              ))}
             </div>
           </div>
         </section>
 
         {/* How It Works */}
-        <section id="how" className="py-20 border-b border-cyan-500/20 bg-gradient-to-b from-black via-cyan-950/5 to-black">
-          <div className="container mx-auto px-4 max-w-6xl">
-            <div className="text-center mb-16">
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-cyan-500/30 bg-cyan-950/30 mb-6 text-xs font-mono text-cyan-300">
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+        <section id="how" className="py-20 border-b border-white/5">
+          <div className="container mx-auto px-4 max-w-5xl">
+            <div className="text-center mb-14">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 mb-5 text-xs font-mono text-gray-400">
                 HOW IT WORKS
               </div>
-              <h2 className="text-4xl md:text-5xl font-black text-white mb-4">Four steps to<br />
-                <span className="bg-gradient-to-r from-cyan-400 to-orange-400 bg-clip-text text-transparent">
-                  buildable blueprints
-                </span>
+              <h2 className="text-4xl md:text-5xl font-black text-white mb-3">
+                Four steps to<br />
+                <span className="text-cyan-400">buildable blueprints</span>
               </h2>
             </div>
 
-            <div className="grid md:grid-cols-4 gap-0 relative">
-              {/* Connecting line */}
-              <div className="hidden md:block absolute top-24 left-12.5% right-12.5% h-1 bg-gradient-to-r from-cyan-500 via-orange-500 to-magenta-500 opacity-20" />
-
+            <div className="grid md:grid-cols-4 gap-4">
               {[
                 { num: '01', title: 'Connect', icon: '🔗', desc: 'OAuth in one click. Read-only access to your repos.' },
                 { num: '02', title: 'Scan', icon: '⚡', desc: 'AI analyzes structure, patterns, and dependencies.' },
                 { num: '03', title: 'Discover', icon: '💡', desc: 'Ideas surface instantly, ranked by viability.' },
-                { num: '04', title: 'Build', icon: '🚀', desc: 'Get full briefs, stack recs, and MVP roadmaps.' }
+                { num: '04', title: 'Build', icon: '🚀', desc: 'Get full briefs, stack recs, and MVP roadmaps.' },
               ].map((step, i) => (
-                <div key={i} className="relative group">
-                  <div className="p-6 text-center">
-                    {/* Step number background */}
-                    <div className="relative z-10 mb-6">
-                      <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full border-2 transition-all duration-300 ${
-                        i === 0 ? 'border-cyan-500 bg-cyan-950/40 shadow-lg shadow-cyan-500/30' :
-                        i === 3 ? 'border-orange-500 bg-orange-950/40 shadow-lg shadow-orange-500/30' :
-                        'border-cyan-500/40 bg-cyan-950/20'
-                      } group-hover:border-opacity-100 group-hover:shadow-lg group-hover:scale-110`}>
-                        <span className="text-2xl font-black bg-gradient-to-br from-cyan-300 to-orange-300 bg-clip-text text-transparent">{step.num}</span>
-                      </div>
-                    </div>
-                    <h3 className="text-xl font-bold text-white mb-2">{step.title}</h3>
-                    <p className="text-sm text-cyan-200/60">{step.desc}</p>
-                  </div>
+                <div key={i} className="p-6 rounded-2xl bg-white/3 border border-white/8 hover:border-cyan-500/30 hover:bg-white/5 transition-all text-center group">
+                  <div className="text-3xl mb-3">{step.icon}</div>
+                  <div className="text-xs font-mono text-cyan-500 mb-1">{step.num}</div>
+                  <h3 className="text-lg font-bold text-white mb-2">{step.title}</h3>
+                  <p className="text-sm text-gray-500">{step.desc}</p>
                 </div>
               ))}
             </div>
@@ -297,78 +212,71 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
         {/* Feature Grid */}
         <section id="features" className="py-20">
-          <div className="container mx-auto px-4 max-w-6xl">
-            <div className="text-center mb-16">
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-cyan-500/30 bg-cyan-950/30 mb-6 text-xs font-mono text-cyan-300">
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+          <div className="container mx-auto px-4 max-w-5xl">
+            <div className="text-center mb-14">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 mb-5 text-xs font-mono text-gray-400">
                 FEATURES
               </div>
-              <h2 className="text-4xl md:text-5xl font-black text-white mb-4">Everything your repos<br />
-                <span className="bg-gradient-to-r from-cyan-400 via-orange-400 to-magenta-400 bg-clip-text text-transparent">
-                  have been waiting for
-                </span>
+              <h2 className="text-4xl md:text-5xl font-black text-white mb-3">
+                Everything your repos<br />
+                <span className="text-cyan-400">have been waiting</span><span className="text-white"> for</span>
               </h2>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-4">
+            <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4">
               {[
                 { icon: '⚡', title: 'AI Repo Scanner', desc: 'Deep analysis of your codebase structure and patterns in seconds.' },
                 { icon: '💡', title: 'Idea Surfacer', desc: 'Turns existing code into ranked, buildable project ideas.' },
                 { icon: '🔗', title: 'Multi-Repo Fusion', desc: 'Cross-reference patterns across all your repos simultaneously.' },
                 { icon: '📊', title: 'Health Dashboard', desc: 'Live metrics on code quality and technical debt.' },
                 { icon: '📋', title: 'Launch Briefs', desc: 'AI-generated product briefs for every detected idea.' },
-                { icon: '🔒', title: 'Private by Default', desc: 'Your code never leaves your control.' }
-              ].map((feature, i) => (
-                <div key={i} className="group relative p-6 border border-cyan-500/20 bg-cyan-950/10 hover:bg-cyan-950/20 hover:border-cyan-400/40 rounded-lg transition-all duration-300 cursor-pointer">
-                  <div className="text-3xl mb-3">{feature.icon}</div>
-                  <h3 className="font-bold text-white mb-2">{feature.title}</h3>
-                  <p className="text-sm text-cyan-200/60">{feature.desc}</p>
-                  <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-cyan-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+                { icon: '🔒', title: 'Private by Default', desc: 'Your code never leaves your control.' },
+              ].map((f, i) => (
+                <div key={i} className="p-6 rounded-2xl bg-white/3 border border-white/8 hover:border-cyan-500/30 hover:bg-white/5 transition-all group cursor-pointer">
+                  <div className="text-2xl mb-3">{f.icon}</div>
+                  <h3 className="font-bold text-white mb-1.5">{f.title}</h3>
+                  <p className="text-sm text-gray-500">{f.desc}</p>
                 </div>
               ))}
             </div>
           </div>
         </section>
 
-        {/* CTA Section */}
-        <section className="py-20 border-t border-cyan-500/20">
-          <div className="container mx-auto px-4 max-w-2xl text-center">
-            <h2 className="text-4xl md:text-5xl font-black text-white mb-6">
+        {/* Bottom CTA */}
+        <section className="py-20 border-t border-white/5">
+          <div className="container mx-auto px-4 max-w-xl text-center">
+            <h2 className="text-4xl md:text-5xl font-black text-white mb-4">
               Your next product is<br />
-              <span className="bg-gradient-to-r from-cyan-400 via-orange-400 to-magenta-400 bg-clip-text text-transparent">
-                already in your repos
-              </span>
+              <span className="text-cyan-400">already in your repos</span>
             </h2>
-            <p className="text-lg text-cyan-200/70 mb-8">
-              Join 2,400+ developers who've stopped guessing and started shipping.
+            <p className="text-lg text-gray-400 mb-8">
+              Join 2,400+ developers who&apos;ve stopped guessing and started shipping.
             </p>
-            <Button size="lg" className="bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-black font-bold text-base h-12 shadow-lg shadow-cyan-500/40" asChild>
-              <Link href="/api/auth/github/login">
-                <Github className="h-5 w-5 mr-2" />
-                Start Scanning Now
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Link>
-            </Button>
-            <p className="text-xs text-cyan-400/50 font-mono mt-6">
-              free forever plan · no credit card required · read-only access
+            <a
+              href="/api/auth/github/login"
+              className="inline-flex items-center justify-center gap-2.5 w-full sm:w-auto sm:min-w-64 bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-lg px-8 py-4 rounded-2xl transition-all shadow-xl shadow-cyan-500/30 hover:-translate-y-0.5"
+            >
+              <Github className="h-5 w-5" />
+              Start Scanning Now
+              <ArrowRight className="h-4 w-4" />
+            </a>
+            <p className="text-xs text-gray-600 font-mono mt-5">
+              no credit card · read-only access · cancel anytime
             </p>
           </div>
         </section>
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-cyan-500/20 bg-black/50 py-8">
-        <div className="container mx-auto px-4 text-center text-xs text-cyan-400/40 font-mono">
-          © 2025 RepoFuse. Built by developers, for developers.
+      <footer className="border-t border-white/5 py-8">
+        <div className="container mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-600">
+          <span>© 2025 RepoFuse. Built by developers, for developers.</span>
+          <div className="flex items-center gap-4">
+            <Link href="/pricing" className="hover:text-gray-400 transition-colors">Pricing</Link>
+            <Link href="/dashboard" className="hover:text-gray-400 transition-colors">Dashboard</Link>
+          </div>
         </div>
       </footer>
-
-      <style>{`
-        @keyframes gridDrift {
-          0% { transform: translateY(0); }
-          100% { transform: translateY(60px); }
-        }
-      `}</style>
     </div>
   )
 }

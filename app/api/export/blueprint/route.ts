@@ -1,25 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+import { getCurrentUser } from '@/lib/auth'
+import { exportAppSchema, exportRequestSchema } from '@/lib/schemas'
 
-interface ExportApp {
-  app_name: string
-  app_type: string
-  description: string
-  is_complete: boolean
-  reuse_percentage: number
-  missing_files_count: number
-  missing_files: string[]
-  technologies: string[]
-  difficulty_level: string
-  ai_explanation: string
-  fast_cash_label?: string
-}
+type ExportApp = z.infer<typeof exportAppSchema>
 
 export async function POST(request: NextRequest) {
   try {
-    const { app } = (await request.json()) as { app: ExportApp }
+    const user = await getCurrentUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    const parsedBody = exportRequestSchema.safeParse(await request.json())
+
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: parsedBody.error.issues[0]?.message ?? 'Invalid export request' }, { status: 400 })
+    }
+
+    const { app } = parsedBody.data
+    const fileBaseName = toSlug(app.app_name)
 
     const blueprint = {
-      id: `${app.app_name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`,
+      id: `${fileBaseName}-${Date.now()}`,
       appName: app.app_name,
       appType: app.app_type,
       description: app.description,
@@ -43,13 +47,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(blueprint, {
       headers: {
         'Content-Type': 'application/json',
-        'Content-Disposition': `attachment; filename="${app.app_name.toLowerCase().replace(/\s+/g, '-')}-blueprint.json"`,
+        'Content-Disposition': `attachment; filename="${fileBaseName}-blueprint.json"`,
       },
     })
   } catch (error) {
     console.error('Error generating blueprint:', error)
     return NextResponse.json({ error: 'Failed to generate blueprint' }, { status: 500 })
   }
+}
+
+function toSlug(value: string): string {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'blueprint'
 }
 
 function generateFileStructure(): Record<string, unknown> {
@@ -71,7 +83,7 @@ function generateFileStructure(): Record<string, unknown> {
 
 function generateSetupInstructions(app: ExportApp): string[] {
   return [
-    `Create new project: npx create-${app.app_type}-app ${app.app_name.toLowerCase().replace(/\s+/g, '-')}`,
+    `Create new project: npx create-${app.app_type}-app ${toSlug(app.app_name)}`,
     'Install dependencies from the reused repositories',
     'Copy the identified files into the new project structure',
     'Install missing dependencies',

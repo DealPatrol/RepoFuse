@@ -6,6 +6,9 @@ import {
   getRepositoriesForAnalysis,
   getSubscriptionByGithubId,
   getUserViewedBlueprintIds,
+  type Analysis,
+  type AppBlueprint,
+  type Repository,
 } from '@/lib/queries'
 import { getCurrentUser } from '@/lib/auth'
 import { PLANS } from '@/lib/stripe'
@@ -20,32 +23,39 @@ export default async function AnalysisDetailPage({
   const { id } = await params
   const user = await getCurrentUser()
 
-  let analysis = null
-  let repositories: any[] = []
-  let blueprints: any[] = []
+  if (!user) {
+    notFound()
+  }
+
+  let analysis: Analysis | null = null
+  let repositories: Repository[] = []
+  let blueprints: AppBlueprint[] = []
   let userPlan = 'free'
   let viewedBlueprintIds: string[] = []
   let isTrialing = false
 
   try {
     ;[analysis, repositories, blueprints] = await Promise.all([
-      getAnalysisById(id),
-      getRepositoriesForAnalysis(id),
-      getBlueprintsByAnalysis(id),
+      getAnalysisById(id, user.id),
+      getRepositoriesForAnalysis(id, user.id),
+      getBlueprintsByAnalysis(id, user.id),
     ])
+  } catch {
+    notFound()
+  }
 
-    if (user) {
+  if (user) {
+    try {
       const [subscription, viewedIds] = await Promise.all([
         getSubscriptionByGithubId(user.github_id),
         getUserViewedBlueprintIds(user.id),
       ])
       userPlan = subscription?.plan || 'free'
       viewedBlueprintIds = viewedIds
-      // Check if in trial via Stripe (subscription status = 'trialing')
       isTrialing = subscription?.status === 'trialing'
+    } catch {
+      // Subscription/views table not available yet — use free defaults
     }
-  } catch {
-    notFound()
   }
 
   if (!analysis) {

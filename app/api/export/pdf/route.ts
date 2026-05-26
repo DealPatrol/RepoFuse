@@ -1,21 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+import { requirePro } from '@/lib/billing'
+import { exportAppSchema, exportRequestSchema } from '@/lib/schemas'
 
-interface ExportApp {
-  app_name: string
-  app_type: string
-  description: string
-  is_complete: boolean
-  reuse_percentage: number
-  missing_files_count: number
-  missing_files: string[]
-  technologies: string[]
-  difficulty_level: string
-  ai_explanation: string
-}
+type ExportApp = z.infer<typeof exportAppSchema>
 
 export async function POST(request: NextRequest) {
   try {
-    const { app } = (await request.json()) as { app: ExportApp }
+    const proAccess = await requirePro()
+
+    if (!proAccess.ok) {
+      return proAccess.response
+    }
+
+    const parsedBody = exportRequestSchema.safeParse(await request.json())
+
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: parsedBody.error.issues[0]?.message ?? 'Invalid export request' }, { status: 400 })
+    }
+
+    const { app } = parsedBody.data
+    const fileBaseName = toSlug(app.app_name)
 
     // Generate HTML content for PDF
     const htmlContent = generateHTML(app)
@@ -27,7 +32,7 @@ export async function POST(request: NextRequest) {
     return new NextResponse(pdfContent, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${app.app_name.toLowerCase().replace(/\s+/g, '-')}-report.pdf"`,
+        'Content-Disposition': `attachment; filename="${fileBaseName}-report.pdf"`,
       },
     })
   } catch (error) {
@@ -36,7 +41,32 @@ export async function POST(request: NextRequest) {
   }
 }
 
+function toSlug(value: string): string {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'report'
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function generateHTML(app: ExportApp): string {
+  const appName = escapeHtml(app.app_name)
+  const appType = escapeHtml(app.app_type)
+  const description = escapeHtml(app.description)
+  const difficultyLevel = escapeHtml(app.difficulty_level)
+  const explanation = escapeHtml(app.ai_explanation)
+  const technologies = app.technologies.map((tech) => `<span class="badge">${escapeHtml(tech)}</span>`).join('')
+  const missingFiles = app.missing_files.map((file) => `<li>${escapeHtml(file)}</li>`).join('')
+
   return `
     <!DOCTYPE html>
     <html>
@@ -57,12 +87,12 @@ function generateHTML(app: ExportApp): string {
         </style>
       </head>
       <body>
-        <h1>${app.app_name}</h1>
+        <h1>${appName}</h1>
         
         <div class="section">
           <h2>Overview</h2>
-          <p><strong>Type:</strong> ${app.app_type}</p>
-          <p><strong>Description:</strong> ${app.description}</p>
+          <p><strong>Type:</strong> ${appType}</p>
+          <p><strong>Description:</strong> ${description}</p>
           <p><strong>Status:</strong> <span class="badge ${app.is_complete ? 'complete' : 'partial'}">${app.is_complete ? 'Complete' : 'Partial'}</span></p>
         </div>
 
@@ -79,7 +109,7 @@ function generateHTML(app: ExportApp): string {
             </tr>
             <tr>
               <td>Difficulty Level</td>
-              <td>${app.difficulty_level}</td>
+              <td>${difficultyLevel}</td>
             </tr>
             <tr>
               <td>Missing Files</td>
@@ -91,7 +121,7 @@ function generateHTML(app: ExportApp): string {
         ${app.technologies.length > 0 ? `
           <div class="section">
             <h2>Technologies</h2>
-            <div>${app.technologies.map((t: string) => `<span class="badge">${t}</span>`).join('')}</div>
+            <div>${technologies}</div>
           </div>
         ` : ''}
 
@@ -99,14 +129,14 @@ function generateHTML(app: ExportApp): string {
           <div class="section">
             <h2>Missing Files</h2>
             <ul>
-              ${app.missing_files.map((f: string) => `<li>${f}</li>`).join('')}
+              ${missingFiles}
             </ul>
           </div>
         ` : ''}
 
         <div class="section">
           <h2>Analysis & Explanation</h2>
-          <p>${app.ai_explanation}</p>
+          <p>${explanation}</p>
         </div>
 
         <div class="section">

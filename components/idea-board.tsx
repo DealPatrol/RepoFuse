@@ -1,300 +1,274 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import {
-  Sparkles,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  Loader2,
   ArrowRight,
-  Search,
-  RefreshCw,
+  Code2,
+  FilePlus2,
+  Heart,
   LayoutGrid,
+  MessageSquare,
+  Search,
+  Sparkles,
+  Trash2,
   type LucideIcon,
 } from 'lucide-react'
-import type { Analysis } from '@/lib/queries'
+import {
+  getLikedApps,
+  removeLikedApp,
+  subscribeToLikedApps,
+  type LikedApp,
+  type LikedAppDifficulty,
+} from '@/lib/liked-apps'
 
-type StatusFilter = 'all' | Analysis['status']
+type DifficultyFilter = 'all' | LikedAppDifficulty
 
-const STATUS_META: Record<
-  Analysis['status'],
-  { label: string; color: string; badgeClass: string; icon: LucideIcon }
-> = {
-  pending: {
-    label: 'Pending',
-    color: 'text-muted-foreground',
-    badgeClass: 'bg-muted text-muted-foreground',
-    icon: Clock,
-  },
-  scanning: {
-    label: 'Scanning',
-    color: 'text-chart-1',
-    badgeClass: 'bg-chart-1/10 text-chart-1',
-    icon: Loader2,
-  },
-  analyzing: {
-    label: 'Analyzing',
-    color: 'text-chart-2',
-    badgeClass: 'bg-chart-2/10 text-chart-2',
-    icon: Sparkles,
-  },
-  complete: {
-    label: 'Complete',
-    color: 'text-chart-1',
-    badgeClass: 'bg-chart-1/10 text-chart-1',
-    icon: CheckCircle2,
-  },
-  failed: {
-    label: 'Failed',
-    color: 'text-destructive',
-    badgeClass: 'bg-destructive/10 text-destructive',
-    icon: XCircle,
-  },
+const DIFFICULTY_META: Record<LikedAppDifficulty, { label: string; badgeClass: string; icon: LucideIcon }> = {
+  easy: { label: 'Easy', badgeClass: 'bg-chart-1/10 text-chart-1 border-0', icon: Sparkles },
+  medium: { label: 'Medium', badgeClass: 'bg-chart-2/10 text-chart-2 border-0', icon: LayoutGrid },
+  hard: { label: 'Hard', badgeClass: 'bg-destructive/10 text-destructive border-0', icon: Code2 },
 }
 
-const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
+const DIFFICULTY_FILTERS: { value: DifficultyFilter; label: string }[] = [
   { value: 'all', label: 'All' },
-  { value: 'complete', label: 'Complete' },
-  { value: 'analyzing', label: 'Analyzing' },
-  { value: 'scanning', label: 'Scanning' },
-  { value: 'pending', label: 'Pending' },
-  { value: 'failed', label: 'Failed' },
+  { value: 'easy', label: 'Easy' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'hard', label: 'Hard' },
 ]
 
-function AnalysisCard({ analysis }: { analysis: Analysis }) {
-  const meta = STATUS_META[analysis.status]
-  const StatusIcon = meta.icon
-  const progress =
-    analysis.total_files > 0
-      ? Math.round((analysis.analyzed_files / analysis.total_files) * 100)
-      : 0
+function LikedAppCard({ app, onRemove }: { app: LikedApp; onRemove: (id: string) => void }) {
+  const meta = DIFFICULTY_META[app.difficulty] ?? DIFFICULTY_META.medium
+  const DifficultyIcon = meta.icon
 
   return (
-    <Card className="p-5 hover:shadow-md transition-all duration-200 hover:border-border flex flex-col gap-4">
+    <Card className="group flex flex-col gap-4 p-5 transition-all duration-200 hover:border-rose-500/30 hover:shadow-lg">
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="h-9 w-9 rounded-lg bg-muted/60 flex items-center justify-center flex-shrink-0">
-            <Sparkles className="h-4 w-4 text-muted-foreground" />
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-rose-500/10">
+            <Heart className="h-5 w-5 fill-current text-rose-500" />
           </div>
           <div className="min-w-0">
-            <h3 className="font-semibold text-foreground truncate">{analysis.name}</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {new Date(analysis.created_at).toLocaleDateString(undefined, {
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric',
-              })}
-            </p>
+            <h3 className="truncate font-semibold text-foreground">{app.name}</h3>
+            <p className="mt-0.5 text-xs font-medium text-chart-2">{app.tagline}</p>
           </div>
         </div>
-        <Badge className={`text-xs shrink-0 ${meta.badgeClass}`}>
-          <StatusIcon
-            className={`h-3 w-3 mr-1 ${analysis.status === 'scanning' ? 'animate-spin' : analysis.status === 'analyzing' ? 'animate-pulse' : ''}`}
-          />
-          {meta.label}
-        </Badge>
+        <button
+          type="button"
+          onClick={() => onRemove(app.id)}
+          aria-label={`Remove ${app.name}`}
+          className="rounded-lg p-2 text-muted-foreground opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
       </div>
 
-      {analysis.total_files > 0 && (
-        <div className="space-y-1.5">
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span>{analysis.analyzed_files} / {analysis.total_files} files</span>
-            <span>{progress}%</span>
+      <p className="line-clamp-3 text-sm text-muted-foreground">{app.description}</p>
+
+      <div className="flex flex-wrap gap-1.5">
+        <Badge variant="outline" className="text-xs">{app.type}</Badge>
+        <Badge className={`text-xs ${meta.badgeClass}`}>
+          <DifficultyIcon className="mr-1 h-3 w-3" />
+          {meta.label}
+        </Badge>
+        {app.suggestedStack.slice(0, 4).map((tech) => (
+          <Badge key={tech} variant="secondary" className="text-xs">{tech}</Badge>
+        ))}
+      </div>
+
+      {app.reusePlan && (
+        <div className="rounded-lg border border-chart-2/20 bg-chart-2/5 p-3 text-xs text-muted-foreground">
+          <div className="mb-1 flex items-center gap-1.5 font-medium text-foreground">
+            <Code2 className="h-3.5 w-3.5 text-chart-2" />
+            RepoFuse reuse plan
           </div>
-          <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-            <div
-              className="h-full rounded-full bg-chart-1 transition-all duration-500"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
+          {app.reusePlan}
         </div>
       )}
 
-      {analysis.error_message && (
-        <p className="text-xs text-destructive line-clamp-2">{analysis.error_message}</p>
-      )}
+      <div className="grid gap-3 text-xs text-muted-foreground md:grid-cols-2">
+        {app.sourceFiles && app.sourceFiles.length > 0 && (
+          <div>
+            <div className="mb-1 font-medium text-foreground">Reuse</div>
+            <div className="space-y-1">
+              {app.sourceFiles.slice(0, 3).map((file) => (
+                <div key={file} className="truncate rounded bg-muted px-2 py-1 font-mono">{file}</div>
+              ))}
+            </div>
+          </div>
+        )}
+        {app.filesToCreate && app.filesToCreate.length > 0 && (
+          <div>
+            <div className="mb-1 flex items-center gap-1 font-medium text-foreground">
+              <FilePlus2 className="h-3 w-3" />
+              Create
+            </div>
+            <div className="space-y-1">
+              {app.filesToCreate.slice(0, 3).map((file) => (
+                <div key={file} className="truncate rounded bg-muted px-2 py-1 font-mono">{file}</div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
-      <Button variant="outline" size="sm" asChild className="self-start mt-auto">
-        <Link href={`/dashboard/analyses/${analysis.id}`}>
-          View Results
-          <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
-        </Link>
-      </Button>
+      <div className="mt-auto flex items-center justify-between border-t border-border pt-4">
+        <span className="text-xs text-muted-foreground">
+          Liked {new Date(app.selectedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+        </span>
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/dashboard/pattern-analyzer">
+            Refine in Chat
+            <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+          </Link>
+        </Button>
+      </div>
     </Card>
   )
 }
 
 export function IdeaBoard() {
-  const [analyses, setAnalyses] = useState<Analysis[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [likedApps, setLikedApps] = useState<LikedApp[]>([])
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
-  const [refreshing, setRefreshing] = useState(false)
-
-  const fetchAnalyses = async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true)
-    else setLoading(true)
-    setError(null)
-    try {
-      const res = await fetch('/api/analyses')
-      if (!res.ok) throw new Error('Failed to load analyses')
-      const data: Analysis[] = await res.json()
-      setAnalyses(data)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load analyses')
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
-    }
-  }
+  const [difficultyFilter, setDifficultyFilter] = useState<DifficultyFilter>('all')
 
   useEffect(() => {
-    fetchAnalyses()
+    const refresh = () => setLikedApps(getLikedApps())
+    refresh()
+    return subscribeToLikedApps(refresh)
   }, [])
 
-  const filtered = analyses.filter((a) => {
-    const matchesStatus = statusFilter === 'all' || a.status === statusFilter
-    const matchesSearch = a.name.toLowerCase().includes(search.toLowerCase())
-    return matchesStatus && matchesSearch
-  })
+  const filtered = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    return likedApps.filter((app) => {
+      const matchesDifficulty = difficultyFilter === 'all' || app.difficulty === difficultyFilter
+      const matchesSearch =
+        !query ||
+        app.name.toLowerCase().includes(query) ||
+        app.description.toLowerCase().includes(query) ||
+        app.suggestedStack.some((tech) => tech.toLowerCase().includes(query))
+      return matchesDifficulty && matchesSearch
+    })
+  }, [difficultyFilter, likedApps, search])
 
-  const counts = analyses.reduce(
-    (acc, a) => {
-      acc[a.status] = (acc[a.status] || 0) + 1
+  const counts = likedApps.reduce(
+    (acc, app) => {
+      acc[app.difficulty] += 1
       return acc
     },
-    {} as Record<string, number>,
+    { easy: 0, medium: 0, hard: 0 } as Record<LikedAppDifficulty, number>,
   )
+
+  const handleRemove = (id: string) => {
+    setLikedApps(removeLikedApp(id))
+  }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <LayoutGrid className="h-5 w-5 text-chart-2" />
-            <h1 className="text-2xl font-bold text-foreground">Idea Board</h1>
+          <div className="mb-1 flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-500/10">
+              <Heart className="h-4 w-4 fill-current text-rose-500" />
+            </div>
+            <h1 className="text-2xl font-bold text-foreground">Liked Apps</h1>
           </div>
-          <p className="text-muted-foreground">All your analyses at a glance — track progress and review results.</p>
+          <p className="text-sm text-muted-foreground">
+            Apps you picked from VibeCoding Chat, ready to refine into RepoFuse builds.
+          </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => fetchAnalyses(true)}
-          disabled={refreshing}
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-          Refresh
+        <Button size="sm" asChild>
+          <Link href="/dashboard/pattern-analyzer">
+            <MessageSquare className="mr-2 h-4 w-4" />
+            Open VibeCoding Chat
+          </Link>
         </Button>
       </div>
 
-      {/* Stats strip */}
-      {!loading && analyses.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {(Object.keys(STATUS_META) as Analysis['status'][]).map((status) => {
-            const meta = STATUS_META[status]
-            const count = counts[status] || 0
-            if (count === 0) return null
+      {likedApps.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-3">
+          {(['easy', 'medium', 'hard'] as LikedAppDifficulty[]).map((difficulty) => {
+            const meta = DIFFICULTY_META[difficulty]
+            const Icon = meta.icon
             return (
-              <button
-                key={status}
-                onClick={() => setStatusFilter(statusFilter === status ? 'all' : status)}
-                className={`text-left p-3 rounded-xl border transition-all duration-200 ${
-                  statusFilter === status
-                    ? 'border-foreground/30 bg-foreground/5'
-                    : 'border-border hover:border-border/80 hover:bg-muted/40'
-                }`}
+              <Card
+                key={difficulty}
+                className={`cursor-pointer p-4 transition-all ${difficultyFilter === difficulty ? 'ring-2 ring-rose-500/60' : 'hover:shadow-sm'}`}
+                onClick={() => setDifficultyFilter(difficultyFilter === difficulty ? 'all' : difficulty)}
               >
-                <p className="text-xl font-bold text-foreground tabular-nums">{count}</p>
-                <p className={`text-xs font-medium mt-0.5 ${meta.color}`}>{meta.label}</p>
-              </button>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted/60">
+                    <Icon className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold tabular-nums text-foreground">{counts[difficulty]}</p>
+                    <p className="text-xs text-muted-foreground">{meta.label} builds</p>
+                  </div>
+                </div>
+              </Card>
             )
           })}
         </div>
       )}
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3 items-center">
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-[220px] max-w-sm flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search analyses..."
+            placeholder="Search liked apps..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
           />
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {STATUS_FILTERS.map((f) => (
+          {DIFFICULTY_FILTERS.map((filter) => (
             <button
-              key={f.value}
-              onClick={() => setStatusFilter(f.value)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                statusFilter === f.value
+              key={filter.value}
+              type="button"
+              onClick={() => setDifficultyFilter(filter.value)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                difficultyFilter === filter.value
                   ? 'bg-foreground text-background'
-                  : 'bg-muted text-muted-foreground hover:text-foreground'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
               }`}
             >
-              {f.label}
-              {f.value !== 'all' && counts[f.value] != null && (
-                <span className="ml-1.5 opacity-70">{counts[f.value]}</span>
-              )}
+              {filter.label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Content */}
-      {loading && (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      )}
-
-      {error && (
-        <Card className="p-8 text-center border-destructive/30">
-          <XCircle className="mx-auto h-10 w-10 text-destructive/50 mb-3" />
-          <p className="font-medium text-foreground mb-1">Failed to load analyses</p>
-          <p className="text-sm text-muted-foreground mb-4">{error}</p>
-          <Button variant="outline" onClick={() => fetchAnalyses()}>
-            Try Again
-          </Button>
-        </Card>
-      )}
-
-      {!loading && !error && filtered.length === 0 && (
+      {filtered.length === 0 ? (
         <Card className="border-dashed p-12 text-center">
-          <Sparkles className="mx-auto h-12 w-12 text-muted-foreground/30 mb-4" />
-          <h3 className="text-lg font-semibold text-foreground mb-2">
-            {analyses.length === 0 ? 'No analyses yet' : 'No matches'}
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-500/10">
+            <Heart className="h-8 w-8 text-rose-500/70" />
+          </div>
+          <h3 className="mb-2 text-lg font-semibold text-foreground">
+            {likedApps.length === 0 ? 'No liked apps yet' : 'No liked apps match'}
           </h3>
-          <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
-            {analyses.length === 0
-              ? 'Run your first analysis to see it appear here.'
-              : 'Try adjusting your search or filter.'}
+          <p className="mx-auto mb-6 max-w-sm text-sm text-muted-foreground">
+            {likedApps.length === 0
+              ? 'Open VibeCoding Chat, ask what to build, then heart the app cards you want RepoFuse to assemble.'
+              : 'Try adjusting your search or difficulty filter.'}
           </p>
-          {analyses.length === 0 && (
+          {likedApps.length === 0 && (
             <Button asChild>
-              <Link href="/dashboard/analyses">
-                <Sparkles className="h-4 w-4 mr-2" />
-                Go to Analyses
+              <Link href="/dashboard/pattern-analyzer">
+                <MessageSquare className="mr-2 h-4 w-4" />
+                Find Apps to Like
               </Link>
             </Button>
           )}
         </Card>
-      )}
-
-      {!loading && !error && filtered.length > 0 && (
+      ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((analysis) => (
-            <AnalysisCard key={analysis.id} analysis={analysis} />
+          {filtered.map((app) => (
+            <LikedAppCard key={app.id} app={app} onRemove={handleRemove} />
           ))}
         </div>
       )}

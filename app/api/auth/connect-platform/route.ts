@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL
 
     if (!clientId || !clientSecret || !appUrl) {
-      console.error(`[v0] Missing OAuth config for ${platform}`)
+    console.error(`Missing OAuth config for ${platform}`)
       return NextResponse.json({ error: 'Platform not configured' }, { status: 500 })
     }
 
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (!tokenResponse.ok) {
-      console.error(`[v0] Token exchange failed for ${platform}:`, tokenResponse.status)
+      console.error(`Token exchange failed for ${platform}:`, tokenResponse.status)
       return NextResponse.json({ error: 'Token exchange failed' }, { status: 400 })
     }
 
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     const accessToken = tokenData.access_token || tokenData.token
 
     if (!accessToken) {
-      console.error(`[v0] No access token for ${platform}:`, tokenData)
+      console.error(`No access token for ${platform}:`, tokenData)
       return NextResponse.json({ error: 'No access token received' }, { status: 400 })
     }
 
@@ -88,9 +88,16 @@ export async function POST(request: NextRequest) {
 
     // Store platform connection in cookies
     const cookieStore = await cookies()
-    const connectedPlatforms = cookieStore.get('connected_platforms')?.value 
-      ? JSON.parse(cookieStore.get('connected_platforms')!.value)
-      : {}
+    let connectedPlatforms: Record<string, unknown> = {}
+    const connectedPlatformsCookie = cookieStore.get('connected_platforms')?.value
+
+    if (connectedPlatformsCookie) {
+      try {
+        connectedPlatforms = JSON.parse(connectedPlatformsCookie) as Record<string, unknown>
+      } catch {
+        connectedPlatforms = {}
+      }
+    }
 
     connectedPlatforms[platform] = {
       access_token: accessToken,
@@ -110,7 +117,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, platform })
   } catch (error) {
-    console.error('[v0] Platform connection error:', error)
+    console.error('Platform connection error:', error)
     return NextResponse.json({ error: 'Connection failed' }, { status: 500 })
   }
 }

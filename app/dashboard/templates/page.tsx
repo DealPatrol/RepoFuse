@@ -3,9 +3,10 @@ import Link from 'next/link'
 import { ArrowLeft, Rocket, Zap, Lightbulb } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { TemplateAssemblyCard } from '@/components/template-assembly-card'
+import { CreateTemplateModal } from '@/components/create-template-modal'
 import { getAllTemplates, getFeaturedTemplates, type Template } from '@/lib/queries'
+import { getCurrentUser } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,9 +29,13 @@ async function TemplateHubContent() {
   let setupRequired = false
 
   try {
+    const user = await getCurrentUser()
+    if (!user) {
+      return null
+    }
     const result = await Promise.all([
-      getFeaturedTemplates(),
-      getAllTemplates(),
+      getFeaturedTemplates(user.id),
+      getAllTemplates(user.id),
     ])
     featured = result[0]
     all = result[1]
@@ -42,38 +47,46 @@ async function TemplateHubContent() {
   if (setupRequired || !all.length) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <Link href="/dashboard/analyses">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="w-4 h-4" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-3xl font-bold">Template Assembly Hub</h1>
-            <p className="text-muted-foreground">Pre-built project combinations ready to assemble</p>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <Link href="/dashboard/analyses">
+              <Button variant="ghost" size="icon">
+                <ArrowLeft className="w-4 h-4" />
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-3xl font-bold">Template Assembly Hub</h1>
+              <p className="text-muted-foreground">Pre-built project combinations ready to assemble</p>
+            </div>
           </div>
+          <CreateTemplateModal />
         </div>
 
         <Card className="p-12 text-center border-2 border-dashed">
           <Lightbulb className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <h2 className="text-2xl font-bold mb-2">No templates available yet</h2>
+          <h2 className="text-2xl font-bold mb-2">No templates yet</h2>
           <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-            Templates will be generated once you run an analysis on your repositories.
+            Create a template by combining blueprints from your analyses, or run an analysis to discover new blueprints.
           </p>
-          <Button asChild>
-            <Link href="/dashboard/analyses">
-              Run an Analysis
-            </Link>
-          </Button>
+          <div className="flex items-center justify-center gap-3 flex-wrap">
+            <CreateTemplateModal />
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/analyses">Run an Analysis</Link>
+            </Button>
+          </div>
         </Card>
       </div>
     )
   }
 
   try {
+    const user = await getCurrentUser()
+    if (!user) {
+      return null
+    }
     ;[featured, all] = await Promise.all([
-      getFeaturedTemplates(),
-      getAllTemplates(),
+      getFeaturedTemplates(user.id),
+      getAllTemplates(user.id),
     ])
   } catch {
     // Database tables may not exist yet
@@ -85,18 +98,21 @@ async function TemplateHubContent() {
     <div className="space-y-8">
       {/* Header */}
       <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <Link href="/dashboard/analyses">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="w-4 h-4" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-3xl font-bold">Template Assembly Hub</h1>
-            <p className="text-muted-foreground">
-              Start building today from code you already have. Pre-configured templates combine your best pieces.
-            </p>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <Link href="/dashboard/analyses">
+              <Button variant="ghost" size="icon">
+                <ArrowLeft className="w-4 h-4" />
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-3xl font-bold">Template Assembly Hub</h1>
+              <p className="text-muted-foreground">
+                Start building today from code you already have. Pre-configured templates combine your best pieces.
+              </p>
+            </div>
           </div>
+          <CreateTemplateModal />
         </div>
 
         {/* Feature Cards */}
@@ -107,7 +123,7 @@ async function TemplateHubContent() {
               <div>
                 <p className="font-semibold text-sm text-green-900">Ship Faster</p>
                 <p className="text-xs text-green-700/80">
-                  Templates show exactly what's needed to launch
+                  Templates show exactly what&apos;s needed to launch
                 </p>
               </div>
             </div>

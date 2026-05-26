@@ -5,6 +5,19 @@ import { getAnthropicModel } from '@/lib/anthropic-model'
 import type { AppBlueprint } from '@/lib/queries'
 
 const anthropic = new Anthropic()
+import { getSubscriptionByGithubId, upsertSubscription, type AppBlueprint } from '@/lib/queries'
+import { isPaidPlan } from '@/lib/stripe'
+
+let __anthropicClient: Anthropic | null = null
+function getAnthropic(): Anthropic {
+  if (__anthropicClient) return __anthropicClient
+  const key = process.env.ANTHROPIC_API_KEY
+  if (!key) {
+    throw new Error('ANTHROPIC_API_KEY is not configured')
+  }
+  __anthropicClient = new Anthropic({ apiKey: key })
+  return __anthropicClient
+}
 
 type Platform = 'github' | 'gitlab'
 
@@ -60,6 +73,7 @@ Return format: {"path/to/file.ts": "...full content...", "README.md": "..."}
 `
 
   const response = await anthropic.messages.create({
+  const response = await getAnthropic().messages.create({
     model: getAnthropicModel(),
     max_tokens: 8192,
     messages: [{ role: 'user', content: prompt }],
@@ -210,6 +224,16 @@ export async function POST(request: NextRequest) {
         const user = await getCurrentUser()
         if (!user) {
           send({ step: 'error', message: 'Sign in before building an app.' })
+          controller.close()
+          return
+        }
+
+        let sub = await getSubscriptionByGithubId(user.github_id).catch(() => null)
+        if (!sub) {
+          sub = await upsertSubscription({ github_id: user.github_id }).catch(() => null)
+        }
+        if (!isPaidPlan(sub?.plan)) {
+          send({ step: 'error', message: 'Build This App is available on paid plans. Upgrade to create and push a generated repo.' })
           controller.close()
           return
         }
