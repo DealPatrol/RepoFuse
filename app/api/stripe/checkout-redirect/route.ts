@@ -51,9 +51,10 @@ export async function GET(request: NextRequest) {
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${appUrl}/dashboard?upgraded=true`,
       cancel_url: `${appUrl}/pricing?cancelled=true`,
+      metadata: { github_id: String(user.github_id), plan: 'pro' },
       subscription_data: {
         trial_period_days: 14, // Launch offer: 14 days free
-        metadata: { github_id: String(user.github_id) },
+        metadata: { github_id: String(user.github_id), plan: 'pro' },
       },
     })
 

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAllRepositories, createRepository, getSubscriptionByGithubId, upsertSubscription } from '@/lib/queries'
 import { getCurrentUser } from '@/lib/auth'
 import { PLANS, isPaidPlan } from '@/lib/stripe'
+import { isPaidPlan, PLANS } from '@/lib/stripe'
+import { PLANS } from '@/lib/stripe'
 import { createRepositoryRequestSchema, parseGitHubRepositoryUrl } from '@/lib/schemas'
 
 export async function GET() {
@@ -23,6 +25,19 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser()
+    if (user) {
+      let sub = await getSubscriptionByGithubId(user.github_id).catch(() => null)
+      if (!sub) {
+        sub = await upsertSubscription({ github_id: user.github_id }).catch(() => null)
+      }
+      if (sub && !isPaidPlan(sub.plan)) {
+        const repos = await getAllRepositories()
+        if (repos.length >= PLANS.free.repos_limit) {
+          return NextResponse.json(
+            { error: `Free plan is limited to ${PLANS.free.repos_limit} repositories. Upgrade to Pro for unlimited repos.` },
+            { status: 403 },
+          )
+        }
 
     if (!user) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })

@@ -132,6 +132,7 @@ async function run() {
         stripe_customer_id VARCHAR(255) UNIQUE,
         stripe_subscription_id VARCHAR(255) UNIQUE,
         plan VARCHAR(50) DEFAULT 'free' CHECK (plan IN ('free', 'pro', 'scale', 'byok')),
+        plan VARCHAR(50) DEFAULT 'free' CHECK (plan IN ('free', 'byok', 'pro', 'scale')),
         status VARCHAR(50) DEFAULT 'active' CHECK (status IN ('active', 'past_due', 'canceled', 'trialing')),
         current_period_end TIMESTAMP WITH TIME ZONE,
         analyses_used_this_month INTEGER DEFAULT 0,
