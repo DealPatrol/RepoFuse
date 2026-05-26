@@ -16,6 +16,22 @@ Go to your Vercel project → **Settings** → **Environment Variables** and add
 | `NEXT_PUBLIC_APP_URL` | Production | Your production URL (e.g. `https://repofuse.vercel.app`) |
 | `NEXT_PUBLIC_APP_URL` | Preview | Leave blank — Vercel sets this automatically for previews |
 | `OPENAI_API_KEY` | Production, Preview | OpenAI API key for AI analysis |
+| `ANTHROPIC_API_KEY` | Production, Preview | Anthropic API key for scaffold generation |
+| `STRIPE_SECRET_KEY` | Production | Live secret key (`sk_live_...`) |
+| `STRIPE_WEBHOOK_SECRET` | Production | Signing secret (`whsec_...`) from the **live** webhook endpoint |
+| `STRIPE_PRO_PRICE_ID` | Production | Pro plan Price ID |
+| `STRIPE_SCALE_PRICE_ID` | Production | Scale plan Price ID (optional) |
+
+### Stripe webhooks (live mode)
+
+1. [Stripe Dashboard → Developers → Webhooks](https://dashboard.stripe.com/webhooks) (ensure **Live** mode toggle is on).
+2. Endpoint URL: `https://repofuse.com/api/stripe/webhook`  
+   (`https://RepoFuse.com/...` works too; hostnames are case-insensitive.)
+3. Subscribe to at least: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_succeeded`, `invoice.payment_failed`.
+4. Copy **Signing secret** → Vercel env `STRIPE_WEBHOOK_SECRET` for **Production** only.
+5. Redeploy after changing `STRIPE_WEBHOOK_SECRET`.
+
+**If Stripe emails about failed deliveries:** open the webhook → **Event deliveries** and check the HTTP status. `400 Invalid signature` means `STRIPE_WEBHOOK_SECRET` does not match that endpoint’s signing secret. `503 Webhook not configured` means the env var is missing on Vercel.
 | `ANTHROPIC_API_KEY` | Production, Preview | Anthropic API key for scaffold generation and MCP-backed scaffold generation |
 | `ANTHROPIC_MODEL` | Optional | Override the Claude model used for scaffold generation |
 | `STRIPE_SECRET_KEY` | Production, Preview | Stripe secret key for checkout + billing portal |
