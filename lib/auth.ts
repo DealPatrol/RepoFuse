@@ -12,7 +12,7 @@ export interface AuthUser {
   stripe_customer_id: string | null
   stripe_subscription_id: string | null
   stripe_price_id: string | null
-  plan_tier: 'free' | 'pro' | null
+  plan_tier: 'free' | 'pro' | 'scale' | 'byok' | null
   subscription_status: string | null
 }
 

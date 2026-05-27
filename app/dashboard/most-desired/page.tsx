@@ -1,9 +1,11 @@
 import { getCurrentUser } from '@/lib/auth'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Star, Lock, Crown, ArrowRight, TrendingUp, Zap, Target } from 'lucide-react'
 import Link from 'next/link'
+import { getSubscriptionByGithubId } from '@/lib/queries'
+import { isPaidPlan } from '@/lib/stripe'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,8 +64,8 @@ const priorityColors = {
 export default async function MostDesiredPage() {
   const user = await getCurrentUser()
   
-  // Check if user is Pro - for now we'll show the upgrade prompt
-  const isPro = false // In production: check user.subscription_tier === 'pro'
+  const subscription = user ? await getSubscriptionByGithubId(user.github_id).catch(() => null) : null
+  const isPro = isPaidPlan(subscription?.plan)
 
   if (!isPro) {
     return (

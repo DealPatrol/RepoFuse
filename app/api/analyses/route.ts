@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { createAnalysis, linkAnalysisToRepository, getAllAnalyses } from '@/lib/queries'
+import { createAnalysis, getRepositoryById, linkAnalysisToRepository, getAllAnalyses } from '@/lib/queries'
 import { createAnalysisRequestSchema } from '@/lib/schemas'
 
 export async function GET() {
@@ -11,7 +11,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    const analyses = await getAllAnalyses()
+    const analyses = await getAllAnalyses(user.id)
     return NextResponse.json(analyses)
   } catch (error) {
     console.error('Error fetching analyses:', error)
@@ -34,11 +34,16 @@ export async function POST(request: NextRequest) {
     }
 
     const { name, repositoryIds } = parsedBody.data
-    const analysis = await createAnalysis(name.trim())
+    const analysis = await createAnalysis(name.trim(), user.id)
 
     const linked: string[] = []
     for (const repoId of repositoryIds) {
       try {
+        const repository = await getRepositoryById(repoId, user.id)
+        if (!repository) {
+          console.warn(`Skipping repository ${repoId}; it is not owned by ${user.id}`)
+          continue
+        }
         await linkAnalysisToRepository(analysis.id, repoId)
         linked.push(repoId as string)
       } catch (e) {

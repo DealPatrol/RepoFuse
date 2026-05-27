@@ -1,7 +1,7 @@
 -- Add user_credits table for tracking credit balance
 CREATE TABLE IF NOT EXISTS user_credits (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES user_auth(id) ON DELETE CASCADE,
   current_balance BIGINT NOT NULL DEFAULT 0,
   total_granted BIGINT NOT NULL DEFAULT 0,
   total_used BIGINT NOT NULL DEFAULT 0,
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS user_credits (
 -- Add credit_transactions table for audit trail
 CREATE TABLE IF NOT EXISTS credit_transactions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES user_auth(id) ON DELETE CASCADE,
   amount BIGINT NOT NULL,
   transaction_type VARCHAR(50) NOT NULL, -- 'grant', 'analysis', 'scaffold', 'refund', 'renewal'
   reason TEXT,
