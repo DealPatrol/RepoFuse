@@ -462,7 +462,7 @@ import Link from 'next/link'
                     {[
                       'Comment threads on every blueprint',
                       'Upvote to surface the best ideas',
-                      'Context that doesn't get lost in Slack',
+                      "Context that doesn't get lost in Slack",
                     ].map((feat) => (
                       <li key={feat} className="flex items-center gap-3 text-[#8B949E]">
                         <CheckCircle2 className="w-5 h-5 text-[#F59E0B] flex-shrink-0" />

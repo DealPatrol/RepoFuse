@@ -18,7 +18,7 @@
       name: 'Free',
       monthlyPrice: 0,
       period: 'forever',
-      description: 'Explore what's possible. No card needed.',
+      description: "Explore what's possible. No card needed.",
       credits: 200,
       maxCredits: 12000,
       icon: Zap,
@@ -362,7 +362,7 @@
             {[
               { quote: '"3 hidden apps found in 4 minutes. Shipped the first one 3 weeks later."', author: '@IndieHacker_X' },
               { quote: '"Reduced our AI costs by 60% with BYOK. Same quality, way less spend."', author: 'Emily W., Scale.io' },
-              { quote: '"The scaffold PR had all checks green. I just hit merge. That's it."', author: 'Marcus R., Solo Founder' },
+              { quote: "The scaffold PR had all checks green. I just hit merge. That's it.", author: 'Marcus R., Solo Founder' },
             ].map((t, i) => (
               <div key={i} className="bg-[#161B22] border border-[#30363D] rounded-xl p-5 hover:border-[#06B6D4]/30 transition-all">
                 <div className="flex gap-1 mb-3">
