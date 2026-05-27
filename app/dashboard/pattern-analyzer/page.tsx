@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { getAllAnalyses, type Analysis } from '@/lib/queries'
 import { PatternAnalyzer } from '@/components/pattern-analyzer'
 import { getCurrentUser } from '@/lib/auth'

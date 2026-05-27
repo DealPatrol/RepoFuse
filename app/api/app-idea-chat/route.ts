@@ -9,6 +9,9 @@ import {
 import { getAnthropicModel } from '@/lib/anthropic-model'
 import { getCurrentUser } from '@/lib/auth'
 import { deductCredits, CREDITS } from '@/lib/credits'
+import type { AppIdeaChatResponse, ChatMessage } from '@/lib/app-idea-chat-types'
+
+export type { AppIdeaSuggestion, AppIdeaChatResponse, ChatMessage } from '@/lib/app-idea-chat-types'
 
 let __anthropicClient: Anthropic | null = null
 function getAnthropic(): Anthropic {
@@ -21,30 +24,50 @@ function getAnthropic(): Anthropic {
   return __anthropicClient
 }
 
-export interface AppIdeaSuggestion {
-  name: string
-  tagline: string
-  description: string
-  type: string
-  difficulty: 'easy' | 'medium' | 'hard'
-  estimatedEffort: string
-  suggestedStack: string[]
-  monetizationAngle: string
-  whyNow: string
-  reusePlan?: string
-  sourceFiles?: string[]
-  filesToCreate?: string[]
+function normalizeAnalysisId(analysisId?: string): string | undefined {
+  if (!analysisId || analysisId === 'none') return undefined
+  return analysisId
 }
 
-export interface AppIdeaChatResponse {
-  reply: string
-  suggestions: AppIdeaSuggestion[]
-  followUpQuestions: string[]
+/** Anthropic requires alternating user/assistant turns. */
+function normalizeConversationHistory(history: ChatMessage[]): ChatMessage[] {
+  const trimmed = history
+    .map((m) => ({
+      role: m.role,
+      content: m.content?.trim() ?? '',
+    }))
+    .filter((m) => m.content.length > 0)
+    .slice(-12)
+
+  const normalized: ChatMessage[] = []
+  for (const entry of trimmed) {
+    const last = normalized[normalized.length - 1]
+    if (last?.role === entry.role) {
+      last.content = `${last.content}\n\n${entry.content}`
+      continue
+    }
+    normalized.push({ ...entry })
+  }
+
+  if (normalized[0]?.role === 'assistant') {
+    normalized.shift()
+  }
+
+  return normalized
 }
 
-export interface ChatMessage {
-  role: 'user' | 'assistant'
-  content: string
+function parseAppIdeaChatResponse(raw: string): AppIdeaChatResponse {
+  const jsonText = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
+  try {
+    return JSON.parse(jsonText) as AppIdeaChatResponse
+  } catch {
+    const start = jsonText.indexOf('{')
+    const end = jsonText.lastIndexOf('}')
+    if (start >= 0 && end > start) {
+      return JSON.parse(jsonText.slice(start, end + 1)) as AppIdeaChatResponse
+    }
+    throw new Error('Failed to parse AI response')
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -54,11 +77,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    const { message, analysisId, history = [] } = (await request.json()) as {
+    const { message, analysisId: rawAnalysisId, history = [] } = (await request.json()) as {
       message: string
       analysisId?: string
       history?: ChatMessage[]
     }
+    const analysisId = normalizeAnalysisId(rawAnalysisId)
 
     if (!message?.trim()) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 })
@@ -74,7 +98,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: creditResult.error || 'Insufficient credits' }, { status: 402 })
     }
 
-    // Optionally load codebase context
     let codebaseContext = ''
     if (analysisId) {
       try {
@@ -104,7 +127,8 @@ export async function POST(request: NextRequest) {
             .slice(0, 16)
             .map((file) => {
               const repo = repositories.find((r) => r.id === file.repository_id)
-              return `${repo?.full_name ?? 'repo'}/${file.path}${file.purpose ? ` - ${file.purpose}` : ''}`
+              const purpose = file.purpose?.trim()
+              return `${repo?.full_name ?? 'repo'}/${file.path}${purpose ? ` - ${purpose}` : ''}`
             })
 
           codebaseContext = `
@@ -122,11 +146,7 @@ ${reusableFiles.length > 0 ? reusableFiles.map((file) => `- ${file}`).join('\n')
       }
     }
 
-    // Build conversation history for context
-    const conversationHistory = history.slice(-6).map((m) => ({
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-    }))
+    const conversationHistory = normalizeConversationHistory(history).slice(-6)
 
     const systemPrompt = `You are RepoFuse's VibeCoding app assembler. Help developers describe what they want to build, then turn their connected GitHub/GitLab repository knowledge into buildable app plans that reuse as much existing code, file structure, and patterns as possible.
 
@@ -162,10 +182,10 @@ Always respond with valid JSON only (no markdown fences):
   "followUpQuestions": ["Question 1?", "Question 2?"]
 }`
 
-    const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
+    const messages = normalizeConversationHistory([
       ...conversationHistory,
-      { role: 'user', content: message },
-    ]
+      { role: 'user', content: message.trim() },
+    ])
 
     const response = await getAnthropic().messages.create({
       model: getAnthropicModel(),
@@ -175,16 +195,23 @@ Always respond with valid JSON only (no markdown fences):
     })
 
     const raw = response.content[0].type === 'text' ? response.content[0].text.trim() : ''
-    const jsonText = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
 
     let parsed: AppIdeaChatResponse
     try {
-      parsed = JSON.parse(jsonText)
+      parsed = parseAppIdeaChatResponse(raw)
     } catch {
       return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 })
     }
 
-    return NextResponse.json(parsed)
+    if (!parsed.reply?.trim()) {
+      return NextResponse.json({ error: 'Empty AI response' }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      reply: parsed.reply,
+      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
+      followUpQuestions: Array.isArray(parsed.followUpQuestions) ? parsed.followUpQuestions : [],
+    })
   } catch (error) {
     console.error('[app-idea-chat] error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
