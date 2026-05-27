@@ -183,9 +183,11 @@ export default async function BuiltAppsPage() {
                   <span className="text-xs text-muted-foreground">
                     Last commit: {app.lastCommit}
                   </span>
-                  <Button size="sm" variant="ghost" className="text-cyan-400 hover:text-cyan-300">
-                    <Sparkles className="h-3 w-3 mr-1" />
-                    Analyze
+                  <Button size="sm" variant="ghost" className="text-cyan-400 hover:text-cyan-300" asChild>
+                    <Link href={`/dashboard/pattern-analyzer?analysisId=${app.id.replace(/^app-/, '')}`}>
+                      <Sparkles className="h-3 w-3 mr-1" />
+                      Chat about app
+                    </Link>
                   </Button>
                 </div>
               </CardContent>

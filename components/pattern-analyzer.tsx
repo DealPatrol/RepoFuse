@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -29,7 +30,7 @@ import {
   FilePlus2,
 } from 'lucide-react'
 import type { Analysis } from '@/lib/queries'
-import type { AppIdeaSuggestion, AppIdeaChatResponse, ChatMessage } from '@/app/api/app-idea-chat/route'
+import type { AppIdeaSuggestion, AppIdeaChatResponse, ChatMessage } from '@/lib/app-idea-chat-types'
 import { createLikedAppId, getLikedApps, toggleLikedApp } from '@/lib/liked-apps'
 
 const DIFFICULTY_META = {
@@ -232,6 +233,13 @@ type FullChatMessage = ChatMessage & {
 }
 
 export function PatternAnalyzer({ completedAnalyses }: PatternAnalyzerProps) {
+  const searchParams = useSearchParams()
+  const analysisFromUrl = searchParams.get('analysisId')
+  const initialAnalysisId =
+    analysisFromUrl && completedAnalyses.some((a) => a.id === analysisFromUrl)
+      ? analysisFromUrl
+      : 'none'
+
   const [messages, setMessages] = useState<FullChatMessage[]>([
     {
       role: 'assistant',
@@ -243,9 +251,20 @@ export function PatternAnalyzer({ completedAnalyses }: PatternAnalyzerProps) {
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [selectedAnalysisId, setSelectedAnalysisId] = useState<string>('')
+  const [selectedAnalysisId, setSelectedAnalysisId] = useState<string>(initialAnalysisId)
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (
+      analysisFromUrl &&
+      completedAnalyses.some((a) => a.id === analysisFromUrl) &&
+      selectedAnalysisId !== analysisFromUrl
+    ) {
+      setSelectedAnalysisId(analysisFromUrl)
+    }
+  }, [analysisFromUrl, completedAnalyses, selectedAnalysisId])
+
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -275,60 +294,69 @@ export function PatternAnalyzer({ completedAnalyses }: PatternAnalyzerProps) {
     setLikedIds(new Set(apps.map((app) => app.id)))
   }
 
-  const sendMessage = async (text: string) => {
-    if (!text.trim() || loading) return
+  const sendMessage = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim()
+      if (!trimmed || loading) return
 
-    const userMessage: FullChatMessage = { role: 'user', content: text }
-    const updatedMessages = [...messages, userMessage]
-    setMessages(updatedMessages)
-    setInput('')
-    setLoading(true)
+      setMessages((prev) => [...prev, { role: 'user', content: trimmed }])
+      setInput('')
+      setLoading(true)
 
-    try {
-      const history = updatedMessages
-        .filter((m) => !m.suggestions?.length && !m.followUpQuestions?.length)
-        .slice(-8)
+      const history: ChatMessage[] = messages
         .map(({ role, content }) => ({ role, content }))
+        .slice(-8)
 
-      const res = await fetch('/api/app-idea-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: text,
-          analysisId: selectedAnalysisId || undefined,
-          history,
-        }),
-      })
+      const analysisId =
+        selectedAnalysisId && selectedAnalysisId !== 'none' ? selectedAnalysisId : undefined
 
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || 'Request failed')
+      try {
+        const res = await fetch('/api/app-idea-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: trimmed, analysisId, history }),
+        })
+
+        let data: { error?: string } & Partial<AppIdeaChatResponse> = {}
+        try {
+          data = await res.json()
+        } catch {
+          throw new Error(res.ok ? 'Invalid server response' : `Request failed (${res.status})`)
+        }
+
+        if (!res.ok) {
+          throw new Error(data.error || `Request failed (${res.status})`)
+        }
+
+        const reply = data.reply?.trim()
+        if (!reply) {
+          throw new Error('Empty response from server')
+        }
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: reply,
+            suggestions: data.suggestions ?? [],
+            followUpQuestions: data.followUpQuestions ?? [],
+          },
+        ])
+      } catch (err) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content:
+              err instanceof Error ? err.message : 'Something went wrong. Please try again.',
+          },
+        ])
+      } finally {
+        setLoading(false)
       }
-
-      const data: AppIdeaChatResponse = await res.json()
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: data.reply,
-          suggestions: data.suggestions,
-          followUpQuestions: data.followUpQuestions,
-        },
-      ])
-    } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content:
-            err instanceof Error ? err.message : 'Something went wrong. Please try again.',
-        },
-      ])
-    } finally {
-      setLoading(false)
-    }
-  }
+    },
+    [loading, messages, selectedAnalysisId],
+  )
 
   return (
     <div className="flex flex-col h-[calc(100vh-12rem)] max-h-[800px]">
@@ -375,10 +403,7 @@ export function PatternAnalyzer({ completedAnalyses }: PatternAnalyzerProps) {
             message={msg}
             likedIds={likedIds}
             onToggleLiked={handleToggleLiked}
-            onFollowUp={(q) => {
-              setInput(q)
-              sendMessage(q)
-            }}
+            onFollowUp={(q) => void sendMessage(q)}
           />
         ))}
         {loading && (
