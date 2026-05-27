@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createTemplate, getBlueprintsByAnalysis, getMissingGapsByBlueprint } from '@/lib/queries'
+import { createTemplate, getMissingGapsByBlueprint } from '@/lib/queries'
+import { getCurrentUser } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
   try {
+    const user = await getCurrentUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
     const body = await request.json()
     const {
       name,
@@ -20,13 +26,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate aggregate metrics from blueprints
-    let totalFiles = 0
+    const totalFiles = 0
     let totalMissingFiles = 0
     let totalEstimatedHours = 0
     let totalReuse = 0
 
     for (const blueprintId of blueprintIds) {
-      const gaps = await getMissingGapsByBlueprint(blueprintId)
+      const gaps = await getMissingGapsByBlueprint(blueprintId, user.id)
       totalMissingFiles += gaps.length
       totalEstimatedHours += gaps.reduce((sum, g) => sum + g.estimated_hours, 0)
       
@@ -38,6 +44,7 @@ export async function POST(request: NextRequest) {
     const totalAllFiles = totalFiles + totalMissingFiles
 
     const template = await createTemplate({
+      user_id: user.id,
       name,
       description: description || null,
       blueprint_ids: blueprintIds,

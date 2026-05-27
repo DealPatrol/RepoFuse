@@ -2,7 +2,8 @@ import { NextRequest } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { getCurrentUser } from '@/lib/auth'
 import { getAnthropicModel } from '@/lib/anthropic-model'
-import type { AppBlueprint } from '@/lib/queries'
+import { getSubscriptionByGithubId, upsertSubscription, type AppBlueprint } from '@/lib/queries'
+import { isPaidPlan } from '@/lib/stripe'
 
 let __anthropicClient: Anthropic | null = null
 function getAnthropic(): Anthropic {
@@ -219,6 +220,16 @@ export async function POST(request: NextRequest) {
         const user = await getCurrentUser()
         if (!user) {
           send({ step: 'error', message: 'Sign in before building an app.' })
+          controller.close()
+          return
+        }
+
+        let sub = await getSubscriptionByGithubId(user.github_id).catch(() => null)
+        if (!sub) {
+          sub = await upsertSubscription({ github_id: user.github_id }).catch(() => null)
+        }
+        if (!isPaidPlan(sub?.plan)) {
+          send({ step: 'error', message: 'Build This App is available on paid plans. Upgrade to create and push a generated repo.' })
           controller.close()
           return
         }

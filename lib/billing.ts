@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser, type AuthUser } from '@/lib/auth'
-import { getStripe, isStripeConfigured } from '@/lib/stripe'
+import { getStripe, isPaidPlan, isStripeConfigured, type PlanId } from '@/lib/stripe'
 import { updateUserBilling } from '@/lib/queries'
 
 const ACTIVE_STATUSES = new Set(['active', 'trialing'])
 
 export interface BillingState {
-  plan: 'free' | 'pro'
+  plan: PlanId
   status: string | null
   canAccessPro: boolean
   customerId: string | null
@@ -27,9 +27,9 @@ export async function getBillingState(user: AuthUser | null): Promise<BillingSta
   }
 
   let state: BillingState = {
-    plan: user.plan_tier === 'pro' && user.subscription_status && ACTIVE_STATUSES.has(user.subscription_status) ? 'pro' : 'free',
+    plan: isPaidPlan(user.plan_tier) && user.subscription_status && ACTIVE_STATUSES.has(user.subscription_status) ? user.plan_tier : 'free',
     status: user.subscription_status,
-    canAccessPro: user.plan_tier === 'pro' && user.subscription_status ? ACTIVE_STATUSES.has(user.subscription_status) : false,
+    canAccessPro: isPaidPlan(user.plan_tier) && user.subscription_status ? ACTIVE_STATUSES.has(user.subscription_status) : false,
     customerId: user.stripe_customer_id,
     subscriptionId: user.stripe_subscription_id,
     priceId: user.stripe_price_id,

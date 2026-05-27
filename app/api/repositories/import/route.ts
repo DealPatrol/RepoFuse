@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentAccessToken, getCurrentUser } from '@/lib/auth'
 import { listGitHubRepositories } from '@/lib/github'
 import { createRepository, getAllRepositories, getSubscriptionByGithubId, upsertSubscription } from '@/lib/queries'
-import { PLANS } from '@/lib/stripe'
+import { PLANS, isPaidPlan } from '@/lib/stripe'
+import { isPaidPlan, PLANS } from '@/lib/stripe'
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,19 +20,29 @@ export async function POST(request: NextRequest) {
     }
 
     const user = await getCurrentUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
     let repoLimit = -1
+    let sub = await getSubscriptionByGithubId(user.github_id).catch(() => null)
+    if (!sub) {
+      sub = await upsertSubscription({ github_id: user.github_id }).catch(() => null)
+    }
+    if (sub && !isPaidPlan(sub.plan)) {
+      repoLimit = PLANS.free.repos_limit
     if (user) {
       let sub = await getSubscriptionByGithubId(user.github_id).catch(() => null)
       if (!sub) {
         sub = await upsertSubscription({ github_id: user.github_id }).catch(() => null)
       }
-      if (sub && sub.plan !== 'pro') {
+      if (sub && !isPaidPlan(sub.plan)) {
         repoLimit = PLANS.free.repos_limit
       }
     }
 
     if (repoLimit > 0) {
-      const existingRepos = await getAllRepositories()
+      const existingRepos = await getAllRepositories(user.id)
       const slotsLeft = repoLimit - existingRepos.length
       if (slotsLeft <= 0) {
         return NextResponse.json(
@@ -58,6 +69,7 @@ export async function POST(request: NextRequest) {
 
     for (const repo of selectedRepositories) {
       const saved = await createRepository({
+        user_id: user.id,
         github_id: repo.id,
         name: repo.name,
         full_name: repo.full_name,

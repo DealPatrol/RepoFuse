@@ -15,7 +15,7 @@ const navItems = [
   { href: '/dashboard', label: 'Overview', icon: BarChart3 },
   { href: '/dashboard/repositories', label: 'Repos', icon: FolderGit2 },
   { href: '/dashboard/analyses', label: 'Analyses', icon: Sparkles },
-  { href: '/dashboard/idea-board', label: 'Idea Board', icon: LayoutGrid },
+  { href: '/dashboard/idea-board', label: 'Liked Apps', icon: LayoutGrid },
   { href: '/dashboard/pattern-analyzer', label: 'App Idea Chat', icon: MessageSquare },
   { href: '/dashboard/billing', label: 'Billing', icon: CreditCard },
 ]
