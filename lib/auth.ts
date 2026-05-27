@@ -16,6 +16,39 @@ export interface AuthUser {
   subscription_status: string | null
 }
 
+export function sanitizeReturnTo(
+  returnTo: string | null | undefined,
+  fallback = '/dashboard/repositories?connected=github',
+) {
+  if (!returnTo) {
+    return fallback
+  }
+
+  const trimmed = returnTo.trim()
+
+  // Reject protocol-relative and backslash-normalized paths (e.g. `/\\evil.com` -> `//evil.com`).
+  if (trimmed.includes('\\') || !trimmed.startsWith('/') || trimmed.startsWith('//')) {
+    return fallback
+  }
+
+  try {
+    const base = 'http://repofuse.local'
+    const parsed = new URL(trimmed, base)
+    if (parsed.origin !== base) {
+      return fallback
+    }
+
+    const normalized = `${parsed.pathname}${parsed.search}${parsed.hash}`
+    if (!normalized.startsWith('/') || normalized.startsWith('//')) {
+      return fallback
+    }
+
+    return normalized
+  } catch {
+    return fallback
+  }
+}
+
 async function fetchGitHubUserFromToken(accessToken: string): Promise<{
   id: number
   login: string
@@ -39,7 +72,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   const userIdCookie = cookieStore.get('github_user_id')?.value
   const tokenCookie = cookieStore.get(GITHUB_ACCESS_TOKEN_COOKIE)?.value
 
-  if (!userIdCookie) {
+  if (!userIdCookie || !tokenCookie) {
     return null
   }
 
@@ -58,7 +91,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
       LIMIT 1
     `
     const row = users[0] as AuthUser | undefined
-    if (row?.access_token) {
+    if (row?.access_token === tokenCookie) {
       return row
     }
     if (row && tokenCookie) {
