@@ -80,7 +80,6 @@ export const PLANS = {
 export type PlanId = keyof typeof PLANS
 
 export function isPaidPlan(plan: string | null | undefined): plan is Exclude<PlanId, 'free'> {
-export function isPaidPlan(plan: PlanId | null | undefined): boolean {
   return plan === 'pro' || plan === 'scale' || plan === 'byok'
 }
 
