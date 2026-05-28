@@ -20,7 +20,8 @@ import {
   incrementAnalysisUsage,
 } from '@/lib/queries'
 import { getAnthropicModel } from '@/lib/anthropic-model'
-import { PLANS, isPaidPlan } from '@/lib/stripe'
+import { isOnFreeTier } from '@/lib/pro-access'
+import { PLANS } from '@/lib/stripe'
 import { generateGapsFromBlueprint, generateTemplatesFromBlueprints } from '@/lib/gap-generation'
 
 // Schema for AI-generated app blueprints
@@ -168,7 +169,7 @@ export async function POST(
         if (!sub) {
           sub = await upsertSubscription({ github_id: user.github_id }).catch(() => null)
         }
-        if (sub && !isPaidPlan(sub.plan)) {
+        if (isOnFreeTier(user, sub) && sub) {
           const limit = PLANS.free.analyses_per_month
           if (sub.analyses_used_this_month >= limit) {
             send({ error: `You've reached your free plan limit of ${limit} analyses per month. Upgrade to Pro for unlimited analyses.`, status: 'failed' })

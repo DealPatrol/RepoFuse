@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentAccessToken, getCurrentUser } from '@/lib/auth'
 import { listGitHubRepositories } from '@/lib/github'
 import { createRepository, getAllRepositories, getSubscriptionByGithubId, upsertSubscription } from '@/lib/queries'
-import { PLANS, isPaidPlan } from '@/lib/stripe'
+import { isOnFreeTier } from '@/lib/pro-access'
+import { PLANS } from '@/lib/stripe'
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
     if (!sub) {
       sub = await upsertSubscription({ github_id: user.github_id }).catch(() => null)
     }
-    if (sub && !isPaidPlan(sub.plan)) {
+    if (isOnFreeTier(user, sub)) {
       repoLimit = PLANS.free.repos_limit
     }
 

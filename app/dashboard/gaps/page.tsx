@@ -8,7 +8,6 @@ import { GapPriorityMatrix } from '@/components/gap-priority-matrix'
 import {
   getAllMissingGaps,
   getGapSummary,
-  getSubscriptionByGithubId,
   getCompletedGapIdsForUser,
   type GapSummary,
   type MissingFileGap,
@@ -16,7 +15,7 @@ import {
 import { GapsPriorityGroups } from '@/components/gaps-priority-groups'
 import { gapCategories, groupGapsByPriority, calculateTotalEffort } from '@/lib/gap-priorities'
 import { getCurrentUser } from '@/lib/auth'
-import { isPaidPlan } from '@/lib/stripe'
+import { resolveProAccess } from '@/lib/pro-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -318,8 +317,7 @@ async function GapsDashboardContent({ userId }: { userId: string }) {
 export default async function GapsDashboardPage() {
   // Check if user is Pro
   const user = await getCurrentUser()
-  const subscription = user ? await getSubscriptionByGithubId(user.github_id).catch(() => null) : null
-  const isPro = isPaidPlan(subscription?.plan)
+  const { canAccessPro: isPro } = user ? await resolveProAccess(user) : { canAccessPro: false }
 
   if (!user || !isPro) {
     return (

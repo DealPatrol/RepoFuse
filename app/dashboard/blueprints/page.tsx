@@ -1,6 +1,6 @@
 import { getCurrentUser } from '@/lib/auth'
-import { getAllAnalyses, getBlueprintsByAnalysis, getSubscriptionByGithubId } from '@/lib/queries'
-import { isPaidPlan } from '@/lib/stripe'
+import { getAllAnalyses, getBlueprintsByAnalysis } from '@/lib/queries'
+import { resolveProAccess } from '@/lib/pro-access'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -58,8 +58,7 @@ export default async function BlueprintsPage() {
     // Database not available
   }
   
-  const subscription = user ? await getSubscriptionByGithubId(user.github_id).catch(() => null) : null
-  const isPro = isPaidPlan(subscription?.plan)
+  const { canAccessPro: isPro } = user ? await resolveProAccess(user) : { canAccessPro: false }
 
   if (!isPro) {
     return (

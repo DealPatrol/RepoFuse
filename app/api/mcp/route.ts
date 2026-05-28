@@ -1,7 +1,7 @@
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { generateText } from 'ai'
 import { getCurrentUser } from '@/lib/auth'
-import { getBillingState } from '@/lib/billing'
+import { resolveProAccess } from '@/lib/pro-access'
 import { createAnthropicPromptRunner } from '@/lib/repofuse-core.js'
 import { createRepoFuseMcpServer } from '@/lib/repofuse-mcp.js'
 
@@ -15,7 +15,7 @@ async function handleMcpRequest(request: Request) {
     return Response.json({ error: 'Not authenticated' }, { status: 401 })
   }
 
-  const billing = await getBillingState(user)
+  const { canAccessPro } = await resolveProAccess(user)
   const model = process.env.REPOFUSE_MODEL || process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022'
   const anthropicRunner = process.env.ANTHROPIC_API_KEY
     ? createAnthropicPromptRunner({ apiKey: process.env.ANTHROPIC_API_KEY, model })
@@ -38,7 +38,7 @@ async function handleMcpRequest(request: Request) {
     githubToken: user.access_token,
     analysisPromptRunner: analysisRunner,
     scaffoldPromptRunner: scaffoldRunner,
-    allowCreateRepo: billing.canAccessPro,
+    allowCreateRepo: canAccessPro,
     maxFilesPerRepo: 120,
     maxBlueprints: 5,
   })

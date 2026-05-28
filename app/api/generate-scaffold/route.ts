@@ -6,7 +6,7 @@ import { getCreditBalance, deductCredits, CREDITS } from '@/lib/credits'
 // Scaffold generation endpoint - v1.1
 import { getCurrentUser } from '@/lib/auth'
 import { getSubscriptionByGithubId, upsertSubscription } from '@/lib/queries'
-import { isPaidPlan } from '@/lib/stripe'
+import { hasProAccess } from '@/lib/pro-access'
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     if (!sub) {
       sub = await upsertSubscription({ github_id: user.github_id }).catch(() => null)
     }
-    if (!isPaidPlan(sub?.plan)) {
+    if (!hasProAccess(user, sub)) {
       return NextResponse.json(
         { error: 'Scaffold generation is a Pro feature. Upgrade your plan to use it.' },
         { status: 403 },

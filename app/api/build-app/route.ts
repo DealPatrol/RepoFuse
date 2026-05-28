@@ -3,7 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { getCurrentUser } from '@/lib/auth'
 import { getAnthropicModel } from '@/lib/anthropic-model'
 import { getSubscriptionByGithubId, upsertSubscription, type AppBlueprint } from '@/lib/queries'
-import { isPaidPlan } from '@/lib/stripe'
+import { hasProAccess } from '@/lib/pro-access'
 
 let __anthropicClient: Anthropic | null = null
 function getAnthropic(): Anthropic {
@@ -228,7 +228,7 @@ export async function POST(request: NextRequest) {
         if (!sub) {
           sub = await upsertSubscription({ github_id: user.github_id }).catch(() => null)
         }
-        if (!isPaidPlan(sub?.plan)) {
+        if (!hasProAccess(user, sub)) {
           send({ step: 'error', message: 'Build This App is available on paid plans. Upgrade to create and push a generated repo.' })
           controller.close()
           return
