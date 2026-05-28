@@ -17,6 +17,12 @@ export function getPriceIdForPlan(plan: 'pro' | 'scale'): string {
 
 export function getStripe(): Stripe {
   const secretKey = getLiveStripeEnv('SECRET_KEY')
+  console.log('[v0] getStripe() called')
+  console.log('[v0] Checking env vars:')
+  console.log('[v0] STRIPE_LIVE_SECRET_KEY:', process.env.STRIPE_LIVE_SECRET_KEY ? '***SET***' : 'NOT SET')
+  console.log('[v0] STRIPE_SECRET_KEY:', process.env.STRIPE_SECRET_KEY ? '***SET***' : 'NOT SET')
+  console.log('[v0] Available env keys containing STRIPE:', Object.keys(process.env).filter(k => k.includes('STRIPE')))
+  
   if (!secretKey) {
     throw new Error('STRIPE_LIVE_SECRET_KEY is not set')
   }

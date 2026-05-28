@@ -68,10 +68,12 @@ export async function POST(request: NextRequest) {
     console.log('[v0] Checkout session created:', session.id)
     return NextResponse.json({ url: session.url })
   } catch (error) {
-    console.error('[v0] Stripe checkout error:', error instanceof Error ? error.message : String(error))
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.error('[v0] Stripe checkout error:', errorMessage)
+    console.error('[v0] Full error:', JSON.stringify(error, null, 2))
     if (error instanceof Error) {
       console.error('[v0] Error stack:', error.stack)
     }
-    return NextResponse.json({ error: 'Failed to create checkout session' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to create checkout session', details: errorMessage }, { status: 500 })
   }
 }
