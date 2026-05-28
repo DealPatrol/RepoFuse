@@ -5,9 +5,16 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { GapPriorityMatrix } from '@/components/gap-priority-matrix'
-import { MissingFileCard } from '@/components/missing-file-card'
-import { getAllMissingGaps, getGapSummary, getSubscriptionByGithubId, type GapSummary, type MissingFileGap } from '@/lib/queries'
-import { groupGapsByPriority, calculateTotalEffort, gapCategories } from '@/lib/gap-priorities'
+import {
+  getAllMissingGaps,
+  getGapSummary,
+  getSubscriptionByGithubId,
+  getCompletedGapIdsForUser,
+  type GapSummary,
+  type MissingFileGap,
+} from '@/lib/queries'
+import { GapsPriorityGroups } from '@/components/gaps-priority-groups'
+import { gapCategories, groupGapsByPriority, calculateTotalEffort } from '@/lib/gap-priorities'
 import { getCurrentUser } from '@/lib/auth'
 import { isPaidPlan } from '@/lib/stripe'
 
@@ -177,6 +184,13 @@ async function GapsDashboardContent({ userId }: { userId: string }) {
     // Database tables may not exist yet
   }
 
+  let completedGapIds: string[] = []
+  try {
+    completedGapIds = await getCompletedGapIdsForUser(userId)
+  } catch {
+    completedGapIds = []
+  }
+
   const gapsByPriority = groupGapsByPriority(gaps)
   const priorityCounts = {
     critical: gapsByPriority.critical.length,
@@ -265,39 +279,7 @@ async function GapsDashboardContent({ userId }: { userId: string }) {
       {/* Priority Matrix */}
       <GapPriorityMatrix gaps={gaps} />
 
-      {/* Priority Groups */}
-      <div className="space-y-6">
-        {Object.entries(priorityCounts)
-          .filter((entry) => entry[1] > 0)
-          .map(([priority, count]) => (
-            <div key={priority} className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="capitalize">
-                  {priority} Priority
-                </Badge>
-                <span className="text-sm text-muted-foreground">
-                  {count} gap{count !== 1 ? 's' : ''} • {' '}
-                  {Math.round(
-                    calculateTotalEffort(
-                      gapsByPriority[priority as keyof typeof gapsByPriority]
-                    )
-                  )}
-                  h effort
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {gapsByPriority[priority as keyof typeof gapsByPriority].map(gap => (
-                  <MissingFileCard
-                    key={gap.id}
-                    gap={gap}
-                    allGaps={gaps}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
-      </div>
+      <GapsPriorityGroups gaps={gaps} completedGapIds={completedGapIds} />
 
       {/* Category Breakdown */}
       {Object.keys(categoryGroups).length > 0 && (

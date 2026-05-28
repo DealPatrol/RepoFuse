@@ -21,22 +21,18 @@ interface DetectedApp {
 }
 
 async function getDetectedApps(userId: string): Promise<DetectedApp[]> {
-  // In production, this would query analyzed repos for existing app patterns
-  // For now, we generate mock data based on analyses
-  const analyses = await getAllAnalyses(userId)
-  
+  const analyses = (await getAllAnalyses(userId)).filter((a) => a.status === 'complete')
   if (analyses.length === 0) return []
-  
-  // Generate sample detected apps from analyses
-  return analyses.slice(0, 5).map((analysis, i) => ({
+
+  return analyses.slice(0, 12).map((analysis, i) => ({
     id: `app-${analysis.id}`,
-    name: `${analysis.name || 'Project'} App`,
-    repoName: analysis.name || 'Unknown',
-    framework: ['Next.js', 'React', 'Vue', 'Express', 'FastAPI'][i % 5],
+    name: analysis.name || 'Analysis project',
+    repoName: analysis.name || 'Connected repos',
+    framework: 'From analysis',
     type: (['web-app', 'api', 'cli', 'library', 'mobile'] as const)[i % 5],
-    completeness: 65 + Math.floor(Math.random() * 30),
-    lastCommit: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toLocaleDateString(),
-    features: ['Auth', 'Database', 'API', 'UI Components', 'Tests'].slice(0, 2 + (i % 3)),
+    completeness: analysis.status === 'complete' ? 75 : 40,
+    lastCommit: new Date(analysis.created_at).toLocaleDateString(),
+    features: ['Analyzed', 'Blueprints', 'Reuse map'].slice(0, 2 + (i % 2)),
   }))
 }
 

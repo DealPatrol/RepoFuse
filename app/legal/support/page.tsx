@@ -84,7 +84,7 @@ export default function SupportPage() {
         </div>
 
         {/* FAQ Section */}
-        <div className="mt-16">
+        <div id="faq" className="mt-16 scroll-mt-24">
           <h2 className="text-3xl font-bold mb-8">Frequently Asked Questions</h2>
           <div className="space-y-6">
             <div className="p-6 rounded-lg border border-border bg-card">

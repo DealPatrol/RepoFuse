@@ -559,6 +559,18 @@ export async function markGapAsComplete(gapId: string, blueprintId: string, user
   return result[0] as CompletedGap
 }
 
+export async function getCompletedGapIdsForUser(userId: string): Promise<string[]> {
+  const sql = getDb()
+  const rows = await sql`
+    SELECT c.gap_id
+    FROM completed_gaps c
+    JOIN app_blueprints b ON b.id = c.blueprint_id
+    JOIN analyses a ON a.id = b.analysis_id
+    WHERE a.user_id = ${userId}
+  `
+  return (rows as Array<{ gap_id: string }>).map((row) => row.gap_id)
+}
+
 export async function getCompletedGapCount(blueprintId: string): Promise<number> {
   const sql = getDb()
   const result = await sql`

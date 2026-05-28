@@ -18,5 +18,9 @@ export default async function PatternAnalyzerPage() {
     // Database not available
   }
 
-  return <PatternAnalyzer completedAnalyses={analyses} />
+  return (
+    <Suspense fallback={<div className="text-muted-foreground text-sm">Loading chat…</div>}>
+      <PatternAnalyzer completedAnalyses={analyses} />
+    </Suspense>
+  )
 }

@@ -2,7 +2,18 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Github, BarChart3, FolderGit2, Sparkles, CreditCard, LayoutGrid, MessageSquare } from 'lucide-react'
+import {
+  Github,
+  BarChart3,
+  FolderGit2,
+  Sparkles,
+  CreditCard,
+  LayoutGrid,
+  MessageSquare,
+  LayoutTemplate,
+  AlertTriangle,
+  Settings,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { RepoFuseLogo3D } from '@/components/repofuse-logo-3d'
 import type { AuthUser } from '@/lib/auth'
@@ -15,9 +26,12 @@ const navItems = [
   { href: '/dashboard', label: 'Overview', icon: BarChart3 },
   { href: '/dashboard/repositories', label: 'Repos', icon: FolderGit2 },
   { href: '/dashboard/analyses', label: 'Analyses', icon: Sparkles },
-  { href: '/dashboard/idea-board', label: 'Liked Apps', icon: LayoutGrid },
   { href: '/dashboard/pattern-analyzer', label: 'App Idea Chat', icon: MessageSquare },
+  { href: '/dashboard/templates/browse', label: 'Templates', icon: LayoutTemplate },
+  { href: '/dashboard/gaps', label: 'Gaps', icon: AlertTriangle },
+  { href: '/dashboard/idea-board', label: 'Liked Apps', icon: LayoutGrid },
   { href: '/dashboard/billing', label: 'Billing', icon: CreditCard },
+  { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ]
 
 export function DashboardHeader({ user }: DashboardHeaderProps) {
