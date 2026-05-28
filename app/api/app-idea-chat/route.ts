@@ -1,28 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Anthropic } from '@anthropic-ai/sdk'
 import {
   getAnalysisById,
   getRepositoriesForAnalysis,
   getBlueprintsByAnalysis,
   getFilesByRepository,
 } from '@/lib/queries'
-import { getAnthropicModel } from '@/lib/anthropic-model'
 import { getCurrentUser } from '@/lib/auth'
 import { deductCredits, CREDITS } from '@/lib/credits'
 import type { AppIdeaChatResponse, ChatMessage } from '@/lib/app-idea-chat-types'
+import { aiConfigErrorMessage, generateWithGateway, isAiConfigured } from '@/lib/ai-gateway'
 
 export type { AppIdeaSuggestion, AppIdeaChatResponse, ChatMessage } from '@/lib/app-idea-chat-types'
-
-let __anthropicClient: Anthropic | null = null
-function getAnthropic(): Anthropic {
-  if (__anthropicClient) return __anthropicClient
-  const key = process.env.ANTHROPIC_API_KEY
-  if (!key) {
-    throw new Error('ANTHROPIC_API_KEY is not configured')
-  }
-  __anthropicClient = new Anthropic({ apiKey: key })
-  return __anthropicClient
-}
 
 function normalizeAnalysisId(analysisId?: string): string | undefined {
   if (!analysisId || analysisId === 'none') return undefined
@@ -72,6 +60,10 @@ function parseAppIdeaChatResponse(raw: string): AppIdeaChatResponse {
 
 export async function POST(request: NextRequest) {
   try {
+    if (!isAiConfigured()) {
+      return NextResponse.json({ error: aiConfigErrorMessage() }, { status: 503 })
+    }
+
     const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
@@ -187,14 +179,13 @@ Always respond with valid JSON only (no markdown fences):
       { role: 'user', content: message.trim() },
     ])
 
-    const response = await getAnthropic().messages.create({
-      model: getAnthropicModel(),
-      max_tokens: 2048,
+    const raw = await generateWithGateway({
       system: systemPrompt,
       messages,
+      maxOutputTokens: 2048,
+      userId: user.id,
+      feature: 'app-idea-chat',
     })
-
-    const raw = response.content[0].type === 'text' ? response.content[0].text.trim() : ''
 
     let parsed: AppIdeaChatResponse
     try {

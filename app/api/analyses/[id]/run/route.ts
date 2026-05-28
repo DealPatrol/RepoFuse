@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
+import { aiConfigErrorMessage, getAnthropicClient, isAiConfigured } from '@/lib/ai-gateway'
 import { z } from 'zod'
 import { getCurrentAccessToken, getCurrentUser } from '@/lib/auth'
 import {
@@ -152,8 +152,8 @@ export async function POST(
           controller.close()
           return
         }
-        if (!process.env.ANTHROPIC_API_KEY) {
-          send({ error: 'AI analysis is not configured. Missing ANTHROPIC_API_KEY.' })
+        if (!isAiConfigured()) {
+          send({ error: aiConfigErrorMessage() })
           controller.close()
           return
         }
@@ -278,7 +278,7 @@ export async function POST(
         const fileSummary = filesToSend.map(f => `- ${f.repo}: ${f.path}`).join('\n')
 
         // Use Claude to analyze and discover app blueprints (structured tool output)
-        const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+        const client = getAnthropicClient()
 
         const userPrompt = `You are acting as an expert software architect and product strategist.
 Analyze these files from GitHub repositories and discover what applications can be built by combining and reusing the existing code.

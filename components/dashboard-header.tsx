@@ -16,7 +16,10 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { RepoFuseLogo3D } from '@/components/repofuse-logo-3d'
+import { UserButton } from '@clerk/nextjs'
 import type { AuthUser } from '@/lib/auth'
+import { authSignInHref } from '@/components/auth-sign-in-link'
+import { isClerkEnabled } from '@/lib/clerk-auth'
 
 interface DashboardHeaderProps {
   user: AuthUser | null
@@ -73,27 +76,33 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
           <div className="flex items-center gap-3">
             {user ? (
               <div className="flex items-center gap-3">
-                {user.github_avatar_url && (
-                  <img
-                    src={user.github_avatar_url}
-                    alt={user.github_username}
-                    className="h-8 w-8 rounded-full ring-2 ring-cyan-500/40"
-                  />
+                {isClerkEnabled() ? (
+                  <UserButton />
+                ) : (
+                  <>
+                    {user.github_avatar_url && (
+                      <img
+                        src={user.github_avatar_url}
+                        alt={user.github_username}
+                        className="h-8 w-8 rounded-full ring-2 ring-cyan-500/40"
+                      />
+                    )}
+                    <div className="hidden sm:block text-right">
+                      <p className="text-xs font-mono font-medium text-cyan-300 leading-none">@{user.github_username}</p>
+                      <a
+                        href="/api/auth/logout"
+                        className="text-xs text-cyan-400/40 hover:text-cyan-300 transition-colors"
+                      >
+                        Sign out
+                      </a>
+                    </div>
+                  </>
                 )}
-                <div className="hidden sm:block text-right">
-                  <p className="text-xs font-mono font-medium text-cyan-300 leading-none">@{user.github_username}</p>
-                  <a
-                    href="/api/auth/logout"
-                    className="text-xs text-cyan-400/40 hover:text-cyan-300 transition-colors"
-                  >
-                    Sign out
-                  </a>
-                </div>
               </div>
             ) : (
               <div className="flex items-center gap-2">
                 <a
-                  href="/api/auth/github/login"
+                  href={authSignInHref()}
                   className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono text-cyan-400/60 hover:text-cyan-300 hover:bg-cyan-950/30 transition-all border border-transparent hover:border-cyan-500/20"
                 >
                   <Github className="h-4 w-4" />
