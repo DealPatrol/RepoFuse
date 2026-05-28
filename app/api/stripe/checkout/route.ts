@@ -38,11 +38,27 @@ export async function POST(request: NextRequest) {
     let customerId = sub.stripe_customer_id
 
     if (!customerId) {
+      console.log('[checkout] Creating new Stripe customer for github_id:', user.github_id)
       const customer = await stripe.customers.create({
         metadata: { github_id: String(user.github_id), github_username: user.github_username },
       })
       customerId = customer.id
+      console.log('[checkout] Created new customer:', customerId)
       await upsertSubscription({ github_id: user.github_id, stripe_customer_id: customerId })
+    } else {
+      // Verify the customer exists in Stripe (in case it's a stale test ID)
+      try {
+        await stripe.customers.retrieve(customerId)
+        console.log('[checkout] Verified existing customer:', customerId)
+      } catch (error) {
+        console.log('[checkout] Customer does not exist in Stripe (likely test ID), creating new one')
+        const customer = await stripe.customers.create({
+          metadata: { github_id: String(user.github_id), github_username: user.github_username },
+        })
+        customerId = customer.id
+        console.log('[checkout] Created replacement customer:', customerId)
+        await upsertSubscription({ github_id: user.github_id, stripe_customer_id: customerId })
+      }
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${process.env.PORT || 3000}`
