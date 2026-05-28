@@ -14,6 +14,8 @@ export interface AuthUser {
   stripe_price_id: string | null
   plan_tier: 'free' | 'pro' | 'scale' | 'byok' | null
   subscription_status: string | null
+  vercel_access_token: string | null
+  vercel_team_id: string | null
 }
 
 export function sanitizeReturnTo(
@@ -26,7 +28,6 @@ export function sanitizeReturnTo(
 
   const trimmed = returnTo.trim()
 
-  // Reject protocol-relative and backslash-normalized paths (e.g. `/\\evil.com` -> `//evil.com`).
   if (trimmed.includes('\\') || !trimmed.startsWith('/') || trimmed.startsWith('//')) {
     return fallback
   }
@@ -85,7 +86,9 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     const sql = getDb()
     const users = await sql`
       SELECT id, github_id, github_username, github_avatar_url, access_token,
-             stripe_customer_id, stripe_subscription_id, stripe_price_id, plan_tier, subscription_status
+             stripe_customer_id, stripe_subscription_id, stripe_price_id,
+             plan_tier, subscription_status,
+             vercel_access_token, vercel_team_id
       FROM user_auth
       WHERE github_id = ${githubId}
       LIMIT 1
@@ -107,6 +110,8 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
           stripe_price_id: row.stripe_price_id ?? null,
           plan_tier: row.plan_tier ?? null,
           subscription_status: row.subscription_status ?? null,
+          vercel_access_token: row.vercel_access_token ?? null,
+          vercel_team_id: row.vercel_team_id ?? null,
         }
       }
     }
@@ -128,6 +133,8 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
         stripe_price_id: null,
         plan_tier: null,
         subscription_status: null,
+        vercel_access_token: null,
+        vercel_team_id: null,
       }
     }
   }
