@@ -19,9 +19,13 @@ function usesGatewayAuth(): boolean {
   return Boolean(process.env.AI_GATEWAY_API_KEY?.trim() || process.env.VERCEL_OIDC_TOKEN?.trim())
 }
 
+function directAnthropicKey(): string | undefined {
+  return process.env[ANTHROPIC_KEY_ENV]?.trim()
+}
+
 /** True when AI Gateway or a direct Anthropic key is available. */
 export function isAiConfigured(): boolean {
-  return usesGatewayAuth() || Boolean(process.env[ANTHROPIC_KEY_ENV]?.trim())
+  return usesGatewayAuth() || Boolean(directAnthropicKey())
 }
 
 /**
