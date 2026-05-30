@@ -204,7 +204,11 @@ Always respond with valid JSON only (no markdown fences):
       followUpQuestions: Array.isArray(parsed.followUpQuestions) ? parsed.followUpQuestions : [],
     })
   } catch (error) {
-    console.error('[app-idea-chat] error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    console.error('[v0] app-idea-chat error:', errorMsg)
+    if (error instanceof Error) {
+      console.error('[v0] Stack:', error.stack)
+    }
+    return NextResponse.json({ error: errorMsg }, { status: 500 })
   }
 }
