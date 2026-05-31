@@ -54,12 +54,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'analysisId is required' }, { status: 400 })
     }
 
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return NextResponse.json(
+        { error: 'Pattern Analyzer is not configured. Missing ANTHROPIC_API_KEY.' },
+        { status: 503 },
+      )
+    }
+
     const creditResult = await deductCredits(user.id, CREDITS.PATTERN_ANALYZER_COST, 'pattern_analyzer', { analysisId })
     if (!creditResult.success) {
       return NextResponse.json({ error: creditResult.error || 'Insufficient credits' }, { status: 402 })
     }
 
-    const analysis = await getAnalysisById(analysisId)
+    const analysis = await getAnalysisById(analysisId, user.id)
     if (!analysis) {
       return NextResponse.json({ error: 'Analysis not found' }, { status: 404 })
     }
@@ -72,8 +79,8 @@ export async function POST(request: NextRequest) {
 
     // Gather repo files and blueprints
     const [repositories, blueprints] = await Promise.all([
-      getRepositoriesForAnalysis(analysisId),
-      getBlueprintsByAnalysis(analysisId),
+      getRepositoriesForAnalysis(analysisId, user.id),
+      getBlueprintsByAnalysis(analysisId, user.id),
     ])
 
     const allFiles = (

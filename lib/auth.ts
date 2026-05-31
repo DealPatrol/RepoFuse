@@ -1,5 +1,8 @@
+import { auth, clerkClient } from '@clerk/nextjs/server'
 import { cookies } from 'next/headers'
+import { isClerkConfigured } from '@/lib/clerk-auth'
 import { getDb } from '@/lib/db'
+import { upsertSubscription } from '@/lib/queries'
 
 export const GITHUB_ACCESS_TOKEN_COOKIE = 'github_access_token'
 
@@ -12,8 +15,42 @@ export interface AuthUser {
   stripe_customer_id: string | null
   stripe_subscription_id: string | null
   stripe_price_id: string | null
-  plan_tier: 'free' | 'pro' | null
+  plan_tier: 'free' | 'pro' | 'scale' | 'byok' | null
   subscription_status: string | null
+  vercel_access_token: string | null
+  vercel_team_id: string | null
+}
+
+export function sanitizeReturnTo(
+  returnTo: string | null | undefined,
+  fallback = '/dashboard/repositories?connected=github',
+) {
+  if (!returnTo) {
+    return fallback
+  }
+
+  const trimmed = returnTo.trim()
+
+  if (trimmed.includes('\\') || !trimmed.startsWith('/') || trimmed.startsWith('//')) {
+    return fallback
+  }
+
+  try {
+    const base = 'http://repofuse.local'
+    const parsed = new URL(trimmed, base)
+    if (parsed.origin !== base) {
+      return fallback
+    }
+
+    const normalized = `${parsed.pathname}${parsed.search}${parsed.hash}`
+    if (!normalized.startsWith('/') || normalized.startsWith('//')) {
+      return fallback
+    }
+
+    return normalized
+  } catch {
+    return fallback
+  }
 }
 
 async function fetchGitHubUserFromToken(accessToken: string): Promise<{
@@ -34,12 +71,89 @@ async function fetchGitHubUserFromToken(accessToken: string): Promise<{
   return { id: u.id, login: u.login, avatar_url: u.avatar_url }
 }
 
-export async function getCurrentUser(): Promise<AuthUser | null> {
+async function getCurrentUserFromClerk(): Promise<AuthUser | null> {
+  const { userId } = await auth()
+  if (!userId) return null
+
+  const client = await clerkClient()
+  const clerkUser = await client.users.getUser(userId)
+
+  const githubAccount =
+    clerkUser.externalAccounts?.find(
+      (account) => account.provider === 'oauth_github' || account.provider === 'github',
+    ) ?? null
+
+  if (!githubAccount) return null
+
+  const githubId = Number.parseInt(githubAccount.providerUserId, 10)
+  if (Number.isNaN(githubId)) return null
+
+  let accessToken: string | null = null
+  try {
+    const tokens = await client.users.getUserOauthAccessToken(userId, 'oauth_github')
+    accessToken = tokens.data[0]?.token ?? null
+  } catch {
+    const cookieStore = await cookies()
+    accessToken = cookieStore.get(GITHUB_ACCESS_TOKEN_COOKIE)?.value ?? null
+  }
+
+  if (!accessToken) return null
+
+  const githubUsername =
+    githubAccount.username || clerkUser.username || `user-${githubId}`
+  const avatarUrl = clerkUser.imageUrl ?? githubAccount.imageUrl ?? null
+
+  try {
+    const sql = getDb()
+    await sql`
+      INSERT INTO user_auth (github_id, github_username, github_avatar_url, access_token)
+      VALUES (${githubId}, ${githubUsername}, ${avatarUrl}, ${accessToken})
+      ON CONFLICT (github_id)
+      DO UPDATE SET
+        access_token = ${accessToken},
+        github_username = ${githubUsername},
+        github_avatar_url = ${avatarUrl},
+        updated_at = CURRENT_TIMESTAMP
+    `
+    await upsertSubscription({ github_id: githubId })
+
+    const users = await sql`
+      SELECT id, github_id, github_username, github_avatar_url, access_token,
+             stripe_customer_id, stripe_subscription_id, stripe_price_id,
+             plan_tier, subscription_status,
+             vercel_access_token, vercel_team_id
+      FROM user_auth
+      WHERE github_id = ${githubId}
+      LIMIT 1
+    `
+    const row = users[0] as AuthUser | undefined
+    if (row) return row
+  } catch {
+    // DB unavailable — return session from Clerk + token
+  }
+
+  return {
+    id: '',
+    github_id: githubId,
+    github_username: githubUsername,
+    github_avatar_url: avatarUrl,
+    access_token: accessToken,
+    stripe_customer_id: null,
+    stripe_subscription_id: null,
+    stripe_price_id: null,
+    plan_tier: null,
+    subscription_status: null,
+    vercel_access_token: null,
+    vercel_team_id: null,
+  }
+}
+
+async function getCurrentUserFromCookies(): Promise<AuthUser | null> {
   const cookieStore = await cookies()
   const userIdCookie = cookieStore.get('github_user_id')?.value
   const tokenCookie = cookieStore.get(GITHUB_ACCESS_TOKEN_COOKIE)?.value
 
-  if (!userIdCookie) {
+  if (!userIdCookie || !tokenCookie) {
     return null
   }
 
@@ -52,7 +166,9 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     const sql = getDb()
     const users = await sql`
       SELECT id, github_id, github_username, github_avatar_url, access_token,
-             stripe_customer_id, stripe_subscription_id, stripe_price_id, plan_tier, subscription_status
+             stripe_customer_id, stripe_subscription_id, stripe_price_id,
+             plan_tier, subscription_status,
+             vercel_access_token, vercel_team_id
       FROM user_auth
       WHERE github_id = ${githubId}
       LIMIT 1
@@ -74,6 +190,8 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
           stripe_price_id: row.stripe_price_id ?? null,
           plan_tier: row.plan_tier ?? null,
           subscription_status: row.subscription_status ?? null,
+          vercel_access_token: row.vercel_access_token ?? null,
+          vercel_team_id: row.vercel_team_id ?? null,
         }
       }
     }
@@ -95,11 +213,22 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
         stripe_price_id: null,
         plan_tier: null,
         subscription_status: null,
+        vercel_access_token: null,
+        vercel_team_id: null,
       }
     }
   }
 
   return null
+}
+
+export async function getCurrentUser(): Promise<AuthUser | null> {
+  if (isClerkConfigured()) {
+    const clerkUser = await getCurrentUserFromClerk()
+    if (clerkUser) return clerkUser
+  }
+
+  return getCurrentUserFromCookies()
 }
 
 export async function getCurrentAccessToken(): Promise<string | null> {

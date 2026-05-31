@@ -14,7 +14,7 @@ export async function GET(
     }
 
     const { id } = await params
-    const repository = await getRepositoryById(id)
+    const repository = await getRepositoryById(id, user.id)
     
     if (!repository) {
       return NextResponse.json({ error: 'Repository not found' }, { status: 404 })
@@ -39,7 +39,7 @@ export async function DELETE(
     }
 
     const { id } = await params
-    await deleteRepository(id)
+    await deleteRepository(id, user.id)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error deleting repository:', error)

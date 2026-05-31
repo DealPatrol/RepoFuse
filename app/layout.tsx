@@ -2,6 +2,7 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import { AuthProvider } from '@/components/auth-provider'
 import { ThemeProvider } from '@/components/theme-provider'
 import './globals.css'
 
@@ -80,8 +81,10 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${geist.variable} ${geistMono.variable} font-sans antialiased bg-background text-foreground`}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-          {children}
-          <Analytics />
+          <AuthProvider>
+            {children}
+            <Analytics />
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

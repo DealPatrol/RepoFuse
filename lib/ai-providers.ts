@@ -14,7 +14,7 @@ export interface AIProviderConfig {
 export function getProviderModel(provider: AIProvider): string {
   switch (provider) {
     case 'anthropic':
-      return 'claude-opus-4.1'
+      return 'anthropic/claude-sonnet-4.6'
     case 'openai':
       return 'gpt-4o'
     case 'grok':
@@ -34,7 +34,7 @@ export function getProviderModel(provider: AIProvider): string {
 export function getAISDKModel(provider: AIProvider, apiKey?: string): string {
   switch (provider) {
     case 'anthropic':
-      return apiKey ? `anthropic/claude-opus-4.1?apiKey=${apiKey}` : 'anthropic/claude-opus-4.1'
+      return apiKey ? `anthropic/claude-sonnet-4.6?apiKey=${apiKey}` : 'anthropic/claude-sonnet-4.6'
     case 'openai':
       return apiKey ? `openai/gpt-4o?apiKey=${apiKey}` : 'openai/gpt-4o'
     case 'grok':
@@ -43,9 +43,9 @@ export function getAISDKModel(provider: AIProvider, apiKey?: string): string {
       return apiKey ? `deepinfra/deepseek-ai/deepseek-coder-33b-instruct?apiKey=${apiKey}` : 'deepinfra/deepseek-ai/deepseek-coder-33b-instruct'
     case 'builtin':
       // Builtin uses Vercel AI Gateway (no API key needed)
-      return 'anthropic/claude-opus-4.1'
+      return 'anthropic/claude-sonnet-4.6'
     default:
-      return 'anthropic/claude-opus-4.1'
+      return 'anthropic/claude-sonnet-4.6'
   }
 }
 

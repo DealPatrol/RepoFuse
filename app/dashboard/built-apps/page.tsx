@@ -1,9 +1,9 @@
 import { getCurrentUser } from '@/lib/auth'
-import { getAllAnalyses, type Analysis } from '@/lib/queries'
+import { getAllAnalyses } from '@/lib/queries'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { AppWindow, ExternalLink, Github, ArrowRight, Sparkles } from 'lucide-react'
+import { AppWindow, Github, ArrowRight, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'
@@ -20,23 +20,19 @@ interface DetectedApp {
   features: string[]
 }
 
-async function getDetectedApps(): Promise<DetectedApp[]> {
-  // In production, this would query analyzed repos for existing app patterns
-  // For now, we generate mock data based on analyses
-  const analyses = await getAllAnalyses()
-  
+async function getDetectedApps(userId: string): Promise<DetectedApp[]> {
+  const analyses = (await getAllAnalyses(userId)).filter((a) => a.status === 'complete')
   if (analyses.length === 0) return []
-  
-  // Generate sample detected apps from analyses
-  return analyses.slice(0, 5).map((analysis, i) => ({
+
+  return analyses.slice(0, 12).map((analysis, i) => ({
     id: `app-${analysis.id}`,
-    name: `${analysis.name || 'Project'} App`,
-    repoName: analysis.name || 'Unknown',
-    framework: ['Next.js', 'React', 'Vue', 'Express', 'FastAPI'][i % 5],
+    name: analysis.name || 'Analysis project',
+    repoName: analysis.name || 'Connected repos',
+    framework: 'From analysis',
     type: (['web-app', 'api', 'cli', 'library', 'mobile'] as const)[i % 5],
-    completeness: 65 + Math.floor(Math.random() * 30),
-    lastCommit: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toLocaleDateString(),
-    features: ['Auth', 'Database', 'API', 'UI Components', 'Tests'].slice(0, 2 + (i % 3)),
+    completeness: analysis.status === 'complete' ? 75 : 40,
+    lastCommit: new Date(analysis.created_at).toLocaleDateString(),
+    features: ['Analyzed', 'Blueprints', 'Reuse map'].slice(0, 2 + (i % 2)),
   }))
 }
 
@@ -53,7 +49,9 @@ export default async function BuiltAppsPage() {
   let detectedApps: DetectedApp[] = []
 
   try {
-    detectedApps = await getDetectedApps()
+    if (user) {
+      detectedApps = await getDetectedApps(user.id)
+    }
   } catch {
     // Database not available
   }
@@ -181,9 +179,11 @@ export default async function BuiltAppsPage() {
                   <span className="text-xs text-muted-foreground">
                     Last commit: {app.lastCommit}
                   </span>
-                  <Button size="sm" variant="ghost" className="text-cyan-400 hover:text-cyan-300">
-                    <Sparkles className="h-3 w-3 mr-1" />
-                    Analyze
+                  <Button size="sm" variant="ghost" className="text-cyan-400 hover:text-cyan-300" asChild>
+                    <Link href={`/dashboard/pattern-analyzer?analysisId=${app.id.replace(/^app-/, '')}`}>
+                      <Sparkles className="h-3 w-3 mr-1" />
+                      Chat about app
+                    </Link>
                   </Button>
                 </div>
               </CardContent>

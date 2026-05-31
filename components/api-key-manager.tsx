@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -33,6 +33,25 @@ export function APIKeyManager() {
   const [success, setSuccess] = useState<string | null>(null)
 
   const providers: AIProvider[] = ['anthropic', 'openai', 'grok', 'deepinfra']
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const response = await fetch('/api/ai-keys')
+        if (!response.ok) return
+        const data = await response.json()
+        if (!cancelled && Array.isArray(data.keys)) {
+          setKeys(data.keys)
+        }
+      } catch {
+        // Keys optional until user adds one
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const handleAddKey = async (e: React.FormEvent) => {
     e.preventDefault()

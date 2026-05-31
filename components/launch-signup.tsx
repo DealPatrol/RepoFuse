@@ -128,7 +128,11 @@ export function LaunchSignup({ onComplete }: LaunchSignupProps) {
         </form>
 
         <p className="text-xs text-cyan-400/50 text-center">
-          We&apos;ll never spam. Read our <a href="/privacy" className="underline hover:text-cyan-300">privacy policy</a>.
+          We&apos;ll never spam. Read our{' '}
+          <a href="/legal/privacy-policy" className="underline hover:text-cyan-300">
+            privacy policy
+          </a>
+          .
         </p>
       </div>
     )

@@ -1,5 +1,7 @@
+// app/dashboard/settings/page.tsx
 import { getCurrentUser } from '@/lib/auth'
 import { APIKeyManager } from '@/components/api-key-manager'
+import { ConnectVercel } from '@/components/connect-vercel'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -16,6 +18,8 @@ export default async function SettingsPage() {
       </div>
     )
   }
+
+  const isVercelConnected = !!user.vercel_access_token
 
   return (
     <div className="min-h-screen bg-background">
@@ -35,6 +39,13 @@ export default async function SettingsPage() {
           <div>
             <h2 className="text-lg font-semibold mb-2">Account</h2>
             <p className="text-muted-foreground">GitHub ID: {user.github_id}</p>
+          </div>
+
+          <div className="border-t border-border/50 pt-8">
+            <h2 className="text-lg font-semibold mb-4">Integrations</h2>
+            <div className="rounded-lg border border-border/50 p-4">
+              <ConnectVercel isConnected={isVercelConnected} />
+            </div>
           </div>
 
           <div className="border-t border-border/50 pt-8">

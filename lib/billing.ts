@@ -1,12 +1,22 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser, type AuthUser } from '@/lib/auth'
-import { getStripe, isStripeConfigured } from '@/lib/stripe'
 import { updateUserBilling } from '@/lib/queries'
+import { hasActivePaidSubscription, hasActivePaidUser } from '@/lib/pro-access'
+import { ACTIVE_SUBSCRIPTION_STATUSES } from '@/lib/subscription-status'
+import { getSubscriptionByGithubId } from '@/lib/queries'
+import { getPriceIdForPlan, getStripe, isPaidPlan, isStripeConfigured, type PlanId } from '@/lib/stripe'
 
-const ACTIVE_STATUSES = new Set(['active', 'trialing'])
+function planFromStripePriceId(priceId: string | null | undefined): Exclude<PlanId, 'free' | 'byok'> {
+  if (!priceId) return 'pro'
+  const scalePriceId = getPriceIdForPlan('scale')
+  if (scalePriceId && priceId === scalePriceId) return 'scale'
+  return 'pro'
+}
+
+const ACTIVE_STATUSES = ACTIVE_SUBSCRIPTION_STATUSES
 
 export interface BillingState {
-  plan: 'free' | 'pro'
+  plan: PlanId
   status: string | null
   canAccessPro: boolean
   customerId: string | null
@@ -27,9 +37,9 @@ export async function getBillingState(user: AuthUser | null): Promise<BillingSta
   }
 
   let state: BillingState = {
-    plan: user.plan_tier === 'pro' && user.subscription_status && ACTIVE_STATUSES.has(user.subscription_status) ? 'pro' : 'free',
+    plan: isPaidPlan(user.plan_tier) && user.subscription_status && ACTIVE_STATUSES.has(user.subscription_status) ? user.plan_tier : 'free',
     status: user.subscription_status,
-    canAccessPro: user.plan_tier === 'pro' && user.subscription_status ? ACTIVE_STATUSES.has(user.subscription_status) : false,
+    canAccessPro: isPaidPlan(user.plan_tier) && user.subscription_status ? ACTIVE_STATUSES.has(user.subscription_status) : false,
     customerId: user.stripe_customer_id,
     subscriptionId: user.stripe_subscription_id,
     priceId: user.stripe_price_id,
@@ -49,14 +59,18 @@ export async function getBillingState(user: AuthUser | null): Promise<BillingSta
 
     const activeSubscription = subscriptions.data.find((subscription) => ACTIVE_STATUSES.has(subscription.status))
     const latestSubscription = activeSubscription || subscriptions.data[0] || null
+    const priceId = latestSubscription?.items.data[0]?.price.id ?? null
+    const activePaid = latestSubscription ? ACTIVE_STATUSES.has(latestSubscription.status) : false
+    const paidPlan = activePaid ? planFromStripePriceId(priceId) : 'free'
+
     const nextState: BillingState = latestSubscription
       ? {
-          plan: ACTIVE_STATUSES.has(latestSubscription.status) ? 'pro' : 'free',
+          plan: paidPlan,
           status: latestSubscription.status,
-          canAccessPro: ACTIVE_STATUSES.has(latestSubscription.status),
+          canAccessPro: activePaid,
           customerId: typeof latestSubscription.customer === 'string' ? latestSubscription.customer : latestSubscription.customer.id,
           subscriptionId: latestSubscription.id,
-          priceId: latestSubscription.items.data[0]?.price.id ?? null,
+          priceId,
         }
       : {
           plan: 'free',
@@ -100,9 +114,14 @@ export async function requirePro() {
     }
   }
 
-  const billing = await getBillingState(user)
+  const [billing, subscription] = await Promise.all([
+    getBillingState(user),
+    getSubscriptionByGithubId(user.github_id).catch(() => null),
+  ])
+  const canAccessPro =
+    billing.canAccessPro || hasActivePaidSubscription(subscription) || hasActivePaidUser(user)
 
-  if (!billing.canAccessPro) {
+  if (!canAccessPro) {
     return {
       ok: false as const,
       response: NextResponse.json(

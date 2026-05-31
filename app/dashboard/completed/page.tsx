@@ -59,9 +59,11 @@ export default async function CompletedProjectsPage() {
             Projects you've shipped and launched
           </p>
         </div>
-        <Button className="bg-green-600 hover:bg-green-500">
-          <Plus className="mr-2 h-4 w-4" />
-          Mark Project Complete
+        <Button className="bg-green-600 hover:bg-green-500" asChild>
+          <Link href="/dashboard/analyses">
+            <Plus className="mr-2 h-4 w-4" />
+            View Analyses to Ship
+          </Link>
         </Button>
       </div>
 

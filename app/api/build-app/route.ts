@@ -1,20 +1,8 @@
 import { NextRequest } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
+import { generateWithGateway } from '@/lib/ai-gateway'
 import { getCurrentUser } from '@/lib/auth'
-import { getAnthropicModel } from '@/lib/anthropic-model'
-import { getBillingState } from '@/lib/billing'
-import type { AppBlueprint } from '@/lib/queries'
-
-let __anthropicClient: Anthropic | null = null
-function getAnthropic(): Anthropic {
-  if (__anthropicClient) return __anthropicClient
-  const key = process.env.ANTHROPIC_API_KEY
-  if (!key) {
-    throw new Error('ANTHROPIC_API_KEY is not configured')
-  }
-  __anthropicClient = new Anthropic({ apiKey: key })
-  return __anthropicClient
-}
+import { getSubscriptionByGithubId, upsertSubscription, type AppBlueprint } from '@/lib/queries'
+import { hasProAccess } from '@/lib/pro-access'
 
 type Platform = 'github' | 'gitlab'
 
@@ -27,7 +15,10 @@ interface BuildAppRequest {
   >
 }
 
-async function generateFiles(blueprint: BuildAppRequest['blueprint']): Promise<Record<string, string>> {
+async function generateFiles(
+  blueprint: BuildAppRequest['blueprint'],
+  userId: string,
+): Promise<Record<string, string>> {
   const missingList = blueprint.missing_files
     .map((f) => `  - ${f.name}: ${f.purpose}`)
     .join('\n')
@@ -69,13 +60,14 @@ Rules:
 Return format: {"path/to/file.ts": "...full content...", "README.md": "..."}
 `
 
-  const response = await getAnthropic().messages.create({
-    model: getAnthropicModel(),
-    max_tokens: 8192,
-    messages: [{ role: 'user', content: prompt }],
-  })
-
-  const raw = response.content[0].type === 'text' ? response.content[0].text.trim() : ''
+  const raw = (
+    await generateWithGateway({
+      feature: 'build-app',
+      userId,
+      maxOutputTokens: 8192,
+      messages: [{ role: 'user', content: prompt }],
+    })
+  ).trim()
   const jsonText = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
 
   const obj = JSON.parse(jsonText) as Record<string, unknown>
@@ -224,9 +216,12 @@ export async function POST(request: NextRequest) {
           return
         }
 
-        const billing = await getBillingState(user)
-        if (!billing.canAccessPro) {
-          send({ step: 'error', message: 'Build This App requires an active Pro subscription.' })
+        let sub = await getSubscriptionByGithubId(user.github_id).catch(() => null)
+        if (!sub) {
+          sub = await upsertSubscription({ github_id: user.github_id }).catch(() => null)
+        }
+        if (!hasProAccess(user, sub)) {
+          send({ step: 'error', message: 'Build This App is available on paid plans. Upgrade to create and push a generated repo.' })
           controller.close()
           return
         }
@@ -247,7 +242,7 @@ export async function POST(request: NextRequest) {
 
         let files: Record<string, string>
         try {
-          files = await generateFiles(blueprint)
+          files = await generateFiles(blueprint, user.id)
         } catch (e) {
           send({
             step: 'error',

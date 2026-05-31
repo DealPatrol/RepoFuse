@@ -1,271 +1,331 @@
-import { NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
+import { NextRequest, NextResponse } from 'next/server'
+import type Stripe from 'stripe'
+import { CREDITS, grantCredits } from '@/lib/credits'
 import {
   getSubscriptionByStripeCustomerId,
   getUserByGithubId,
   updateUserBilling,
   upsertSubscription,
-} from "@/lib/queries";
+} from '@/lib/queries'
+import { getPriceIdForPlan, getStripe } from '@/lib/stripe'
 
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
-// ─── Lazy clients (avoid build-time evaluation) ──────────────────────────────
+type NeonSubscriptionStatus = 'active' | 'past_due' | 'canceled' | 'trialing'
+type BillingPlan = 'free' | 'pro' | 'scale'
 
-let _stripe: Stripe | null = null;
-function getStripeClient(): Stripe {
-  if (_stripe) return _stripe;
-  const key = process.env.STRIPE_SECRET_KEY;
-  if (!key) {
-    throw new Error("STRIPE_SECRET_KEY is not configured");
+const HANDLED_EVENTS = new Set([
+  'checkout.session.completed',
+  'customer.subscription.updated',
+  'customer.subscription.deleted',
+  'invoice.payment_failed',
+  'invoice.payment_succeeded',
+])
+
+function parseGithubId(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) {
+    return null
   }
-  _stripe = new Stripe(key);
-  return _stripe;
-}
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-type PlanTier = "free" | "pro";
-type DbSubscriptionStatus = "active" | "past_due" | "canceled" | "trialing";
-
-function parseGithubId(value: string | null | undefined): number | null {
-  if (!value) return null;
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function getCustomerId(
-  customer: string | Stripe.Customer | Stripe.DeletedCustomer | null,
-): string | null {
-  if (!customer) return null;
-  return typeof customer === "string" ? customer : customer.id;
-}
-
-function normalizeSubscriptionStatus(status: string): DbSubscriptionStatus {
-  if (status === "active" || status === "trialing" || status === "past_due") {
-    return status;
-  }
-  return "canceled";
-}
-
-function getPlanFromPriceId(priceId: string | null | undefined): PlanTier {
-  if (!priceId) return "free";
-  const paidPriceIds = new Set(
-    [
-      process.env.STRIPE_PRO_PRICE_ID,
-      process.env.STRIPE_SCALE_PRICE_ID,
-      process.env.STRIPE_PRICE_PRO_MONTHLY,
-      process.env.STRIPE_PRICE_PRO_YEARLY,
-    ].filter(Boolean),
-  );
-  return paidPriceIds.has(priceId) ? "pro" : "free";
-}
-
-function getPlanFromSubscription(subscription: Stripe.Subscription): PlanTier {
-  const metadataPlan = subscription.metadata?.plan;
-  if (metadataPlan === "pro" || metadataPlan === "scale") {
-    return "pro";
-  }
-  return getPlanFromPriceId(subscription.items.data[0]?.price.id);
+  const githubId = typeof value === 'number' ? value : Number.parseInt(value, 10)
+  return Number.isSafeInteger(githubId) && githubId > 0 ? githubId : null
 }
 
 function getCurrentPeriodEnd(subscription: Stripe.Subscription): string | null {
-  const periodEnd = (subscription as unknown as { current_period_end?: number }).current_period_end;
-  return typeof periodEnd === "number" ? new Date(periodEnd * 1000).toISOString() : null;
+  const periodEnd = (subscription as unknown as { current_period_end?: number }).current_period_end
+  return periodEnd ? new Date(periodEnd * 1000).toISOString() : null
 }
 
-async function getGithubIdFromCustomer(customerId: string): Promise<number | null> {
-  const existingSubscription = await getSubscriptionByStripeCustomerId(customerId).catch(() => null);
-  if (existingSubscription?.github_id) {
-    return existingSubscription.github_id;
+function mapSubscriptionStatus(status: Stripe.Subscription.Status): NeonSubscriptionStatus {
+  if (status === 'active' || status === 'trialing' || status === 'past_due') {
+    return status
   }
 
-  const customer = await getStripeClient().customers.retrieve(customerId);
-  if ("deleted" in customer && customer.deleted) {
-    return null;
+  return 'canceled'
+}
+
+function getPlanFromPriceId(priceId: string | null | undefined): BillingPlan {
+  if (!priceId) {
+    return 'pro'
   }
-  return parseGithubId(customer.metadata?.github_id);
+
+  const scalePriceId = getPriceIdForPlan('scale')
+  if (scalePriceId && priceId === scalePriceId) {
+    return 'scale'
+  }
+
+  return 'pro'
+}
+
+function getCreditGrantForPrice(priceId: string | null | undefined, fallback: number): number {
+  if (priceId && priceId === process.env.STRIPE_SCALE_PRICE_ID) {
+    return CREDITS.SCALE_MONTHLY_GRANT
+  }
+
+  return fallback
 }
 
 async function resolveGithubId(
-  customerId: string | null,
-  ...metadataSources: Array<Stripe.Metadata | null | undefined>
+  stripe: ReturnType<typeof getStripe>,
+  subscription: Stripe.Subscription,
+  customerId: string,
+  fallback?: string | number | null,
 ): Promise<number | null> {
-  for (const metadata of metadataSources) {
-    const githubId = parseGithubId(metadata?.github_id);
-    if (githubId) {
-      return githubId;
-    }
+  const metadataId = parseGithubId(subscription.metadata.github_id) ?? parseGithubId(fallback)
+  if (metadataId) {
+    return metadataId
   }
 
-  return customerId ? getGithubIdFromCustomer(customerId) : null;
+  const existing = await getSubscriptionByStripeCustomerId(customerId)
+  if (existing) {
+    return existing.github_id
+  }
+
+  const customer = await stripe.customers.retrieve(customerId)
+  if (!customer.deleted) {
+    return parseGithubId(customer.metadata.github_id)
+  }
+
+  return null
 }
 
-async function syncSubscriptionToNeon(
-  subscription: Stripe.Subscription,
-  ...metadataSources: Array<Stripe.Metadata | null | undefined>
-): Promise<void> {
-  const customerId = getCustomerId(subscription.customer);
-  const githubId = await resolveGithubId(customerId, subscription.metadata, ...metadataSources);
+async function persistSubscriptionState(params: {
+  githubId: number
+  customerId: string
+  subscription: Stripe.Subscription
+}) {
+  const { githubId, customerId, subscription } = params
+  const status = mapSubscriptionStatus(subscription.status)
+  const priceId = subscription.items.data[0]?.price.id ?? null
+  const plan: BillingPlan =
+    status === 'active' || status === 'trialing' ? getPlanFromPriceId(priceId) : 'free'
 
-  if (!githubId) {
-    throw new Error(`Unable to resolve GitHub user for Stripe subscription ${subscription.id}`);
-  }
-
-  const dbStatus = normalizeSubscriptionStatus(subscription.status);
-  const isActive = dbStatus === "active" || dbStatus === "trialing";
-  const plan = isActive ? getPlanFromSubscription(subscription) : "free";
-  const priceId = subscription.items.data[0]?.price.id ?? null;
-
-  await upsertSubscription({
+  const savedSubscription = await upsertSubscription({
     github_id: githubId,
     stripe_customer_id: customerId,
     stripe_subscription_id: subscription.id,
     plan,
-    status: dbStatus,
+    status,
     current_period_end: getCurrentPeriodEnd(subscription),
-  });
-
-  const user = await getUserByGithubId(githubId);
-  if (!user) {
-    console.warn(`[stripe webhook] No user_auth row found for GitHub user ${githubId}`);
-    return;
+  })
+  if (!savedSubscription.id) {
+    throw new Error('Failed to persist subscription state')
   }
 
-  await updateUserBilling(user.id, {
-    stripe_customer_id: customerId,
-    stripe_subscription_id: subscription.id,
-    stripe_price_id: priceId,
-    plan_tier: plan,
-    subscription_status: subscription.status,
-  });
+  const user = await getUserByGithubId(githubId)
+  if (user) {
+    await updateUserBilling(user.id, {
+      stripe_customer_id: customerId,
+      stripe_subscription_id: subscription.id,
+      stripe_price_id: priceId,
+      plan_tier: plan,
+      subscription_status: status,
+    })
+  }
+
+  return { user, plan, status, priceId }
 }
 
-async function getSubscriptionFromCheckoutSession(
-  session: Stripe.Checkout.Session,
-): Promise<Stripe.Subscription> {
-  if (!session.subscription) {
-    throw new Error(`Checkout session ${session.id} did not include a subscription`);
-  }
-  return typeof session.subscription === "string"
-    ? getStripeClient().subscriptions.retrieve(session.subscription)
-    : session.subscription;
-}
+export async function POST(request: NextRequest) {
+  const signature = request.headers.get('stripe-signature')
 
-// ─── Webhook Handler ──────────────────────────────────────────────────────────
-
-export async function POST(req: NextRequest) {
-  // 1. Get the raw body — required for Stripe signature verification
-  const body = await req.text();
-  const sig = req.headers.get("stripe-signature");
-
-  if (!sig) {
-    console.error("⚠️  Missing stripe-signature header");
-    return NextResponse.json({ error: "Missing signature" }, { status: 400 });
+  if (!process.env.STRIPE_WEBHOOK_SECRET || !process.env.STRIPE_SECRET_KEY) {
+    console.error('[stripe/webhook] Missing STRIPE_WEBHOOK_SECRET or STRIPE_SECRET_KEY in environment')
+    return NextResponse.json({ error: 'Webhook not configured' }, { status: 503 })
   }
 
-  if (!process.env.STRIPE_WEBHOOK_SECRET) {
-    console.error("⚠️  STRIPE_WEBHOOK_SECRET is not set in environment variables");
-    return NextResponse.json({ error: "Webhook secret not configured" }, { status: 500 });
+  if (!signature) {
+    return NextResponse.json({ error: 'Missing stripe-signature header' }, { status: 400 })
   }
 
-  // 2. Verify the event actually came from Stripe
-  let event: Stripe.Event;
+  let body: string
   try {
-    event = getStripeClient().webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error(`⚠️  Webhook signature verification failed: ${message}`);
-    return NextResponse.json({ error: `Webhook Error: ${message}` }, { status: 400 });
+    body = await request.text()
+  } catch (err) {
+    console.error('[stripe/webhook] Failed to read request body:', err)
+    return NextResponse.json({ error: 'Invalid body' }, { status: 400 })
   }
 
-  console.log(`✅ Stripe webhook received: ${event.type}`);
+  let stripe: ReturnType<typeof getStripe>
+  try {
+    stripe = getStripe()
+  } catch (err) {
+    console.error('[stripe/webhook] Stripe client init failed:', err)
+    return NextResponse.json({ error: 'Stripe not configured' }, { status: 503 })
+  }
 
-  // 3. Handle each event type
+  let event: Stripe.Event
+  try {
+    event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET)
+  } catch (err) {
+    console.error('[stripe/webhook] Signature verification failed:', err)
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
+  }
+
+  console.log('[stripe/webhook] Received event', { id: event.id, type: event.type })
+
+  if (!HANDLED_EVENTS.has(event.type)) {
+    return NextResponse.json({ received: true, ignored: event.type })
+  }
+
   try {
     switch (event.type) {
+      case 'checkout.session.completed': {
+        const session = event.data.object as Stripe.Checkout.Session
 
-      // ── Checkout completed (first subscription purchase) ──────────────────
-      case "checkout.session.completed": {
-        const session = event.data.object as Stripe.Checkout.Session;
-        const subscription = await getSubscriptionFromCheckoutSession(session);
-
-        await syncSubscriptionToNeon(subscription, session.metadata);
-
-        console.log(`✅ Checkout completed for subscription ${subscription.id}`);
-        break;
-      }
-
-      // ── Subscription created ───────────────────────────────────────────────
-      case "customer.subscription.created": {
-        const subscription = event.data.object as Stripe.Subscription;
-        await syncSubscriptionToNeon(subscription);
-
-        console.log(`✅ Subscription created: ${subscription.id}`);
-        break;
-      }
-
-      // ── Subscription updated (plan change, renewal, etc.) ─────────────────
-      case "customer.subscription.updated": {
-        const subscription = event.data.object as Stripe.Subscription;
-        await syncSubscriptionToNeon(subscription);
-
-        console.log(`✅ Subscription updated: ${subscription.id} (${subscription.status})`);
-        break;
-      }
-
-      // ── Subscription cancelled/deleted ────────────────────────────────────
-      case "customer.subscription.deleted": {
-        const subscription = event.data.object as Stripe.Subscription;
-        await syncSubscriptionToNeon(subscription);
-
-        console.log(`✅ Subscription cancelled: ${subscription.id}`);
-        break;
-      }
-
-      // ── Invoice paid (recurring renewal) ─────────────────────────────────
-      case "invoice.payment_succeeded": {
-        const invoice = event.data.object as Stripe.Invoice;
-        const subscriptionId = (invoice as unknown as { subscription?: string }).subscription as string | undefined;
-
-        if (!subscriptionId) break;
-
-        // Update period end on renewal
-        const subscription = await getStripeClient().subscriptions.retrieve(subscriptionId);
-        await syncSubscriptionToNeon(subscription);
-
-        console.log(`✅ Invoice paid for subscription: ${subscriptionId}`);
-        break;
-      }
-
-      // ── Invoice payment failed ────────────────────────────────────────────
-      case "invoice.payment_failed": {
-        const invoice = event.data.object as Stripe.Invoice;
-        const subscriptionId = (invoice as unknown as { subscription?: string }).subscription as string | undefined;
-
-        if (subscriptionId) {
-          const subscription = await getStripeClient().subscriptions.retrieve(subscriptionId);
-          await syncSubscriptionToNeon(subscription);
+        if (session.mode !== 'subscription' || !session.customer || !session.subscription) {
+          break
         }
 
-        console.log(`⚠️  Payment failed for subscription: ${subscriptionId ?? "unknown"}`);
-        break;
+        const customerId = session.customer as string
+        const subscription = await stripe.subscriptions.retrieve(session.subscription as string)
+        const githubId = await resolveGithubId(stripe, subscription, customerId, session.metadata?.github_id)
+
+        if (!githubId) {
+          console.error('[stripe/webhook] Could not map checkout session to a GitHub user', {
+            sessionId: session.id,
+          })
+          break
+        }
+
+        const { user, priceId } = await persistSubscriptionState({ githubId, customerId, subscription })
+        if (user) {
+          const amount = getCreditGrantForPrice(priceId, CREDITS.INITIAL_GRANT)
+          await grantCredits(user.id, amount, 'Subscription signup credit grant', {
+            stripe_customer_id: customerId,
+            stripe_subscription_id: subscription.id,
+          })
+        }
+        break
       }
 
-      default:
-        console.log(`ℹ️  Unhandled event type: ${event.type}`);
+      case 'customer.subscription.updated': {
+        const subscription = event.data.object as Stripe.Subscription
+        const customerId = subscription.customer as string
+        const githubId = await resolveGithubId(stripe, subscription, customerId)
+
+        if (!githubId) {
+          console.error('[stripe/webhook] Could not map subscription to a GitHub user', {
+            subscriptionId: subscription.id,
+          })
+          break
+        }
+
+        await persistSubscriptionState({ githubId, customerId, subscription })
+        break
+      }
+
+      case 'customer.subscription.deleted': {
+        const subscription = event.data.object as Stripe.Subscription
+        const customerId = subscription.customer as string
+        const githubId = await resolveGithubId(stripe, subscription, customerId)
+
+        if (!githubId) {
+          console.error('[stripe/webhook] Could not map deleted subscription to a GitHub user', {
+            subscriptionId: subscription.id,
+          })
+          break
+        }
+
+        const savedSubscription = await upsertSubscription({
+          github_id: githubId,
+          stripe_customer_id: customerId,
+          stripe_subscription_id: subscription.id,
+          plan: 'free',
+          status: 'canceled',
+          current_period_end: getCurrentPeriodEnd(subscription),
+        })
+        if (!savedSubscription.id) {
+          throw new Error('Failed to persist canceled subscription state')
+        }
+
+        const user = await getUserByGithubId(githubId)
+        if (user) {
+          await updateUserBilling(user.id, {
+            stripe_customer_id: customerId,
+            stripe_subscription_id: subscription.id,
+            stripe_price_id: subscription.items.data[0]?.price.id ?? null,
+            plan_tier: 'free',
+            subscription_status: 'canceled',
+          })
+        }
+        break
+      }
+
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object as Stripe.Invoice
+        const customerId = invoice.customer as string | null
+
+        if (!customerId) {
+          break
+        }
+
+        const existing = await getSubscriptionByStripeCustomerId(customerId)
+        if (existing) {
+          const savedSubscription = await upsertSubscription({
+            github_id: existing.github_id,
+            stripe_customer_id: customerId,
+            status: 'past_due',
+          })
+          if (!savedSubscription.id) {
+            throw new Error('Failed to persist past-due subscription state')
+          }
+
+          const user = await getUserByGithubId(existing.github_id)
+          if (user) {
+            await updateUserBilling(user.id, {
+              stripe_customer_id: customerId,
+              subscription_status: 'past_due',
+              plan_tier: 'free',
+            })
+          }
+        }
+        break
+      }
+
+      case 'invoice.payment_succeeded': {
+        const invoice = event.data.object as Stripe.Invoice
+        const customerId = invoice.customer as string | null
+
+        if (!customerId) {
+          break
+        }
+
+        const invoiceSubscription = (invoice as unknown as { subscription?: string | Stripe.Subscription | null })
+          .subscription
+        const subscription =
+          typeof invoiceSubscription === 'string'
+            ? await stripe.subscriptions.retrieve(invoiceSubscription)
+            : invoiceSubscription ?? null
+
+        if (subscription) {
+          const githubId = await resolveGithubId(stripe, subscription, customerId)
+          if (githubId) {
+            const { user, priceId } = await persistSubscriptionState({ githubId, customerId, subscription })
+            const billingReason = (invoice as unknown as { billing_reason?: string | null }).billing_reason
+
+            if (user && billingReason !== 'subscription_create') {
+              const amount = getCreditGrantForPrice(priceId, CREDITS.MONTHLY_GRANT)
+              await grantCredits(user.id, amount, 'Monthly subscription renewal', {
+                invoice_id: invoice.id,
+                stripe_customer_id: customerId,
+                stripe_subscription_id: subscription.id,
+              })
+            }
+          }
+        }
+        break
+      }
     }
-  } catch (error) {
-    console.error("❌ Error processing webhook event:", error);
-    return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });
+  } catch (err) {
+    console.error('[stripe/webhook] Handler error:', { eventId: event.id, type: event.type, err })
+    return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 })
   }
 
-  // 4. Always return 200 so Stripe knows we received the event
-  return NextResponse.json({ received: true }, { status: 200 });
+  return NextResponse.json({ received: true })
 }
 
-// ─── Block all other HTTP methods ─────────────────────────────────────────────
-// This prevents the 405 error Stripe was getting before
 export async function GET() {
-  return NextResponse.json({ error: "Method not allowed" }, { status: 405 });
+  return NextResponse.json({ error: 'Method not allowed' }, { status: 405 })
 }

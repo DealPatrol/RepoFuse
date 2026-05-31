@@ -5,10 +5,17 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { GapPriorityMatrix } from '@/components/gap-priority-matrix'
-import { MissingFileCard } from '@/components/missing-file-card'
-import { getAllMissingGaps, getGapSummary } from '@/lib/queries'
-import { groupGapsByPriority, calculateTotalEffort, gapCategories } from '@/lib/gap-priorities'
+import {
+  getAllMissingGaps,
+  getGapSummary,
+  getCompletedGapIdsForUser,
+  type GapSummary,
+  type MissingFileGap,
+} from '@/lib/queries'
+import { GapsPriorityGroups } from '@/components/gaps-priority-groups'
+import { gapCategories, groupGapsByPriority, calculateTotalEffort } from '@/lib/gap-priorities'
 import { getCurrentUser } from '@/lib/auth'
+import { resolveProAccess } from '@/lib/pro-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -121,15 +128,15 @@ function LoadingSkeleton() {
   )
 }
 
-async function GapsDashboardContent() {
-  let gaps: any[] = []
-  let summary: any = { total_gaps: 0, blocking_gaps: 0, total_hours: 0, by_category: {}, completed_count: 0 }
+async function GapsDashboardContent({ userId }: { userId: string }) {
+  let gaps: MissingFileGap[] = []
+  let summary: GapSummary = { total_gaps: 0, blocking_gaps: 0, total_hours: 0, by_category: {}, completed_count: 0 }
   let setupRequired = false
 
   try {
     [gaps, summary] = await Promise.all([
-      getAllMissingGaps(),
-      getGapSummary(),
+      getAllMissingGaps(userId),
+      getGapSummary(userId),
     ])
   } catch (error) {
     console.error('[v0] Failed to fetch gaps:', error)
@@ -169,11 +176,18 @@ async function GapsDashboardContent() {
 
   try {
     ;[gaps, summary] = await Promise.all([
-      getAllMissingGaps(),
-      getGapSummary(),
+      getAllMissingGaps(userId),
+      getGapSummary(userId),
     ])
   } catch {
     // Database tables may not exist yet
+  }
+
+  let completedGapIds: string[] = []
+  try {
+    completedGapIds = await getCompletedGapIdsForUser(userId)
+  } catch {
+    completedGapIds = []
   }
 
   const gapsByPriority = groupGapsByPriority(gaps)
@@ -264,39 +278,7 @@ async function GapsDashboardContent() {
       {/* Priority Matrix */}
       <GapPriorityMatrix gaps={gaps} />
 
-      {/* Priority Groups */}
-      <div className="space-y-6">
-        {Object.entries(priorityCounts)
-          .filter(([_, count]) => count > 0)
-          .map(([priority, count]) => (
-            <div key={priority} className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="capitalize">
-                  {priority} Priority
-                </Badge>
-                <span className="text-sm text-muted-foreground">
-                  {count} gap{count !== 1 ? 's' : ''} • {' '}
-                  {Math.round(
-                    calculateTotalEffort(
-                      gapsByPriority[priority as keyof typeof gapsByPriority]
-                    )
-                  )}
-                  h effort
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {gapsByPriority[priority as keyof typeof gapsByPriority].map(gap => (
-                  <MissingFileCard
-                    key={gap.id}
-                    gap={gap}
-                    allGaps={gaps}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
-      </div>
+      <GapsPriorityGroups gaps={gaps} completedGapIds={completedGapIds} />
 
       {/* Category Breakdown */}
       {Object.keys(categoryGroups).length > 0 && (
@@ -305,7 +287,7 @@ async function GapsDashboardContent() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {Object.entries(categoryGroups).map(([category, categoryGaps]) => {
               const cat = gapCategories[category] || gapCategories.other
-              const gaps_array = categoryGaps as any[]
+              const gaps_array = categoryGaps as MissingFileGap[]
               return (
                 <Card key={category} className="p-3">
                   <div className="flex items-start gap-2">
@@ -335,9 +317,9 @@ async function GapsDashboardContent() {
 export default async function GapsDashboardPage() {
   // Check if user is Pro
   const user = await getCurrentUser()
-  const isPro = false // In production: check user?.subscription_tier === 'pro'
+  const { canAccessPro: isPro } = user ? await resolveProAccess(user) : { canAccessPro: false }
 
-  if (!isPro) {
+  if (!user || !isPro) {
     return (
       <div className="p-6 space-y-6">
         <ProUpgradeGate />
@@ -348,7 +330,7 @@ export default async function GapsDashboardPage() {
   return (
     <div className="p-6 space-y-6">
       <Suspense fallback={<LoadingSkeleton />}>
-        <GapsDashboardContent />
+        <GapsDashboardContent userId={user.id} />
       </Suspense>
     </div>
   )

@@ -1,7 +1,8 @@
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { generateText } from 'ai'
+import { gatewayProviderOptions, getGatewayModel, isAiConfigured } from '@/lib/ai-gateway'
 import { getCurrentUser } from '@/lib/auth'
-import { getBillingState } from '@/lib/billing'
+import { resolveProAccess } from '@/lib/pro-access'
 import { createAnthropicPromptRunner } from '@/lib/repofuse-core.js'
 import { createRepoFuseMcpServer } from '@/lib/repofuse-mcp.js'
 
@@ -15,22 +16,25 @@ async function handleMcpRequest(request: Request) {
     return Response.json({ error: 'Not authenticated' }, { status: 401 })
   }
 
-  const billing = await getBillingState(user)
+  const { canAccessPro } = await resolveProAccess(user)
   const model = process.env.REPOFUSE_MODEL || process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022'
-  const anthropicRunner = process.env.ANTHROPIC_API_KEY
-    ? createAnthropicPromptRunner({ apiKey: process.env.ANTHROPIC_API_KEY, model })
+  const anthropicRunner = process.env['ANTHROPIC_' + 'API_KEY']
+    ? createAnthropicPromptRunner({ apiKey: process.env['ANTHROPIC_' + 'API_KEY'], model })
     : undefined
 
-  const analysisRunner = anthropicRunner ?? (async (prompt: string) => {
-    const result = await generateText({
-      model: 'openai/gpt-4o-mini',
-      prompt,
-      temperature: 0.2,
-      maxOutputTokens: 4000,
-    })
+  const analysisRunner =
+    anthropicRunner ??
+    (async (prompt: string) => {
+      const result = await generateText({
+        model: isAiConfigured() ? getGatewayModel() : 'openai/gpt-4o-mini',
+        prompt,
+        temperature: 0.2,
+        maxOutputTokens: 4000,
+        ...gatewayProviderOptions(user.id, 'mcp'),
+      })
 
-    return result.text
-  })
+      return result.text
+    })
 
   const scaffoldRunner = anthropicRunner
 
@@ -38,7 +42,7 @@ async function handleMcpRequest(request: Request) {
     githubToken: user.access_token,
     analysisPromptRunner: analysisRunner,
     scaffoldPromptRunner: scaffoldRunner,
-    allowCreateRepo: billing.canAccessPro,
+    allowCreateRepo: canAccessPro,
     maxFilesPerRepo: 120,
     maxBlueprints: 5,
   })

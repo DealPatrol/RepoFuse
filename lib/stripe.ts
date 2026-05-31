@@ -2,25 +2,41 @@ import Stripe from 'stripe'
 
 let stripeInstance: Stripe | null = null
 
+function getLiveStripeEnv(name: 'SECRET_KEY' | 'WEBHOOK_SECRET' | 'PRO_PRICE_ID' | 'SCALE_PRICE_ID'): string {
+  return process.env[`STRIPE_LIVE_${name}`] || process.env[`STRIPE_${name}`] || ''
+}
+
 export function isStripeConfigured(): boolean {
-  return !!(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PRO_PRICE_ID)
+  return !!(getLiveStripeEnv('SECRET_KEY') && getLiveStripeEnv('PRO_PRICE_ID'))
 }
 
 export function getPriceIdForPlan(plan: 'pro' | 'scale'): string {
-  if (plan === 'scale') return process.env.STRIPE_SCALE_PRICE_ID || ''
-  return process.env.STRIPE_PRO_PRICE_ID || ''
+  if (plan === 'scale') return getLiveStripeEnv('SCALE_PRICE_ID')
+  return getLiveStripeEnv('PRO_PRICE_ID')
 }
 
 export function getStripe(): Stripe {
-  if (!process.env.STRIPE_SECRET_KEY) {
-    throw new Error('STRIPE_SECRET_KEY is not set')
+  const secretKey = getLiveStripeEnv('SECRET_KEY')
+  console.log('[v0] getStripe() called')
+  console.log('[v0] Checking env vars:')
+  console.log('[v0] STRIPE_LIVE_SECRET_KEY:', process.env.STRIPE_LIVE_SECRET_KEY ? '***SET***' : 'NOT SET')
+  console.log('[v0] STRIPE_SECRET_KEY:', process.env.STRIPE_SECRET_KEY ? '***SET***' : 'NOT SET')
+  console.log('[v0] Available env keys containing STRIPE:', Object.keys(process.env).filter(k => k.includes('STRIPE')))
+  
+  if (!secretKey) {
+    throw new Error('STRIPE_LIVE_SECRET_KEY is not set')
   }
   if (!stripeInstance) {
-    stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY, {
+    stripeInstance = new Stripe(secretKey, {
+      apiVersion: '2026-04-22.dahlia',
       typescript: true,
     })
   }
   return stripeInstance
+}
+
+export function getStripeWebhookSecret(): string {
+  return getLiveStripeEnv('WEBHOOK_SECRET')
 }
 
 export const PLANS = {
@@ -69,8 +85,12 @@ export const PLANS = {
 
 export type PlanId = keyof typeof PLANS
 
+export function isPaidPlan(plan: string | null | undefined): plan is Exclude<PlanId, 'free'> {
+  return plan === 'pro' || plan === 'scale' || plan === 'byok'
+}
+
 export function getPriceId(): string {
-  return process.env.STRIPE_PRO_PRICE_ID || ''
+  return getPriceIdForPlan('pro')
 }
 
 export function getProPriceId(): string {

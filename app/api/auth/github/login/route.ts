@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
+import { sanitizeReturnTo } from '@/lib/auth'
 
 function getBaseUrl(request: NextRequest) {
   return process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
 
   const state = crypto.randomUUID()
   const redirectUri = `${getBaseUrl(request)}/api/auth/github/callback`
-  const returnTo = request.nextUrl.searchParams.get('returnTo') || '/dashboard/repositories?connected=github'
+  const returnTo = sanitizeReturnTo(request.nextUrl.searchParams.get('returnTo'))
 
   const params = new URLSearchParams({
     client_id: clientId,

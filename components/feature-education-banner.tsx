@@ -31,11 +31,9 @@ export function FeatureEducationBanner() {
                 View Gaps
               </Link>
             </Button>
-            <Link href="/docs/GAPS_AND_TEMPLATES_GUIDE.md" className="inline-flex">
-              <Button size="sm" variant="ghost" className="h-7">
-                Learn More
-              </Button>
-            </Link>
+            <Button size="sm" variant="ghost" asChild className="h-7">
+              <Link href="/legal/documentation">Learn More</Link>
+            </Button>
           </div>
         </div>
         <button
