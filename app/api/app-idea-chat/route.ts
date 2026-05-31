@@ -80,6 +80,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 })
     }
 
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return NextResponse.json(
+        { error: 'App Idea Chat is not configured. Missing ANTHROPIC_API_KEY.' },
+        { status: 503 },
+      )
+    }
+
     const creditResult = await deductCredits(
       user.id,
       CREDITS.PATTERN_ANALYZER_COST,

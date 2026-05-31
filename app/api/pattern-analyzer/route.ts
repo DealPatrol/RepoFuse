@@ -54,6 +54,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'analysisId is required' }, { status: 400 })
     }
 
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return NextResponse.json(
+        { error: 'Pattern Analyzer is not configured. Missing ANTHROPIC_API_KEY.' },
+        { status: 503 },
+      )
+    }
+
     const creditResult = await deductCredits(user.id, CREDITS.PATTERN_ANALYZER_COST, 'pattern_analyzer', { analysisId })
     if (!creditResult.success) {
       return NextResponse.json({ error: creditResult.error || 'Insufficient credits' }, { status: 402 })
