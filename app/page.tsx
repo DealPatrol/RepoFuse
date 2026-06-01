@@ -620,6 +620,27 @@ import Link from 'next/link'
           </section>
         </main>
 
+        {/* Featured On Section */}
+        <section className="py-12 border-t border-[#30363D] bg-[#0D1117]">
+          <div className="container mx-auto px-4">
+            <div className="flex flex-col items-center justify-center gap-6">
+              <p className="text-xs text-[#8B949E] uppercase tracking-widest font-mono">Featured On</p>
+              <a 
+                href="https://www.toolpilot.ai" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex items-center justify-center hover:opacity-80 transition-opacity"
+                aria-label="Featured on ToolPilot"
+              >
+                <div className="bg-white px-6 py-3 rounded-lg flex items-center gap-2">
+                  <span className="text-sm font-bold text-black">FEATURED ON</span>
+                  <span className="text-sm font-bold" style={{ color: '#FF6B35' }}>TOOLPILOT</span>
+                </div>
+              </a>
+            </div>
+          </div>
+        </section>
+
         {/* Footer */}
         <footer className="border-t border-[#30363D] py-8">
           <div className="container mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#8B949E]">
