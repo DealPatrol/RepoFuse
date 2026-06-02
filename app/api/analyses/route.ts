@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(analysis)
   } catch (error) {
     console.error('[v0] Error creating analysis:', error)
-    return NextResponse.json({ error: 'Failed to create analysis' }, { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : 'Failed to create analysis'
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }
