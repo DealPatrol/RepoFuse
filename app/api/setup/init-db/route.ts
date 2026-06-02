@@ -133,6 +133,19 @@ async function run() {
     await sql`CREATE INDEX IF NOT EXISTS idx_analyses_status ON analyses(status)`
     await sql`CREATE INDEX IF NOT EXISTS idx_app_blueprints_analysis_id ON app_blueprints(analysis_id)`
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS build_plans (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        blueprint_id UUID NOT NULL REFERENCES app_blueprints(id) ON DELETE CASCADE,
+        content JSONB NOT NULL DEFAULT '{}'::jsonb,
+        version INTEGER NOT NULL DEFAULT 1,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(blueprint_id)
+      )
+    `
+    await sql`CREATE INDEX IF NOT EXISTS idx_build_plans_blueprint_id ON build_plans(blueprint_id)`
+
     return NextResponse.json({ success: true, message: 'Database schema initialized successfully.' })
   } catch (err) {
     console.error('[setup] DB init failed:', err)

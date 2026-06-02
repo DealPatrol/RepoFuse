@@ -21,8 +21,10 @@ import {
   Download,
   Lock,
   Crown,
+  Hammer,
 } from 'lucide-react'
 import type { Analysis, Repository, AppBlueprint } from '@/lib/queries'
+import { BuildThisApp } from '@/components/build-this-app'
 import {
   getBlueprintTier,
   tierCopy,
@@ -78,6 +80,7 @@ export function AnalysisDetail({
   const isFreePlan = userPlan === 'free' && !isTrialing
   const viewLimit = blueprintLimit > 0 ? blueprintLimit : Infinity
   const [scaffoldLoadingId, setScaffoldLoadingId] = useState<string | null>(null)
+  const [buildAppBlueprintId, setBuildAppBlueprintId] = useState<string | null>(null)
   const [isRunning, setIsRunning] = useState(false)
   const [status, setStatus] = useState(analysis.status)
   const [progress, setProgress] = useState(
@@ -607,6 +610,13 @@ export function AnalysisDetail({
                           </Button>
                         ) : null}
                         <Button
+                          className={`${blueprint.missing_files.length > 0 ? 'mt-2' : 'mt-4'} w-full`}
+                          onClick={() => setBuildAppBlueprintId(blueprint.id)}
+                        >
+                          <Hammer className="h-4 w-4 mr-2" />
+                          Build This App
+                        </Button>
+                        <Button
                           variant="ghost"
                           className="mt-2 w-full"
                           onClick={() => downloadBuildPlan(blueprint)}
@@ -632,6 +642,20 @@ export function AnalysisDetail({
           </div>
         )}
       </section>
+
+      {buildAppBlueprintId && (() => {
+        const selectedBlueprint = localBlueprints.find((b) => b.id === buildAppBlueprintId)
+        if (!selectedBlueprint) return null
+        return (
+          <BuildThisApp
+            blueprint={selectedBlueprint}
+            open={!!buildAppBlueprintId}
+            onOpenChange={(open) => {
+              if (!open) setBuildAppBlueprintId(null)
+            }}
+          />
+        )
+      })()}
     </div>
   )
 }

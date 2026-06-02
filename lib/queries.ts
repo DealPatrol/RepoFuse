@@ -1,4 +1,5 @@
 import { getDb } from './db'
+import type { BuildPlanContent } from './build-plan'
 
 // Types
 export interface Repository {
@@ -319,6 +320,12 @@ export async function deleteBlueprintsByAnalysis(analysisId: string): Promise<vo
   await sql`DELETE FROM app_blueprints WHERE analysis_id = ${analysisId}`
 }
 
+export async function getBlueprintById(blueprintId: string): Promise<AppBlueprint | null> {
+  const sql = getDb()
+  const rows = await sql`SELECT * FROM app_blueprints WHERE id = ${blueprintId} LIMIT 1`
+  return (rows[0] as AppBlueprint) || null
+}
+
 export async function createBlueprint(data: {
   analysis_id: string
   name: string
@@ -346,6 +353,56 @@ export async function createBlueprint(data: {
     RETURNING *
   `
   return result[0] as AppBlueprint
+}
+
+// Build plan types & queries
+
+export interface BuildPlanRecord {
+  id: string
+  blueprint_id: string
+  content: BuildPlanContent
+  version: number
+  created_at: string
+  updated_at: string
+}
+
+export async function getBuildPlanByBlueprintId(
+  blueprintId: string,
+): Promise<BuildPlanRecord | null> {
+  const sql = getDb()
+  try {
+    const rows = await sql`
+      SELECT * FROM build_plans WHERE blueprint_id = ${blueprintId} LIMIT 1
+    `
+    return (rows[0] as BuildPlanRecord) || null
+  } catch {
+    return null
+  }
+}
+
+export async function upsertBuildPlan(data: {
+  blueprint_id: string
+  content: BuildPlanContent
+  version?: number
+}): Promise<BuildPlanRecord> {
+  const sql = getDb()
+  const existing = await getBuildPlanByBlueprintId(data.blueprint_id)
+  const version = data.version ?? (existing ? existing.version + 1 : 1)
+
+  const result = await sql`
+    INSERT INTO build_plans (blueprint_id, content, version)
+    VALUES (
+      ${data.blueprint_id},
+      ${JSON.stringify(data.content)}::jsonb,
+      ${version}
+    )
+    ON CONFLICT (blueprint_id) DO UPDATE SET
+      content = EXCLUDED.content,
+      version = EXCLUDED.version,
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING *
+  `
+  return result[0] as BuildPlanRecord
 }
 
 // Gap & Template types
