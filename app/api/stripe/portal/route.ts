@@ -30,6 +30,7 @@ export async function POST() {
     return NextResponse.json({ url: session.url })
   } catch (error) {
     console.error('Stripe portal error:', error)
-    return NextResponse.json({ error: 'Failed to open billing portal. Please try again.' }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Failed to open billing portal. Please try again.'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getStripe, getWebhookSecret } from '@/lib/stripe'
+import { upsertSubscription, getSubscriptionByStripeCustomerId, getUserByGithubId } from '@/lib/queries'
+import { grantCredits, CREDITS } from '@/lib/credits'
 import type Stripe from 'stripe'
 import { CREDITS, grantCredits } from '@/lib/credits'
 import {
@@ -130,6 +133,9 @@ async function persistSubscriptionState(params: {
 export async function POST(request: NextRequest) {
   const signature = request.headers.get('stripe-signature')
 
+  const webhookSecret = getWebhookSecret()
+  if (!signature || !webhookSecret) {
+    return NextResponse.json({ error: 'Webhook not configured' }, { status: 400 })
   if (!process.env.STRIPE_WEBHOOK_SECRET || !process.env.STRIPE_SECRET_KEY) {
     console.error('[stripe/webhook] Missing STRIPE_WEBHOOK_SECRET or STRIPE_SECRET_KEY in environment')
     return NextResponse.json({ error: 'Webhook not configured' }, { status: 503 })
@@ -157,7 +163,7 @@ export async function POST(request: NextRequest) {
 
   let event: Stripe.Event
   try {
-    event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET)
+    event = stripe.webhooks.constructEvent(body, signature, webhookSecret)
   } catch (err) {
     console.error('[stripe/webhook] Signature verification failed:', err)
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
