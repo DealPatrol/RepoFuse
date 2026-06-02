@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAnalysis, linkAnalysisToRepository, getAllAnalyses } from '@/lib/queries'
+import { getCurrentUser } from '@/lib/auth'
+import { createAnalysis, getRepositoryById, linkAnalysisToRepository, getAllAnalyses } from '@/lib/queries'
+import { createAnalysisRequestSchema } from '@/lib/schemas'
 
 export async function GET() {
   try {
-    const analyses = await getAllAnalyses()
+    const user = await getCurrentUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    const analyses = await getAllAnalyses(user.id)
     return NextResponse.json(analyses)
   } catch (error) {
     console.error('Error fetching analyses:', error)
@@ -13,27 +21,29 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { name } = body
-    const repositoryIds = Array.isArray(body.repositoryIds)
-      ? body.repositoryIds
-      : Array.isArray(body.repo_ids)
-        ? body.repo_ids
-        : []
+    const user = await getCurrentUser()
 
-    if (!name || !name.trim()) {
-      return NextResponse.json({ error: 'Analysis name is required' }, { status: 400 })
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    if (!repositoryIds || repositoryIds.length === 0) {
-      return NextResponse.json({ error: 'At least one repository is required' }, { status: 400 })
+    const parsedBody = createAnalysisRequestSchema.safeParse(await request.json())
+
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: parsedBody.error.issues[0]?.message ?? 'Invalid analysis request' }, { status: 400 })
     }
 
-    const analysis = await createAnalysis(name.trim())
+    const { name, repositoryIds } = parsedBody.data
+    const analysis = await createAnalysis(name.trim(), user.id)
 
     const linked: string[] = []
     for (const repoId of repositoryIds) {
       try {
+        const repository = await getRepositoryById(repoId, user.id)
+        if (!repository) {
+          console.warn(`Skipping repository ${repoId}; it is not owned by ${user.id}`)
+          continue
+        }
         await linkAnalysisToRepository(analysis.id, repoId)
         linked.push(repoId as string)
       } catch (e) {

@@ -1,13 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createTemplate, getMissingGapsByBlueprint } from '@/lib/queries'
 import { getCurrentUser } from '@/lib/auth'
+<<<<<<< HEAD
 import { getCreditBalance, deductCredits, CREDITS } from '@/lib/credits'
+=======
+>>>>>>> origin/main
 
 export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser()
     if (!user) {
+<<<<<<< HEAD
       return NextResponse.json({ error: 'Sign in to create templates.' }, { status: 401 })
+=======
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+>>>>>>> origin/main
     }
 
     const body = await request.json()
@@ -26,12 +33,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
+<<<<<<< HEAD
     const balance = await getCreditBalance(user.id)
     if (balance < CREDITS.PATTERN_ANALYZER_COST) {
       return NextResponse.json(
         { error: `Insufficient credits. Required: ${CREDITS.PATTERN_ANALYZER_COST}, Available: ${balance}` },
         { status: 402 }
       )
+=======
+    // Calculate aggregate metrics from blueprints
+    const totalFiles = 0
+    let totalMissingFiles = 0
+    let totalEstimatedHours = 0
+    let totalReuse = 0
+
+    for (const blueprintId of blueprintIds) {
+      const gaps = await getMissingGapsByBlueprint(blueprintId, user.id)
+      totalMissingFiles += gaps.length
+      totalEstimatedHours += gaps.reduce((sum, g) => sum + g.estimated_hours, 0)
+      
+      // Estimate reuse (would be pulled from blueprint in real system)
+      totalReuse += 60 // placeholder
+>>>>>>> origin/main
     }
 
     // Calculate aggregate metrics — best-effort, missing_file_gaps table may not exist yet
@@ -53,6 +76,7 @@ export async function POST(request: NextRequest) {
     const reusePercentage = totalReuse / blueprintIds.length
 
     const template = await createTemplate({
+      user_id: user.id,
       name,
       description: description || null,
       blueprint_ids: blueprintIds,

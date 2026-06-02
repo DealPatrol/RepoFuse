@@ -55,7 +55,12 @@ const PLAN_CONFIGS = [
     icon: Crown,
     features: ['Unlimited repos', 'Unlimited analyses', '3,000 credits/month', 'Scaffold generation', 'App Idea Chat', 'Build This App'],
     cta: 'Start Free Trial',
+<<<<<<< HEAD
     ctaHref: null, // handled by handleUpgrade
+=======
+    ctaHref: null,
+    checkoutPlan: 'pro' as const,
+>>>>>>> origin/main
     highlighted: true,
   },
   {
@@ -67,7 +72,12 @@ const PLAN_CONFIGS = [
     icon: Rocket,
     features: ['Everything in Pro', '12,000 credits/month', 'Highest priority AI', 'Early access', 'Dedicated support'],
     cta: 'Get Scale',
+<<<<<<< HEAD
     ctaHref: null, // goes through checkout API so github_id is attached to subscription
+=======
+    ctaHref: null,
+    checkoutPlan: 'scale' as const,
+>>>>>>> origin/main
   },
   {
     id: 'byok',
@@ -94,7 +104,6 @@ export function BillingClient({
   currentPeriodEnd,
   hasStripeCustomer,
   userId,
-  isTrialing = false,
 }: BillingClientProps) {
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [portalLoading, setPortalLoading] = useState(false)
@@ -103,7 +112,11 @@ export function BillingClient({
   const isPro = plan === 'pro'
   const usagePercent = analysesLimit > 0 ? Math.min(100, Math.round((analysesUsed / analysesLimit) * 100)) : 0
 
+<<<<<<< HEAD
   const handleUpgrade = async (targetPlan: 'pro' | 'scale' = 'pro') => {
+=======
+  const handleCheckout = async (targetPlan: 'pro' | 'scale' = 'pro') => {
+>>>>>>> origin/main
     setCheckoutLoading(true)
     try {
       const res = await fetch('/api/stripe/checkout', {
@@ -219,7 +232,11 @@ export function BillingClient({
                 Manage Subscription
               </Button>
             ) : !isPaid ? (
+<<<<<<< HEAD
               <Button onClick={() => handleUpgrade()} disabled={checkoutLoading} className="w-full shadow-lg shadow-primary/20">
+=======
+              <Button onClick={() => handleCheckout('pro')} disabled={checkoutLoading} className="w-full shadow-lg shadow-primary/20">
+>>>>>>> origin/main
                 {checkoutLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
                 Upgrade to Pro — 7 days free, then $19/mo
               </Button>
@@ -251,7 +268,11 @@ export function BillingClient({
                 <p className="text-xs text-destructive mt-2">
                   {usagePercent >= 100 ? "You've reached your monthly limit." : 'Approaching your monthly limit.'}
                   {' '}
+<<<<<<< HEAD
                   <button onClick={() => handleUpgrade()} className="underline font-medium hover:no-underline">
+=======
+                  <button onClick={() => handleCheckout('pro')} className="underline font-medium hover:no-underline">
+>>>>>>> origin/main
                     Upgrade to Pro
                   </button>
                 </p>
@@ -270,7 +291,11 @@ export function BillingClient({
                 {blueprintsUsed >= blueprintsLimit && (
                   <p className="text-xs text-destructive mt-2">
                     You&apos;ve viewed all your free blueprints.{' '}
+<<<<<<< HEAD
                     <button onClick={() => handleUpgrade()} className="underline font-medium hover:no-underline">
+=======
+                    <button onClick={() => handleCheckout('pro')} className="underline font-medium hover:no-underline">
+>>>>>>> origin/main
                       Upgrade for unlimited
                     </button>
                   </p>
@@ -287,7 +312,11 @@ export function BillingClient({
                     <p className="text-xs text-muted-foreground mt-1">
                       Pro gives you unlimited analyses, repos, scaffold generation, and priority AI.
                     </p>
+<<<<<<< HEAD
                     <Button size="sm" className="mt-3" onClick={() => handleUpgrade()} disabled={checkoutLoading}>
+=======
+                    <Button size="sm" className="mt-3" onClick={() => handleCheckout('pro')} disabled={checkoutLoading}>
+>>>>>>> origin/main
                       Upgrade Now <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
                     </Button>
                   </div>
@@ -379,7 +408,15 @@ export function BillingClient({
                       size="sm"
                       variant={highlighted ? 'default' : 'outline'}
                       className="w-full"
+<<<<<<< HEAD
                       onClick={() => handleUpgrade(p.id === 'scale' ? 'scale' : 'pro')}
+=======
+                      onClick={() =>
+                        handleCheckout(
+                          'checkoutPlan' in p && p.checkoutPlan === 'scale' ? 'scale' : 'pro',
+                        )
+                      }
+>>>>>>> origin/main
                       disabled={checkoutLoading}
                     >
                       {checkoutLoading ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : null}

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
+import { generateWithGateway } from '@/lib/ai-gateway'
 import { getCurrentUser } from '@/lib/auth'
+<<<<<<< HEAD
 import { getAnthropicModel } from '@/lib/anthropic-model'
 import { getCreditBalance, deductCredits, CREDITS } from '@/lib/credits'
 import type { AppBlueprint } from '@/lib/queries'
@@ -9,6 +10,10 @@ export const maxDuration = 120
 export const dynamic = 'force-dynamic'
 
 const anthropic = new Anthropic()
+=======
+import { getSubscriptionByGithubId, upsertSubscription, type AppBlueprint } from '@/lib/queries'
+import { hasProAccess } from '@/lib/pro-access'
+>>>>>>> origin/main
 
 type Platform = 'github' | 'gitlab'
 
@@ -21,7 +26,10 @@ interface BuildAppRequest {
   >
 }
 
-async function generateFiles(blueprint: BuildAppRequest['blueprint']): Promise<Record<string, string>> {
+async function generateFiles(
+  blueprint: BuildAppRequest['blueprint'],
+  userId: string,
+): Promise<Record<string, string>> {
   const missingList = blueprint.missing_files
     .map((f) => `  - ${f.name}: ${f.purpose}`)
     .join('\n')
@@ -63,6 +71,7 @@ Rules:
 Return format: {"path/to/file.ts": "...full content...", "README.md": "..."}
 `
 
+<<<<<<< HEAD
   // Use streaming so Vercel keeps the function alive during generation
   // and we aren't blocked waiting for a single large response.
   let raw = ''
@@ -81,6 +90,17 @@ Return format: {"path/to/file.ts": "...full content...", "README.md": "..."}
   }
 
   raw = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
+=======
+  const raw = (
+    await generateWithGateway({
+      feature: 'build-app',
+      userId,
+      maxOutputTokens: 8192,
+      messages: [{ role: 'user', content: prompt }],
+    })
+  ).trim()
+  const jsonText = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
+>>>>>>> origin/main
 
   const obj = JSON.parse(raw) as Record<string, unknown>
   const files: Record<string, string> = {}
@@ -228,6 +248,16 @@ export async function POST(request: NextRequest) {
           return
         }
 
+        let sub = await getSubscriptionByGithubId(user.github_id).catch(() => null)
+        if (!sub) {
+          sub = await upsertSubscription({ github_id: user.github_id }).catch(() => null)
+        }
+        if (!hasProAccess(user, sub)) {
+          send({ step: 'error', message: 'Build This App is available on paid plans. Upgrade to create and push a generated repo.' })
+          controller.close()
+          return
+        }
+
         const body = (await request.json()) as BuildAppRequest
         const { platform, repoName, blueprint } = body
 
@@ -257,7 +287,7 @@ export async function POST(request: NextRequest) {
 
         let files: Record<string, string>
         try {
-          files = await generateFiles(blueprint)
+          files = await generateFiles(blueprint, user.id)
         } catch (e) {
           send({
             step: 'error',

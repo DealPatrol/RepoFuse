@@ -75,6 +75,7 @@ export function CreateTemplateModal({ onCreated }: { onCreated?: () => void }) {
     setSelectedBlueprintIds([])
     try {
       const res = await fetch(`/api/analyses/${analysisId}/blueprints`)
+<<<<<<< HEAD
       if (res.ok) {
         const data: BlueprintOption[] = await res.json()
         setBlueprints(data)
@@ -86,6 +87,13 @@ export function CreateTemplateModal({ onCreated }: { onCreated?: () => void }) {
           setBlueprints(analysis.blueprints || [])
         }
       }
+=======
+      if (!res.ok) {
+        throw new Error('Failed to load blueprints')
+      }
+      const data: BlueprintOption[] = await res.json()
+      setBlueprints(data)
+>>>>>>> origin/main
     } catch {
       setError('Could not load blueprints for this analysis')
     } finally {

@@ -1,5 +1,6 @@
 import { getCurrentUser } from '@/lib/auth'
-import { getAllAnalyses, type Analysis } from '@/lib/queries'
+import { getAllAnalyses, getBlueprintsByAnalysis } from '@/lib/queries'
+import { resolveProAccess } from '@/lib/pro-access'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -9,8 +10,9 @@ import Link from 'next/link'
 export const dynamic = 'force-dynamic'
 
 // This is a PRO feature - full project blueprints with architecture
-interface Blueprint {
+interface BlueprintCard {
   id: string
+  analysisId: string
   name: string
   description: string
   techStack: string[]
@@ -20,32 +22,36 @@ interface Blueprint {
   generatedAt: string
 }
 
-async function getBlueprintsFromAnalyses(): Promise<Blueprint[]> {
-  const analyses = await getAllAnalyses()
-  
+async function getBlueprintsFromAnalyses(userId: string): Promise<BlueprintCard[]> {
+  const analyses = (await getAllAnalyses(userId)).filter((a) => a.status === 'complete')
   if (analyses.length === 0) return []
-  
-  return analyses.slice(0, 3).map((analysis, i) => ({
-    id: `blueprint-${analysis.id}`,
-    name: `${['AI Code Review SaaS', 'Repo Health Monitor', 'Webhook Automation'][i % 3]}`,
-    description: 'Full project blueprint with architecture, file structure, and implementation guide.',
-    techStack: [
-      ['Next.js', 'Supabase', 'Stripe', 'Tailwind'],
-      ['Next.js', 'PostgreSQL', 'Chart.js', 'shadcn/ui'],
-      ['Express', 'Redis', 'Bull', 'TypeScript'],
-    ][i % 3],
-    architecture: ['Monolith', 'Microservices', 'Serverless'][i % 3],
-    estimatedFiles: 25 + (i * 10),
-    codeReuse: 65 + (i * 8),
-    generatedAt: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toLocaleDateString(),
-  }))
+
+  const cards: BlueprintCard[] = []
+  for (const analysis of analyses.slice(0, 8)) {
+    const blueprints = await getBlueprintsByAnalysis(analysis.id, userId)
+    for (const bp of blueprints) {
+      cards.push({
+        id: bp.id,
+        analysisId: analysis.id,
+        name: bp.name,
+        description: bp.description || 'Blueprint from your repository analysis.',
+        techStack: bp.technologies?.length ? bp.technologies : ['From your repos'],
+        architecture: bp.complexity === 'complex' ? 'Multi-service' : bp.complexity === 'moderate' ? 'Modular' : 'Monolith',
+        estimatedFiles: (bp.existing_files?.length || 0) + (bp.missing_files?.length || 0),
+        codeReuse: Math.round(bp.reuse_percentage || 0),
+        generatedAt: new Date(bp.created_at).toLocaleDateString(),
+      })
+    }
+  }
+  return cards.sort((a, b) => b.codeReuse - a.codeReuse)
 }
 
 export default async function BlueprintsPage() {
   const user = await getCurrentUser()
-  let blueprints: Blueprint[] = []
+  let blueprints: BlueprintCard[] = []
 
   try {
+<<<<<<< HEAD
     blueprints = await getBlueprintsFromAnalyses()
   } catch (error) {
     console.error('[blueprints] Failed to load blueprints:', error)
@@ -53,6 +59,16 @@ export default async function BlueprintsPage() {
 
   // Check if user is Pro
   const isPro = false // In production: check user.subscription_tier === 'pro'
+=======
+    if (user) {
+      blueprints = await getBlueprintsFromAnalyses(user.id)
+    }
+  } catch {
+    // Database not available
+  }
+  
+  const { canAccessPro: isPro } = user ? await resolveProAccess(user) : { canAccessPro: false }
+>>>>>>> origin/main
 
   if (!isPro) {
     return (
@@ -217,11 +233,15 @@ export default async function BlueprintsPage() {
                   </div>
                 </div>
                 <div className="flex gap-2 pt-2 border-t border-border/50">
-                  <Button size="sm" className="flex-1">
-                    View Blueprint
+                  <Button size="sm" className="flex-1" asChild>
+                    <Link href={`/dashboard/analyses/${blueprint.analysisId}`}>
+                      View in Analysis
+                    </Link>
                   </Button>
-                  <Button size="sm" variant="outline">
-                    <Download className="h-4 w-4" />
+                  <Button size="sm" variant="outline" asChild>
+                    <Link href={`/dashboard/analyses/${blueprint.analysisId}`} aria-label="Open analysis">
+                      <Download className="h-4 w-4" />
+                    </Link>
                   </Button>
                 </div>
               </CardContent>
