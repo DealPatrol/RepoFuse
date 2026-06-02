@@ -19,13 +19,13 @@ export default async function BillingPage() {
     }
   }
 
-  const plan = (subscription?.plan as 'pro' | 'byok' | 'free' | undefined) ?? 'free'
-  const limits = PLANS[plan as keyof typeof PLANS] || PLANS.free
+  const plan = (subscription?.plan as keyof typeof PLANS | undefined) ?? 'free'
+  const limits = PLANS[plan] || PLANS.free
   const isTrialing = subscription?.status === 'trialing'
 
   return (
     <BillingClient
-      plan={plan as 'free' | 'pro'}
+      plan={plan as 'free' | 'pro' | 'scale' | 'byok'}
       planName={limits.name}
       analysesUsed={subscription?.analyses_used_this_month ?? 0}
       analysesLimit={limits.analyses_per_month}

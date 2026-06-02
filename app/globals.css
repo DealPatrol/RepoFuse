@@ -3,6 +3,18 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Grid drift animation */
+@keyframes gridDrift {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(60px); }
+}
+
+/* Glow effects */
+@keyframes glowPulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.8; }
+}
+
 :root {
   --background: oklch(0.95 0 0);
   --foreground: oklch(0.15 0 0);

@@ -1,6 +1,15 @@
 import { Anthropic } from '@anthropic-ai/sdk'
 
-const anthropic = new Anthropic()
+let __anthropicClient: Anthropic | null = null
+function getAnthropic(): Anthropic {
+  if (__anthropicClient) return __anthropicClient
+  const key = process.env.ANTHROPIC_API_KEY
+  if (!key) {
+    throw new Error('ANTHROPIC_API_KEY is not configured')
+  }
+  __anthropicClient = new Anthropic({ apiKey: key })
+  return __anthropicClient
+}
 
 /**
  * Represents a code snippet with semantic metadata
@@ -61,7 +70,7 @@ Extract and return JSON with:
 Return ONLY valid JSON, no markdown formatting.`
 
   try {
-    const response = await anthropic.messages.create({
+    const response = await getAnthropic().messages.create({
       model: 'claude-3-5-sonnet-20241022',
       max_tokens: 2000,
       messages: [{ role: 'user', content: prompt }],
@@ -261,7 +270,7 @@ Complete the code:
 \`\`\`${language}`
 
   try {
-    const response = await anthropic.messages.create({
+    const response = await getAnthropic().messages.create({
       model: 'claude-3-5-sonnet-20241022',
       max_tokens: 4000,
       messages: [{ role: 'user', content: prompt }],

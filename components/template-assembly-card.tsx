@@ -135,10 +135,19 @@ export function TemplateAssemblyCard({
         </div>
 
         {/* CTA */}
-        <Button className="w-full group" variant="default">
-          Use This Template
-          <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
-        </Button>
+        {onSelect ? (
+          <Button className="w-full group" variant="default" onClick={() => onSelect(template)}>
+            Use This Template
+            <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
+          </Button>
+        ) : (
+          <Button className="w-full group" variant="default" asChild>
+            <Link href="/dashboard/templates/browse">
+              Use This Template
+              <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
+            </Link>
+          </Button>
+        )}
       </div>
     </Card>
   )

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { getDb } from '@/lib/db'
-import { GITHUB_ACCESS_TOKEN_COOKIE } from '@/lib/auth'
+import { GITHUB_ACCESS_TOKEN_COOKIE, sanitizeReturnTo } from '@/lib/auth'
 import { upsertSubscription } from '@/lib/queries'
 
 function getBaseUrl(request: NextRequest) {
@@ -21,18 +21,7 @@ export async function GET(request: NextRequest) {
     const errorDescription = searchParams.get('error_description')
     const cookieStore = await cookies()
     const savedState = cookieStore.get('github_oauth_state')?.value
-
-    console.log('[v0] OAuth callback received', {
-      hasCode: !!code,
-      hasState: !!state,
-      hasSavedState: !!savedState,
-      stateMatch: state === savedState,
-      baseUrl: getBaseUrl(request),
-      clientId: getGitHubClientId(),
-      hasClientSecret: !!process.env.GITHUB_CLIENT_SECRET,
-      error,
-      errorDescription,
-    })
+    const returnTo = sanitizeReturnTo(cookieStore.get('github_oauth_return_to')?.value)
 
     if (error) {
       console.error('[v0] GitHub returned OAuth error:', error, errorDescription)
@@ -48,12 +37,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/?error=invalid_oauth_state', getBaseUrl(request)))
     }
 
-    // Exchange code for access token
     const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json',
+        Accept: 'application/json',
       },
       body: JSON.stringify({
         client_id: getGitHubClientId(),
@@ -75,11 +63,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/?error=token_exchange_failed', getBaseUrl(request)))
     }
 
-    // Get user info from GitHub
     const userResponse = await fetch('https://api.github.com/user', {
       headers: {
-        'Authorization': `Bearer ${access_token}`,
-        'Accept': 'application/vnd.github+json',
+        Authorization: `Bearer ${access_token}`,
+        Accept: 'application/vnd.github+json',
       },
     })
 
@@ -89,7 +76,6 @@ export async function GET(request: NextRequest) {
 
     const githubUser = await userResponse.json()
 
-    // Persisting auth row is best-effort; cookie-based session should still be created.
     try {
       const sql = getDb()
       await sql`
@@ -107,14 +93,29 @@ export async function GET(request: NextRequest) {
       console.error('[v0] OAuth callback DB write failed; continuing with cookie session:', dbError)
     }
 
-    // Session cookies — token cookie lets APIs work even if DB persistence failed
-    const response = NextResponse.redirect(new URL('/dashboard/repositories?connected=github', getBaseUrl(request)))
+    const launchSignupCookie = cookieStore.get('launch_signup')?.value
+    let redirectUrl = returnTo
+
+    if (launchSignupCookie) {
+      try {
+        const launchData = JSON.parse(launchSignupCookie)
+        if (launchData.wantsStripe) {
+          redirectUrl = '/api/stripe/checkout-redirect'
+        } else {
+          redirectUrl = '/dashboard?trial=started'
+        }
+      } catch (e) {
+        console.error('[v0] Failed to parse launch_signup cookie:', e)
+      }
+    }
+
+    const response = NextResponse.redirect(new URL(redirectUrl, getBaseUrl(request)))
     response.cookies.set('github_user_id', String(githubUser.id), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 60 * 60 * 24 * 30, // 30 days
+      maxAge: 60 * 60 * 24 * 30,
     })
     response.cookies.set(GITHUB_ACCESS_TOKEN_COOKIE, access_token, {
       httpOnly: true,
@@ -124,6 +125,8 @@ export async function GET(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 30,
     })
     response.cookies.set('github_oauth_state', '', { path: '/', maxAge: 0 })
+    response.cookies.set('github_oauth_return_to', '', { path: '/', maxAge: 0 })
+    response.cookies.set('launch_signup', '', { path: '/', maxAge: 0 })
 
     return response
   } catch (error) {

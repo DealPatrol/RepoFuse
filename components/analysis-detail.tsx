@@ -7,11 +7,11 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { 
-  Sparkles, 
-  ArrowLeft, 
-  Loader2, 
-  CheckCircle2, 
-  XCircle, 
+  Sparkles,
+  ArrowLeft,
+  Loader2,
+  CheckCircle2,
+  XCircle,
   Clock,
   FolderGit2,
   Code2,
@@ -21,8 +21,10 @@ import {
   Download,
   Lock,
   Crown,
+  Hammer,
 } from 'lucide-react'
 import type { Analysis, Repository, AppBlueprint } from '@/lib/queries'
+import { BuildAppModal } from '@/components/build-app-modal'
 import {
   getBlueprintTier,
   tierCopy,
@@ -78,6 +80,7 @@ export function AnalysisDetail({
   const isFreePlan = userPlan === 'free' && !isTrialing
   const viewLimit = blueprintLimit > 0 ? blueprintLimit : Infinity
   const [scaffoldLoadingId, setScaffoldLoadingId] = useState<string | null>(null)
+  const [buildModalBlueprint, setBuildModalBlueprint] = useState<AppBlueprint | null>(null)
   const [isRunning, setIsRunning] = useState(false)
   const [status, setStatus] = useState(analysis.status)
   const [progress, setProgress] = useState(
@@ -586,10 +589,18 @@ export function AnalysisDetail({
                           )}
                         </div>
 
+                        <Button
+                          className="mt-4 w-full"
+                          onClick={() => setBuildModalBlueprint(blueprint)}
+                        >
+                          <Hammer className="h-4 w-4 mr-2" />
+                          Build This App
+                        </Button>
+
                         {blueprint.missing_files.length > 0 ? (
                           <Button
                             variant="secondary"
-                            className="mt-4 w-full"
+                            className="mt-2 w-full"
                             disabled={scaffoldLoadingId === blueprint.id}
                             onClick={() => void generateScaffold(blueprint)}
                           >
@@ -632,6 +643,14 @@ export function AnalysisDetail({
           </div>
         )}
       </section>
+
+      {buildModalBlueprint && (
+        <BuildAppModal
+          blueprint={buildModalBlueprint}
+          open={buildModalBlueprint !== null}
+          onOpenChange={(open) => { if (!open) setBuildModalBlueprint(null) }}
+        />
+      )}
     </div>
   )
 }

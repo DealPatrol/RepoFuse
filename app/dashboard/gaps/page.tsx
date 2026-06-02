@@ -1,15 +1,119 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, AlertCircle, TrendingUp, Clock, Zap } from 'lucide-react'
+import { ArrowLeft, AlertCircle, TrendingUp, Clock, Zap, Lock, Crown, ArrowRight, Target, Code2, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { GapPriorityMatrix } from '@/components/gap-priority-matrix'
-import { MissingFileCard } from '@/components/missing-file-card'
-import { getAllMissingGaps, getGapSummary } from '@/lib/queries'
-import { groupGapsByPriority, calculateTotalEffort, gapCategories } from '@/lib/gap-priorities'
+import {
+  getAllMissingGaps,
+  getGapSummary,
+  getCompletedGapIdsForUser,
+  type GapSummary,
+  type MissingFileGap,
+} from '@/lib/queries'
+import { GapsPriorityGroups } from '@/components/gaps-priority-groups'
+import { gapCategories, groupGapsByPriority, calculateTotalEffort } from '@/lib/gap-priorities'
+import { getCurrentUser } from '@/lib/auth'
+import { resolveProAccess } from '@/lib/pro-access'
 
 export const dynamic = 'force-dynamic'
+
+// Pro gate component
+function ProUpgradeGate() {
+  return (
+    <div className="space-y-8">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-3">
+          <AlertCircle className="h-6 w-6 text-red-400" />
+          Missing Code
+          <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30">
+            <Lock className="h-3 w-3 mr-1" />
+            Pro
+          </Badge>
+        </h1>
+        <p className="text-muted-foreground mt-1">
+          See exactly what code is missing before you can ship
+        </p>
+      </div>
+
+      {/* Pro Upgrade Card */}
+      <Card className="bg-gradient-to-br from-red-950/40 via-card to-orange-950/20 border-red-500/30">
+        <CardContent className="flex flex-col items-center justify-center py-16">
+          <div className="p-4 rounded-full bg-red-500/20 mb-6">
+            <Crown className="h-12 w-12 text-red-400" />
+          </div>
+          <h2 className="text-2xl font-bold mb-2">Unlock Missing Code Analysis</h2>
+          <p className="text-muted-foreground text-center max-w-lg mb-8">
+            Pro users get a detailed breakdown of every gap in their codebase,
+            prioritized by impact and effort required.
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 w-full max-w-3xl">
+            <div className="text-center p-4 rounded-lg bg-card/50 border border-border/50">
+              <Target className="h-6 w-6 text-red-400 mx-auto mb-2" />
+              <div className="font-semibold">Priority Matrix</div>
+              <div className="text-sm text-muted-foreground">What to fix first</div>
+            </div>
+            <div className="text-center p-4 rounded-lg bg-card/50 border border-border/50">
+              <Clock className="h-6 w-6 text-red-400 mx-auto mb-2" />
+              <div className="font-semibold">Time Estimates</div>
+              <div className="text-sm text-muted-foreground">Per gap & total</div>
+            </div>
+            <div className="text-center p-4 rounded-lg bg-card/50 border border-border/50">
+              <Code2 className="h-6 w-6 text-red-400 mx-auto mb-2" />
+              <div className="font-semibold">Code Suggestions</div>
+              <div className="text-sm text-muted-foreground">AI-generated fixes</div>
+            </div>
+            <div className="text-center p-4 rounded-lg bg-card/50 border border-border/50">
+              <CheckCircle className="h-6 w-6 text-red-400 mx-auto mb-2" />
+              <div className="font-semibold">Progress Tracking</div>
+              <div className="text-sm text-muted-foreground">Mark as done</div>
+            </div>
+          </div>
+
+          <Button asChild size="lg" className="bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-400 hover:to-orange-400 text-white font-bold">
+            <Link href="/pricing">
+              Upgrade to Pro
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Blurred Preview */}
+      <div className="relative">
+        <div className="absolute inset-0 bg-background/60 backdrop-blur-sm z-10 flex items-center justify-center">
+          <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-lg px-4 py-2">
+            <Lock className="h-4 w-4 mr-2" />
+            Pro Feature Preview
+          </Badge>
+        </div>
+        <div className="opacity-50 space-y-4">
+          <div className="grid grid-cols-4 gap-4">
+            <Card className="p-4">
+              <div className="text-2xl font-bold">12</div>
+              <p className="text-sm text-muted-foreground">Total Gaps</p>
+            </Card>
+            <Card className="p-4 bg-red-950/30">
+              <div className="text-2xl font-bold text-red-400">3</div>
+              <p className="text-sm text-muted-foreground">Critical</p>
+            </Card>
+            <Card className="p-4">
+              <div className="text-2xl font-bold">24h</div>
+              <p className="text-sm text-muted-foreground">Total Effort</p>
+            </Card>
+            <Card className="p-4 bg-green-950/30">
+              <div className="text-2xl font-bold text-green-400">5</div>
+              <p className="text-sm text-muted-foreground">Completed</p>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function LoadingSkeleton() {
   return (
@@ -24,15 +128,15 @@ function LoadingSkeleton() {
   )
 }
 
-async function GapsDashboardContent() {
-  let gaps: any[] = []
-  let summary: any = { total_gaps: 0, blocking_gaps: 0, total_hours: 0, by_category: {}, completed_count: 0 }
+async function GapsDashboardContent({ userId }: { userId: string }) {
+  let gaps: MissingFileGap[] = []
+  let summary: GapSummary = { total_gaps: 0, blocking_gaps: 0, total_hours: 0, by_category: {}, completed_count: 0 }
   let setupRequired = false
 
   try {
     [gaps, summary] = await Promise.all([
-      getAllMissingGaps(),
-      getGapSummary(),
+      getAllMissingGaps(userId),
+      getGapSummary(userId),
     ])
   } catch (error) {
     console.error('[v0] Failed to fetch gaps:', error)
@@ -72,11 +176,18 @@ async function GapsDashboardContent() {
 
   try {
     ;[gaps, summary] = await Promise.all([
-      getAllMissingGaps(),
-      getGapSummary(),
+      getAllMissingGaps(userId),
+      getGapSummary(userId),
     ])
   } catch {
     // Database tables may not exist yet
+  }
+
+  let completedGapIds: string[] = []
+  try {
+    completedGapIds = await getCompletedGapIdsForUser(userId)
+  } catch {
+    completedGapIds = []
   }
 
   const gapsByPriority = groupGapsByPriority(gaps)
@@ -167,39 +278,7 @@ async function GapsDashboardContent() {
       {/* Priority Matrix */}
       <GapPriorityMatrix gaps={gaps} />
 
-      {/* Priority Groups */}
-      <div className="space-y-6">
-        {Object.entries(priorityCounts)
-          .filter(([_, count]) => count > 0)
-          .map(([priority, count]) => (
-            <div key={priority} className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="capitalize">
-                  {priority} Priority
-                </Badge>
-                <span className="text-sm text-muted-foreground">
-                  {count} gap{count !== 1 ? 's' : ''} • {' '}
-                  {Math.round(
-                    calculateTotalEffort(
-                      gapsByPriority[priority as keyof typeof gapsByPriority]
-                    )
-                  )}
-                  h effort
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {gapsByPriority[priority as keyof typeof gapsByPriority].map(gap => (
-                  <MissingFileCard
-                    key={gap.id}
-                    gap={gap}
-                    allGaps={gaps}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
-      </div>
+      <GapsPriorityGroups gaps={gaps} completedGapIds={completedGapIds} />
 
       {/* Category Breakdown */}
       {Object.keys(categoryGroups).length > 0 && (
@@ -208,7 +287,7 @@ async function GapsDashboardContent() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {Object.entries(categoryGroups).map(([category, categoryGaps]) => {
               const cat = gapCategories[category] || gapCategories.other
-              const gaps_array = categoryGaps as any[]
+              const gaps_array = categoryGaps as MissingFileGap[]
               return (
                 <Card key={category} className="p-3">
                   <div className="flex items-start gap-2">
@@ -235,11 +314,23 @@ async function GapsDashboardContent() {
   )
 }
 
-export default function GapsDashboardPage() {
+export default async function GapsDashboardPage() {
+  // Check if user is Pro
+  const user = await getCurrentUser()
+  const { canAccessPro: isPro } = user ? await resolveProAccess(user) : { canAccessPro: false }
+
+  if (!user || !isPro) {
+    return (
+      <div className="p-6 space-y-6">
+        <ProUpgradeGate />
+      </div>
+    )
+  }
+
   return (
     <div className="p-6 space-y-6">
       <Suspense fallback={<LoadingSkeleton />}>
-        <GapsDashboardContent />
+        <GapsDashboardContent userId={user.id} />
       </Suspense>
     </div>
   )

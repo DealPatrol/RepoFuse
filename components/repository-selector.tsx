@@ -72,11 +72,16 @@ export function RepositorySelector() {
         }),
       })
 
-      if (!res.ok) throw new Error('Failed to create analysis')
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to create analysis')
+      }
       const analysis = await res.json()
       window.location.href = `/dashboard/analyses/${analysis.id}`
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to start analysis')
+      const errorMsg = err instanceof Error ? err.message : 'Failed to start analysis'
+      console.error('[v0] Analysis creation error:', errorMsg)
+      alert(errorMsg)
     }
   }
 

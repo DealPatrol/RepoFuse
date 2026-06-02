@@ -2,10 +2,14 @@ import { getDb } from '@/lib/db'
 
 // Credit constants
 export const CREDITS = {
-  INITIAL_GRANT: 5000, // Credits given on Pro signup
-  MONTHLY_GRANT: 5000, // Credits given on monthly renewal
-  ANALYSIS_COST: 100, // Credits per analysis
-  SCAFFOLD_COST: 250, // Credits per scaffold generation
+  INITIAL_GRANT: 500,           // Credits given on free signup (trial)
+  PRO_MONTHLY_GRANT: 3000,      // Credits given to Pro on monthly renewal
+  SCALE_MONTHLY_GRANT: 12000,   // Credits given to Scale on monthly renewal
+  MONTHLY_GRANT: 3000,          // Legacy alias — matches Pro grant
+  ANALYSIS_COST: 100,           // Credits per analysis run
+  SCAFFOLD_COST: 150,           // Credits per scaffold generation
+  BUILD_APP_COST: 500,          // Credits per Build This App
+  PATTERN_ANALYZER_COST: 100,   // Credits per Pattern Analyzer scan
 }
 
 // Types
@@ -24,7 +28,7 @@ export interface CreditTransaction {
   id: string
   user_id: string
   amount: number
-  transaction_type: 'grant' | 'analysis' | 'scaffold' | 'refund' | 'renewal'
+  transaction_type: 'grant' | 'analysis' | 'scaffold' | 'build_app' | 'pattern_analyzer' | 'refund' | 'renewal'
   reason: string | null
   metadata: Record<string, any>
   balance_after: number
@@ -105,11 +109,11 @@ export async function grantCredits(
   return transaction[0] as CreditTransaction
 }
 
-// Deduct credits (for analysis or scaffold)
+// Deduct credits (for analysis, scaffold, build_app, or pattern_analyzer)
 export async function deductCredits(
   userId: string,
   amount: number,
-  type: 'analysis' | 'scaffold',
+  type: 'analysis' | 'scaffold' | 'build_app' | 'pattern_analyzer',
   metadata: Record<string, any> = {}
 ): Promise<{ success: boolean; transaction?: CreditTransaction; error?: string }> {
   const sql = getDb()
@@ -138,13 +142,12 @@ export async function deductCredits(
   `
   
   // Record transaction
-  const transactionType = type === 'analysis' ? 'analysis' : 'scaffold'
   const transaction = await sql`
     INSERT INTO credit_transactions (
       user_id, amount, transaction_type, reason, metadata, balance_after
     )
     VALUES (
-      ${userId}, ${-amount}, ${transactionType}, ${`${type} deduction`}, ${JSON.stringify(metadata)}::jsonb, ${newBalance}
+      ${userId}, ${-amount}, ${type}, ${`${type} deduction`}, ${JSON.stringify(metadata)}::jsonb, ${newBalance}
     )
     RETURNING *
   `

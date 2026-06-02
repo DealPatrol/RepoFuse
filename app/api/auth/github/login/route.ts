@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
+import { sanitizeReturnTo } from '@/lib/auth'
 
 function getBaseUrl(request: NextRequest) {
   return process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
@@ -18,13 +19,7 @@ export async function GET(request: NextRequest) {
 
   const state = crypto.randomUUID()
   const redirectUri = `${getBaseUrl(request)}/api/auth/github/callback`
-
-  console.log('[v0] GitHub OAuth login initiated', {
-    clientId,
-    redirectUri,
-    baseUrl: getBaseUrl(request),
-    hasAppUrl: !!process.env.NEXT_PUBLIC_APP_URL,
-  })
+  const returnTo = sanitizeReturnTo(request.nextUrl.searchParams.get('returnTo'))
 
   const params = new URLSearchParams({
     client_id: clientId,
@@ -35,6 +30,13 @@ export async function GET(request: NextRequest) {
 
   const response = NextResponse.redirect(`https://github.com/login/oauth/authorize?${params.toString()}`)
   response.cookies.set('github_oauth_state', state, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 60 * 10,
+  })
+  response.cookies.set('github_oauth_return_to', returnTo, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
