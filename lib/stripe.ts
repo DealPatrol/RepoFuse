@@ -2,16 +2,56 @@ import Stripe from 'stripe'
 
 let stripeInstance: Stripe | null = null
 
+type StripeMode = 'live' | 'test'
+
+function normalizeMode(value?: string): StripeMode {
+  if (value?.toLowerCase() === 'test') return 'test'
+  return 'live'
+}
+
+function detectModeFromKey(key: string): StripeMode {
+  if (key.startsWith('sk_test_') || key.startsWith('rk_test_')) return 'test'
+  return 'live'
+}
+
+function getConfiguredMode(): StripeMode {
+  return normalizeMode(process.env.STRIPE_MODE)
+}
+
+function getSecretKeyForMode(mode: StripeMode): string {
+  if (mode === 'live') {
+    return process.env.STRIPE_SECRET_KEY_LIVE || process.env.STRIPE_SECRET_KEY || ''
+  }
+  return process.env.STRIPE_SECRET_KEY_TEST || process.env.STRIPE_SECRET_KEY || ''
+}
+
+export function getWebhookSecret(): string {
+  const mode = getConfiguredMode()
+  if (mode === 'live') {
+    return process.env.STRIPE_WEBHOOK_SECRET_LIVE || process.env.STRIPE_WEBHOOK_SECRET || ''
+  }
+  return process.env.STRIPE_WEBHOOK_SECRET_TEST || process.env.STRIPE_WEBHOOK_SECRET || ''
+}
+
 export function isStripeConfigured(): boolean {
-  return !!(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PRO_PRICE_ID)
+  return !!(getSecretKeyForMode(getConfiguredMode()) && getPriceId())
 }
 
 export function getStripe(): Stripe {
-  if (!process.env.STRIPE_SECRET_KEY) {
+  const mode = getConfiguredMode()
+  const secretKey = getSecretKeyForMode(mode)
+
+  if (!secretKey) {
     throw new Error('STRIPE_SECRET_KEY is not set')
   }
+  const keyMode = detectModeFromKey(secretKey)
+  if (keyMode !== mode) {
+    throw new Error(
+      `Stripe mode mismatch: STRIPE_MODE=${mode} but key appears to be ${keyMode}. Update keys to match selected mode.`,
+    )
+  }
   if (!stripeInstance) {
-    stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY, {
+    stripeInstance = new Stripe(secretKey, {
       typescript: true,
     })
   }
@@ -52,5 +92,9 @@ export const PLANS = {
 export type PlanId = keyof typeof PLANS
 
 export function getPriceId(): string {
-  return process.env.STRIPE_PRO_PRICE_ID || ''
+  const mode = getConfiguredMode()
+  if (mode === 'live') {
+    return process.env.STRIPE_PRO_PRICE_ID_LIVE || process.env.STRIPE_PRO_PRICE_ID || ''
+  }
+  return process.env.STRIPE_PRO_PRICE_ID_TEST || process.env.STRIPE_PRO_PRICE_ID || ''
 }

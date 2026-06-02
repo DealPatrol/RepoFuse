@@ -16,6 +16,9 @@ export async function POST() {
 
     const priceId = getPriceId()
     const stripe = getStripe()
+    if (!priceId) {
+      return NextResponse.json({ error: 'Stripe price is not configured.' }, { status: 503 })
+    }
     let sub = await getSubscriptionByGithubId(user.github_id)
 
     if (!sub) {
@@ -49,6 +52,7 @@ export async function POST() {
     return NextResponse.json({ url: session.url })
   } catch (error) {
     console.error('Stripe checkout error:', error)
-    return NextResponse.json({ error: 'Failed to create checkout session' }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Failed to create checkout session'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
