@@ -40,28 +40,8 @@ export default async function AnalysisDetailPage({
       getRepositoriesForAnalysis(id, user.id),
       getBlueprintsByAnalysis(id, user.id),
     ])
-<<<<<<< HEAD
-  } catch (error) {
-    console.error('[analysis-detail] Failed to load analysis data:', error)
-    notFound()
-  }
-
-  if (user) {
-    try {
-      const [subscription, viewedIds] = await Promise.all([
-        getSubscriptionByGithubId(user.github_id),
-        getUserViewedBlueprintIds(user.id),
-      ])
-      userPlan = subscription?.plan || 'free'
-      viewedBlueprintIds = viewedIds
-      isTrialing = subscription?.status === 'trialing'
-    } catch (error) {
-      console.error('[analysis-detail] Failed to load subscription/views, using free defaults:', error)
-    }
-=======
   } catch {
     notFound()
->>>>>>> origin/main
   }
 
   try {

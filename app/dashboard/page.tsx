@@ -144,23 +144,12 @@ function RepoCard({ repo }: { repo: Repository }) {
 export default async function DashboardPage() {
   let repositories: Repository[] = []
   let analyses: Analysis[] = []
-<<<<<<< HEAD
-  let gapSummary = { total_gaps: 0, blocking_gaps: 0, total_hours: 0, completed_count: 0, by_category: {} }
-
-  try {
-    repositories = await getAllRepositories()
-    analyses = await getAllAnalyses()
-    gapSummary = await getGapSummary()
-  } catch (error) {
-    console.error('[dashboard] Failed to load page data:', error)
-=======
   let gapSummary = {
     total_gaps: 0,
     blocking_gaps: 0,
     total_hours: 0,
     completed_count: 0,
     by_category: {} as Record<string, number>,
->>>>>>> origin/main
   }
 
   try {

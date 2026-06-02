@@ -49,17 +49,11 @@ export default async function BuiltAppsPage() {
   let detectedApps: DetectedApp[] = []
 
   try {
-<<<<<<< HEAD
-    detectedApps = await getDetectedApps()
-  } catch (error) {
-    console.error('[built-apps] Failed to load apps:', error)
-=======
     if (user) {
       detectedApps = await getDetectedApps(user.id)
     }
   } catch {
     // Database not available
->>>>>>> origin/main
   }
 
   return (

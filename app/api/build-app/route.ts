@@ -1,19 +1,8 @@
 import { NextRequest } from 'next/server'
 import { generateWithGateway } from '@/lib/ai-gateway'
 import { getCurrentUser } from '@/lib/auth'
-<<<<<<< HEAD
-import { getAnthropicModel } from '@/lib/anthropic-model'
-import { getCreditBalance, deductCredits, CREDITS } from '@/lib/credits'
-import type { AppBlueprint } from '@/lib/queries'
-
-export const maxDuration = 120
-export const dynamic = 'force-dynamic'
-
-const anthropic = new Anthropic()
-=======
 import { getSubscriptionByGithubId, upsertSubscription, type AppBlueprint } from '@/lib/queries'
 import { hasProAccess } from '@/lib/pro-access'
->>>>>>> origin/main
 
 type Platform = 'github' | 'gitlab'
 
@@ -71,26 +60,6 @@ Rules:
 Return format: {"path/to/file.ts": "...full content...", "README.md": "..."}
 `
 
-<<<<<<< HEAD
-  // Use streaming so Vercel keeps the function alive during generation
-  // and we aren't blocked waiting for a single large response.
-  let raw = ''
-  const stream = anthropic.messages.stream({
-    model: getAnthropicModel(),
-    max_tokens: 8192,
-    messages: [{ role: 'user', content: prompt }],
-  })
-  for await (const chunk of stream) {
-    if (
-      chunk.type === 'content_block_delta' &&
-      chunk.delta.type === 'text_delta'
-    ) {
-      raw += chunk.delta.text
-    }
-  }
-
-  raw = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
-=======
   const raw = (
     await generateWithGateway({
       feature: 'build-app',
@@ -100,9 +69,8 @@ Return format: {"path/to/file.ts": "...full content...", "README.md": "..."}
     })
   ).trim()
   const jsonText = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
->>>>>>> origin/main
 
-  const obj = JSON.parse(raw) as Record<string, unknown>
+  const obj = JSON.parse(jsonText) as Record<string, unknown>
   const files: Record<string, string> = {}
   for (const [k, v] of Object.entries(obj)) {
     files[k] = typeof v === 'string' ? v : JSON.stringify(v, null, 2)
@@ -269,19 +237,6 @@ export async function POST(request: NextRequest) {
 
         const cleanRepoName = repoName.trim().replace(/\s+/g, '-').toLowerCase()
 
-        // Verify the user can afford the build up front, but only charge them
-        // once the app is actually built (see the deduction after 'done' below).
-        // This prevents losing credits when generation, repo creation, or pushing fails.
-        const balance = await getCreditBalance(user.id)
-        if (balance < CREDITS.BUILD_APP_COST) {
-          send({
-            step: 'error',
-            message: `Insufficient credits. Required: ${CREDITS.BUILD_APP_COST}, Available: ${balance}`,
-          })
-          controller.close()
-          return
-        }
-
         // Step 1 — generate files with Claude
         send({ step: 'generating', message: 'Generating file contents with Claude…' })
 
@@ -354,20 +309,6 @@ export async function POST(request: NextRequest) {
             current: pushed,
             total: fileEntries.length,
           })
-        }
-
-        // The build succeeded — charge the user now. Deducting here (rather than
-        // up front) guarantees failed builds never cost credits. A deduction
-        // failure must not turn a successful build into an error, so it's logged
-        // rather than surfaced.
-        try {
-          await deductCredits(user.id, CREDITS.BUILD_APP_COST, 'build_app', {
-            repoName: cleanRepoName,
-            platform,
-            filesCreated: pushed,
-          })
-        } catch (e) {
-          console.error('[build-app] credit deduction failed after successful build:', e)
         }
 
         send({

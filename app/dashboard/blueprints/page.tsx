@@ -51,15 +51,6 @@ export default async function BlueprintsPage() {
   let blueprints: BlueprintCard[] = []
 
   try {
-<<<<<<< HEAD
-    blueprints = await getBlueprintsFromAnalyses()
-  } catch (error) {
-    console.error('[blueprints] Failed to load blueprints:', error)
-  }
-
-  // Check if user is Pro
-  const isPro = false // In production: check user.subscription_tier === 'pro'
-=======
     if (user) {
       blueprints = await getBlueprintsFromAnalyses(user.id)
     }
@@ -68,7 +59,6 @@ export default async function BlueprintsPage() {
   }
   
   const { canAccessPro: isPro } = user ? await resolveProAccess(user) : { canAccessPro: false }
->>>>>>> origin/main
 
   if (!isPro) {
     return (

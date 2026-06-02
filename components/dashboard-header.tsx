@@ -2,11 +2,6 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-<<<<<<< HEAD
-import { Github, BarChart3, FolderGit2, Sparkles, CreditCard, LayoutGrid, MessageSquare, ShieldAlert } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { RepoFuseLogo3D } from '@/components/repofuse-logo-3d'
-=======
 import {
   Github,
   BarChart3,
@@ -22,7 +17,6 @@ import {
 import { cn } from '@/lib/utils'
 import { RepoFuseLogo3D } from '@/components/repofuse-logo-3d'
 import { UserButton } from '@clerk/nextjs'
->>>>>>> origin/main
 import type { AuthUser } from '@/lib/auth'
 import { authSignInHref } from '@/components/auth-sign-in-link'
 import { isClerkEnabled } from '@/lib/clerk-auth'
@@ -35,16 +29,10 @@ const navItems = [
   { href: '/dashboard', label: 'Overview', icon: BarChart3 },
   { href: '/dashboard/repositories', label: 'Repos', icon: FolderGit2 },
   { href: '/dashboard/analyses', label: 'Analyses', icon: Sparkles },
-<<<<<<< HEAD
-  { href: '/dashboard/idea-board', label: 'Idea Board', icon: LayoutGrid },
-  { href: '/dashboard/pattern-analyzer', label: 'App Idea Chat', icon: MessageSquare },
-  { href: '/dashboard/debt-scanner', label: 'Debt Scanner', icon: ShieldAlert },
-=======
   { href: '/dashboard/pattern-analyzer', label: 'App Idea Chat', icon: MessageSquare },
   { href: '/dashboard/templates/browse', label: 'Templates', icon: LayoutTemplate },
   { href: '/dashboard/gaps', label: 'Gaps', icon: AlertTriangle },
   { href: '/dashboard/idea-board', label: 'Liked Apps', icon: LayoutGrid },
->>>>>>> origin/main
   { href: '/dashboard/billing', label: 'Billing', icon: CreditCard },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ]
@@ -88,24 +76,6 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
           <div className="flex items-center gap-3">
             {user ? (
               <div className="flex items-center gap-3">
-<<<<<<< HEAD
-                {user.github_avatar_url && (
-                  <img
-                    src={user.github_avatar_url}
-                    alt={user.github_username}
-                    className="h-8 w-8 rounded-full ring-2 ring-cyan-500/40"
-                  />
-                )}
-                <div className="hidden sm:block text-right">
-                  <p className="text-xs font-mono font-medium text-cyan-300 leading-none">@{user.github_username}</p>
-                  <a
-                    href="/api/auth/logout"
-                    className="text-xs text-cyan-400/40 hover:text-cyan-300 transition-colors"
-                  >
-                    Sign out
-                  </a>
-                </div>
-=======
                 {isClerkEnabled() ? (
                   <UserButton />
                 ) : (
@@ -128,16 +98,11 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
                     </div>
                   </>
                 )}
->>>>>>> origin/main
               </div>
             ) : (
               <div className="flex items-center gap-2">
                 <a
-<<<<<<< HEAD
-                  href="/api/auth/github/login"
-=======
                   href={authSignInHref()}
->>>>>>> origin/main
                   className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono text-cyan-400/60 hover:text-cyan-300 hover:bg-cyan-950/30 transition-all border border-transparent hover:border-cyan-500/20"
                 >
                   <Github className="h-4 w-4" />

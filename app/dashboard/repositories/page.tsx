@@ -20,18 +20,12 @@ export default async function RepositoriesPage() {
   let repositories: Repository[] = []
 
   try {
-<<<<<<< HEAD
-    repositories = await getAllRepositories()
-  } catch (error) {
-    console.error('[repositories] Failed to load repositories:', error)
-=======
     const user = await getCurrentUser()
     if (user) {
       repositories = await getAllRepositories(user.id)
     }
   } catch {
     // Database not available yet
->>>>>>> origin/main
   }
 
   return (
