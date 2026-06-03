@@ -10,10 +10,9 @@ export function HeroChat() {
     if (!message.trim()) return
     setSubmitted(true)
 
-    // After 2 seconds of analyzing, redirect to sign in
+    // After 2 seconds of analyzing, redirect to GitHub sign in
     setTimeout(() => {
-      const encodedMessage = encodeURIComponent(message)
-      window.location.href = `/api/auth/github/login?redirect=/dashboard&idea=${encodedMessage}`
+      window.location.href = `/api/auth/github/login?returnTo=/dashboard`
     }, 2000)
   }
 
