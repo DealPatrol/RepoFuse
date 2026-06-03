@@ -69,11 +69,16 @@ import {
 
         <main>
           {/* ── Hero ── */}
-          <section className="relative pt-24 pb-20 overflow-hidden">
+          <section className="relative pt-12 pb-20 overflow-hidden">
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-[radial-gradient(ellipse_at_center,rgba(6,182,212,0.08)_0%,rgba(13,17,23,0)_70%)] pointer-events-none" />
             <div className="absolute bottom-0 right-1/3 w-64 h-64 bg-[radial-gradient(ellipse_at_center,rgba(245,158,11,0.06)_0%,rgba(13,17,23,0)_70%)] pointer-events-none" />
 
             <div className="container mx-auto px-4 max-w-4xl text-center relative z-10">
+              {/* Hero Chat - Interactive Intent Capture at Top */}
+              <div className="mb-20">
+                <HeroChat />
+              </div>
+
               {/* Badge */}
               <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full border border-[#F59E0B]/30 bg-[#F59E0B]/10 text-sm text-[#F59E0B] mb-10">
                 <span className="w-2 h-2 rounded-full bg-[#F59E0B] animate-pulse" />
@@ -98,11 +103,6 @@ import {
                 RepoFuse scans your GitHub and GitLab repos, surfaces project ideas, and turns scattered code into your next launch —{' '}
                 <strong className="text-[#F0F6FC] font-semibold">automatically.</strong>
               </p>
-
-              {/* Hero Chat */}
-              <div className="mb-12">
-                <HeroChat />
-              </div>
 
               {/* CTAs */}
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-4">
