@@ -76,7 +76,7 @@ import {
               </div>
 
               {/* Badge */}
-              <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full border border-[#F59E0B]/30 bg-[#F59E0B]/10 text-sm text-[#F59E0B] mb-10">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#161B22] border border-[#30363D] mb-6 text-xs font-mono text-[#8B949E]">
                 <span className="w-2 h-2 rounded-full bg-[#F59E0B] animate-pulse" />
                 <span className="flex items-center gap-1.5 font-semibold">
                   <Zap className="h-3.5 w-3.5" />
@@ -88,9 +88,9 @@ import {
 
               {/* Headline */}
               <h1 className="font-mono text-5xl sm:text-6xl md:text-7xl font-bold leading-[1.1] tracking-tight mb-8 text-[#F0F6FC]">
-                Your repos are hiding<br className="hidden md:block" />
+                Unlock ideas from<br className="hidden md:block" />
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#06B6D4] to-[#F59E0B]">
-                  {' '}buildable apps.
+                  {' '}your code.
                 </span>
               </h1>
 
