@@ -1,11 +1,12 @@
 import Link from 'next/link'
-  import { RepoFuseLogo3D } from '@/components/repofuse-logo-3d'
-  import { NavDropdown } from '@/components/nav-dropdown'
-  import {
-    Github, ArrowRight, AlertCircle, Zap, Play,
-    GitPullRequest, Mail, CheckCircle2, Workflow,
-    MessageSquare, Layers, Activity, Database, Terminal,
-  } from 'lucide-react'
+import { RepoFuseLogo3D } from '@/components/repofuse-logo-3d'
+import { NavDropdown } from '@/components/nav-dropdown'
+import { HeroChat } from '@/components/hero-chat'
+import {
+  Github, ArrowRight, AlertCircle, Zap, Play,
+  GitPullRequest, Mail, CheckCircle2, Workflow,
+  MessageSquare, Layers, Activity, Database, Terminal,
+} from 'lucide-react'
 
   const ERROR_MESSAGES: Record<string, string> = {
     auth_required: 'You must sign in to access the dashboard.',
@@ -93,10 +94,15 @@ import Link from 'next/link'
               </h1>
 
               {/* Subheading */}
-              <p className="text-xl text-[#8B949E] max-w-2xl mx-auto leading-relaxed mb-10">
+              <p className="text-xl text-[#8B949E] max-w-2xl mx-auto leading-relaxed mb-12">
                 RepoFuse scans your GitHub and GitLab repos, surfaces project ideas, and turns scattered code into your next launch —{' '}
                 <strong className="text-[#F0F6FC] font-semibold">automatically.</strong>
               </p>
+
+              {/* Hero Chat */}
+              <div className="mb-12">
+                <HeroChat />
+              </div>
 
               {/* CTAs */}
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-4">
