@@ -42,7 +42,7 @@ import {
         {/* Header */}
         <header className="sticky top-0 z-50 border-b border-[#30363D] bg-[#0D1117]/80 backdrop-blur-md">
           <div className="container mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2.5 flex-shrink-0">
+            <Link href="/" className="flex items-center gap-2.5 flex-shrink-0 pl-4">
               <RepoFuseLogo3D className="h-9 w-9 mt-4" />
               <span className="text-sm font-bold text-[#F0F6FC] hidden sm:block font-mono">RepoFuse</span>
             </Link>
@@ -58,10 +58,6 @@ import {
               <a href="/api/auth/github/login" className="flex items-center gap-2 text-xs font-medium text-[#8B949E] hover:text-[#F0F6FC] px-3 py-2 rounded-lg border border-[#30363D] hover:border-[#8B949E] transition-all bg-[#161B22]">
                 <Github className="h-3.5 w-3.5" />
                 Sign in
-              </a>
-              <a href="/api/auth/github/login" className="flex items-center gap-2 text-xs font-bold text-[#0D1117] px-4 py-2 rounded-lg bg-[#F0F6FC] hover:bg-[#c9d1d9] transition-all">
-                Get Started
-                <ArrowRight className="h-3.5 w-3.5" />
               </a>
             </div>
           </div>
