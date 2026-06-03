@@ -1,11 +1,12 @@
 import Link from 'next/link'
-  import { RepoFuseLogo3D } from '@/components/repofuse-logo-3d'
-  import { NavDropdown } from '@/components/nav-dropdown'
-  import {
-    Github, ArrowRight, AlertCircle, Zap, Play,
-    GitPullRequest, Mail, CheckCircle2, Workflow,
-    MessageSquare, Layers, Activity, Database, Terminal,
-  } from 'lucide-react'
+import { RepoFuseLogo3D } from '@/components/repofuse-logo-3d'
+import { NavDropdown } from '@/components/nav-dropdown'
+import { HeroChat } from '@/components/hero-chat'
+import {
+  Github, ArrowRight, AlertCircle, Zap, Play,
+  GitPullRequest, Mail, CheckCircle2, Workflow,
+  MessageSquare, Layers, Activity, Database, Terminal,
+} from 'lucide-react'
 
   const ERROR_MESSAGES: Record<string, string> = {
     auth_required: 'You must sign in to access the dashboard.',
@@ -41,7 +42,7 @@ import Link from 'next/link'
         {/* Header */}
         <header className="sticky top-0 z-50 border-b border-[#30363D] bg-[#0D1117]/80 backdrop-blur-md">
           <div className="container mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2.5 flex-shrink-0">
+            <Link href="/" className="flex items-center gap-2.5 flex-shrink-0 pl-4">
               <RepoFuseLogo3D className="h-9 w-9 mt-4" />
               <span className="text-sm font-bold text-[#F0F6FC] hidden sm:block font-mono">RepoFuse</span>
             </Link>
@@ -58,23 +59,24 @@ import Link from 'next/link'
                 <Github className="h-3.5 w-3.5" />
                 Sign in
               </a>
-              <a href="/api/auth/github/login" className="flex items-center gap-2 text-xs font-bold text-[#0D1117] px-4 py-2 rounded-lg bg-[#F0F6FC] hover:bg-[#c9d1d9] transition-all">
-                Get Started
-                <ArrowRight className="h-3.5 w-3.5" />
-              </a>
             </div>
           </div>
         </header>
 
         <main>
           {/* ── Hero ── */}
-          <section className="relative pt-24 pb-20 overflow-hidden">
+          <section className="relative pt-12 pb-20 overflow-hidden">
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-[radial-gradient(ellipse_at_center,rgba(6,182,212,0.08)_0%,rgba(13,17,23,0)_70%)] pointer-events-none" />
             <div className="absolute bottom-0 right-1/3 w-64 h-64 bg-[radial-gradient(ellipse_at_center,rgba(245,158,11,0.06)_0%,rgba(13,17,23,0)_70%)] pointer-events-none" />
 
             <div className="container mx-auto px-4 max-w-4xl text-center relative z-10">
+              {/* Hero Chat - Interactive Intent Capture at Top */}
+              <div className="mb-20">
+                <HeroChat />
+              </div>
+
               {/* Badge */}
-              <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full border border-[#F59E0B]/30 bg-[#F59E0B]/10 text-sm text-[#F59E0B] mb-10">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#161B22] border border-[#30363D] mb-6 text-xs font-mono text-[#8B949E]">
                 <span className="w-2 h-2 rounded-full bg-[#F59E0B] animate-pulse" />
                 <span className="flex items-center gap-1.5 font-semibold">
                   <Zap className="h-3.5 w-3.5" />
@@ -86,14 +88,14 @@ import Link from 'next/link'
 
               {/* Headline */}
               <h1 className="font-mono text-5xl sm:text-6xl md:text-7xl font-bold leading-[1.1] tracking-tight mb-8 text-[#F0F6FC]">
-                Your repos are hiding<br className="hidden md:block" />
+                Unlock ideas from<br className="hidden md:block" />
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#06B6D4] to-[#F59E0B]">
-                  {' '}buildable apps.
+                  {' '}your code.
                 </span>
               </h1>
 
               {/* Subheading */}
-              <p className="text-xl text-[#8B949E] max-w-2xl mx-auto leading-relaxed mb-10">
+              <p className="text-xl text-[#8B949E] max-w-2xl mx-auto leading-relaxed mb-12">
                 RepoFuse scans your GitHub and GitLab repos, surfaces project ideas, and turns scattered code into your next launch —{' '}
                 <strong className="text-[#F0F6FC] font-semibold">automatically.</strong>
               </p>
