@@ -37,35 +37,22 @@ export function isStripeConfigured(): boolean {
   return !!(getSecretKeyForMode(getConfiguredMode()) && getPriceId())
 }
 
+export function getPriceIdForPlan(plan: 'pro' | 'scale'): string {
+  const mode = getConfiguredMode()
+  if (plan === 'scale') {
+    return mode === 'live'
+      ? (process.env.STRIPE_SCALE_PRICE_ID_LIVE || process.env.STRIPE_SCALE_PRICE_ID || '')
+      : (process.env.STRIPE_SCALE_PRICE_ID_TEST || process.env.STRIPE_SCALE_PRICE_ID || '')
+  }
+  return getPriceId()
+}
+
 export function getStripe(): Stripe {
   const mode = getConfiguredMode()
   const secretKey = getSecretKeyForMode(mode)
 
   if (!secretKey) {
     throw new Error('STRIPE_SECRET_KEY is not set')
-function getLiveStripeEnv(name: 'SECRET_KEY' | 'WEBHOOK_SECRET' | 'PRO_PRICE_ID' | 'SCALE_PRICE_ID'): string {
-  return process.env[`STRIPE_LIVE_${name}`] || process.env[`STRIPE_${name}`] || ''
-}
-
-export function isStripeConfigured(): boolean {
-  return !!(getLiveStripeEnv('SECRET_KEY') && getLiveStripeEnv('PRO_PRICE_ID'))
-}
-
-export function getPriceIdForPlan(plan: 'pro' | 'scale'): string {
-  if (plan === 'scale') return getLiveStripeEnv('SCALE_PRICE_ID')
-  return getLiveStripeEnv('PRO_PRICE_ID')
-}
-
-export function getStripe(): Stripe {
-  const secretKey = getLiveStripeEnv('SECRET_KEY')
-  console.log('[v0] getStripe() called')
-  console.log('[v0] Checking env vars:')
-  console.log('[v0] STRIPE_LIVE_SECRET_KEY:', process.env.STRIPE_LIVE_SECRET_KEY ? '***SET***' : 'NOT SET')
-  console.log('[v0] STRIPE_SECRET_KEY:', process.env.STRIPE_SECRET_KEY ? '***SET***' : 'NOT SET')
-  console.log('[v0] Available env keys containing STRIPE:', Object.keys(process.env).filter(k => k.includes('STRIPE')))
-  
-  if (!secretKey) {
-    throw new Error('STRIPE_LIVE_SECRET_KEY is not set')
   }
   const keyMode = detectModeFromKey(secretKey)
   if (keyMode !== mode) {
@@ -74,16 +61,9 @@ export function getStripe(): Stripe {
     )
   }
   if (!stripeInstance) {
-    stripeInstance = new Stripe(secretKey, {
-      apiVersion: '2026-04-22.dahlia',
-      typescript: true,
-    })
+    stripeInstance = new Stripe(secretKey, { typescript: true })
   }
   return stripeInstance
-}
-
-export function getStripeWebhookSecret(): string {
-  return getLiveStripeEnv('WEBHOOK_SECRET')
 }
 
 export const PLANS = {
@@ -142,15 +122,6 @@ export function getPriceId(): string {
     return process.env.STRIPE_PRO_PRICE_ID_LIVE || process.env.STRIPE_PRO_PRICE_ID || ''
   }
   return process.env.STRIPE_PRO_PRICE_ID_TEST || process.env.STRIPE_PRO_PRICE_ID || ''
-  return getPriceIdForPlan('pro')
-}
-
-export function getProPriceId(): string {
-  const priceId = process.env.STRIPE_PRO_PRICE_ID
-  if (!priceId) {
-    throw new Error('STRIPE_PRO_PRICE_ID is not configured')
-  }
-  return priceId
 }
 
 export function getAppUrl(origin?: string): string {

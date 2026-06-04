@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getStripe, getWebhookSecret } from '@/lib/stripe'
-import { upsertSubscription, getSubscriptionByStripeCustomerId, getUserByGithubId } from '@/lib/queries'
-import { grantCredits, CREDITS } from '@/lib/credits'
 import type Stripe from 'stripe'
-import { CREDITS, grantCredits } from '@/lib/credits'
+import { grantCredits, CREDITS } from '@/lib/credits'
 import {
   getSubscriptionByStripeCustomerId,
   getUserByGithubId,
   updateUserBilling,
   upsertSubscription,
 } from '@/lib/queries'
-import { getPriceIdForPlan, getStripe } from '@/lib/stripe'
+import { getStripe, getWebhookSecret, getPriceIdForPlan } from '@/lib/stripe'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -132,17 +129,10 @@ async function persistSubscriptionState(params: {
 
 export async function POST(request: NextRequest) {
   const signature = request.headers.get('stripe-signature')
-
   const webhookSecret = getWebhookSecret()
+
   if (!signature || !webhookSecret) {
     return NextResponse.json({ error: 'Webhook not configured' }, { status: 400 })
-  if (!process.env.STRIPE_WEBHOOK_SECRET || !process.env.STRIPE_SECRET_KEY) {
-    console.error('[stripe/webhook] Missing STRIPE_WEBHOOK_SECRET or STRIPE_SECRET_KEY in environment')
-    return NextResponse.json({ error: 'Webhook not configured' }, { status: 503 })
-  }
-
-  if (!signature) {
-    return NextResponse.json({ error: 'Missing stripe-signature header' }, { status: 400 })
   }
 
   let body: string
