@@ -1,5 +1,5 @@
 import { getCurrentUser } from '@/lib/auth'
-import { DashboardHeader } from '@/components/dashboard-header'
+import { DashboardSidebar } from '@/components/dashboard-sidebar'
 
 export default async function DashboardLayout({
   children,
@@ -14,10 +14,19 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-black text-white">
-      <DashboardHeader user={user} />
-      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10">
-        {children}
+    <div className="flex h-screen bg-[#0D1117]">
+      {/* Sidebar */}
+      <DashboardSidebar user={user ? {
+        name: user.name || 'Developer',
+        email: user.email,
+        plan: 'pro'
+      } : undefined} />
+
+      {/* Main Content */}
+      <main className="flex-1 overflow-auto ml-64">
+        <div className="p-8">
+          {children}
+        </div>
       </main>
     </div>
   )
