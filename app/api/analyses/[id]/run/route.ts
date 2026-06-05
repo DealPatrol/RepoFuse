@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { aiConfigErrorMessage, getAnthropicClient, isAiConfigured } from '@/lib/ai-gateway'
 import { z } from 'zod'
 import { getCurrentAccessToken, getCurrentUser } from '@/lib/auth'
@@ -132,10 +132,23 @@ const CODE_EXTENSIONS = new Set([
 ])
 
 export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  req: NextRequest,
+  { params }: { params: { id: string } }
 ) {
-  const { id } = await params
+  // Check authentication first - redirect if not authenticated
+  const accessToken = await getCurrentAccessToken().catch(() => null)
+  if (!accessToken) {
+    const redirectUrl = new URL('/api/auth/github/login', req.url)
+    redirectUrl.searchParams.set('returnTo', `/dashboard/analyses/${params.id}`)
+    return NextResponse.redirect(redirectUrl)
+  }
+
+  const user = await getCurrentUser().catch(() => null)
+  if (!user) {
+    const redirectUrl = new URL('/api/auth/github/login', req.url)
+    redirectUrl.searchParams.set('returnTo', `/dashboard/analyses/${params.id}`)
+    return NextResponse.redirect(redirectUrl)
+  }
 
   // Create a stream for progress updates
   const encoder = new TextEncoder()
@@ -146,21 +159,8 @@ export async function POST(
       }
 
       try {
-        const accessToken = await getCurrentAccessToken()
-        if (!accessToken) {
-          send({ error: 'Sign in with GitHub before running an analysis.' })
-          controller.close()
-          return
-        }
         if (!isAiConfigured()) {
           send({ error: aiConfigErrorMessage() })
-          controller.close()
-          return
-        }
-
-        const user = await getCurrentUser()
-        if (!user) {
-          send({ error: 'Sign in with GitHub before running an analysis.' })
           controller.close()
           return
         }
