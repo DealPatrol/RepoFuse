@@ -1,16 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getStripe, getWebhookSecret } from '@/lib/stripe'
-import { upsertSubscription, getSubscriptionByStripeCustomerId, getUserByGithubId } from '@/lib/queries'
+import { getWebhookSecret, getStripe, getPriceIdForPlan } from '@/lib/stripe'
+import { upsertSubscription, getSubscriptionByStripeCustomerId, getUserByGithubId, updateUserBilling } from '@/lib/queries'
 import { grantCredits, CREDITS } from '@/lib/credits'
 import type Stripe from 'stripe'
-import { CREDITS, grantCredits } from '@/lib/credits'
-import {
-  getSubscriptionByStripeCustomerId,
-  getUserByGithubId,
-  updateUserBilling,
-  upsertSubscription,
-} from '@/lib/queries'
-import { getPriceIdForPlan, getStripe } from '@/lib/stripe'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
