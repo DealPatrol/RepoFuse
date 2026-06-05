@@ -129,7 +129,9 @@ export function getPriceId(): string {
 export function getProPriceId(): string {
   const priceId = getPriceId()
   if (!priceId) {
-    throw new Error('Pro price ID is not configured. Set STRIPE_PRO_PRICE_ID or STRIPE_PRO_PRICE_ID_LIVE/TEST.')
+    throw new Error(
+      'Pro price ID is not configured. Set STRIPE_PRO_PRICE_ID or STRIPE_PRO_PRICE_ID_LIVE/TEST.',
+    )
   }
   return priceId
 }

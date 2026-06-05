@@ -29,6 +29,9 @@ export async function POST(request: NextRequest) {
     }
 
     const stripe = getStripe()
+    if (!priceId) {
+      return NextResponse.json({ error: 'Stripe price is not configured.' }, { status: 503 })
+    }
     let sub = await getSubscriptionByGithubId(user.github_id)
 
     if (!sub) {
@@ -46,6 +49,7 @@ export async function POST(request: NextRequest) {
       console.log('[checkout] Created new customer:', customerId)
       await upsertSubscription({ github_id: user.github_id, stripe_customer_id: customerId })
     } else {
+      // Verify the customer exists in Stripe (in case it's a stale test ID)
       try {
         await stripe.customers.retrieve(customerId)
         console.log('[checkout] Verified existing customer:', customerId)
@@ -80,7 +84,7 @@ export async function POST(request: NextRequest) {
     console.log('[checkout] Creating session:', { plan, priceId, customerId })
     const session = await stripe.checkout.sessions.create(sessionParams)
 
-    console.log('[checkout] Checkout session created:', session.id)
+    console.log('[v0] Checkout session created:', session.id)
     return NextResponse.json({ url: session.url })
   } catch (error) {
     console.error('[checkout] Stripe checkout error:', error instanceof Error ? error.message : String(error))
