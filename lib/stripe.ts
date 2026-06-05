@@ -52,7 +52,9 @@ export function getStripe(): Stripe {
   const secretKey = getSecretKeyForMode(mode)
 
   if (!secretKey) {
-    throw new Error('STRIPE_SECRET_KEY is not set')
+    throw new Error(
+      `Stripe secret key not set for ${mode} mode. Set STRIPE_SECRET_KEY_${mode.toUpperCase()} or STRIPE_SECRET_KEY.`,
+    )
   }
   const keyMode = detectModeFromKey(secretKey)
   if (keyMode !== mode) {
@@ -122,6 +124,14 @@ export function getPriceId(): string {
     return process.env.STRIPE_PRO_PRICE_ID_LIVE || process.env.STRIPE_PRO_PRICE_ID || ''
   }
   return process.env.STRIPE_PRO_PRICE_ID_TEST || process.env.STRIPE_PRO_PRICE_ID || ''
+}
+
+export function getProPriceId(): string {
+  const priceId = getPriceId()
+  if (!priceId) {
+    throw new Error('Pro price ID is not configured. Set STRIPE_PRO_PRICE_ID or STRIPE_PRO_PRICE_ID_LIVE/TEST.')
+  }
+  return priceId
 }
 
 export function getAppUrl(origin?: string): string {

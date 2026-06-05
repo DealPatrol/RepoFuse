@@ -29,9 +29,6 @@ export async function POST(request: NextRequest) {
     }
 
     const stripe = getStripe()
-    if (!priceId) {
-      return NextResponse.json({ error: 'Stripe price is not configured.' }, { status: 503 })
-    }
     let sub = await getSubscriptionByGithubId(user.github_id)
 
     if (!sub) {
@@ -49,11 +46,10 @@ export async function POST(request: NextRequest) {
       console.log('[checkout] Created new customer:', customerId)
       await upsertSubscription({ github_id: user.github_id, stripe_customer_id: customerId })
     } else {
-      // Verify the customer exists in Stripe (in case it's a stale test ID)
       try {
         await stripe.customers.retrieve(customerId)
         console.log('[checkout] Verified existing customer:', customerId)
-      } catch (error) {
+      } catch {
         console.log('[checkout] Customer does not exist in Stripe (likely test ID), creating new one')
         const customer = await stripe.customers.create({
           metadata: { github_id: String(user.github_id), github_username: user.github_username },
@@ -84,18 +80,10 @@ export async function POST(request: NextRequest) {
     console.log('[checkout] Creating session:', { plan, priceId, customerId })
     const session = await stripe.checkout.sessions.create(sessionParams)
 
-    console.log('[v0] Checkout session created:', session.id)
+    console.log('[checkout] Checkout session created:', session.id)
     return NextResponse.json({ url: session.url })
   } catch (error) {
-    console.error('Stripe checkout error:', error)
-    const message = error instanceof Error ? error.message : 'Failed to create checkout session'
-    return NextResponse.json({ error: message }, { status: 500 })
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    console.error('[v0] Stripe checkout error:', errorMessage)
-    console.error('[v0] Full error:', JSON.stringify(error, null, 2))
-    if (error instanceof Error) {
-      console.error('[v0] Error stack:', error.stack)
-    }
-    return NextResponse.json({ error: 'Failed to create checkout session', details: errorMessage }, { status: 500 })
+    console.error('[checkout] Stripe checkout error:', error instanceof Error ? error.message : String(error))
+    return NextResponse.json({ error: 'Failed to create checkout session' }, { status: 500 })
   }
 }
