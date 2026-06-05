@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getAppUrl, getProPriceId, getStripe, isStripeConfigured } from '@/lib/stripe'
+import { getAppUrl, getPriceId, getStripe, isStripeConfigured } from '@/lib/stripe'
 import { updateUserBilling } from '@/lib/queries'
 
 export async function GET(request: NextRequest) {
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
       customer: customerId,
       line_items: [
         {
-          price: getProPriceId(),
+          price: getPriceId(),
           quantity: 1,
         },
       ],
