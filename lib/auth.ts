@@ -174,7 +174,7 @@ async function getCurrentUserFromCookies(): Promise<AuthUser | null> {
       LIMIT 1
     `
     const row = users[0] as AuthUser | undefined
-    if (row?.access_token === tokenCookie) {
+    if (row?.access_token && tokenCookie === row.access_token) {
       return row
     }
     if (row && tokenCookie) {

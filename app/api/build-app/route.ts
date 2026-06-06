@@ -133,8 +133,8 @@ async function pushFileToGitHub(
   )
 
   if (!res.ok) {
-    const err = (await res.json()) as { message?: string }
-    console.warn(`[build-app] Failed to push ${path}: ${err.message}`)
+    const err = (await res.json().catch(() => ({}))) as { message?: string }
+    throw new Error(`Failed to push ${path}: ${err.message ?? res.statusText}`)
   }
 }
 
@@ -195,8 +195,8 @@ async function pushFileToGitLab(
   )
 
   if (!res.ok) {
-    const err = (await res.json()) as { message?: string }
-    console.warn(`[build-app] Failed to push ${path} to GitLab: ${err.message}`)
+    const err = (await res.json().catch(() => ({}))) as { message?: string }
+    throw new Error(`Failed to push ${path} to GitLab: ${err.message ?? res.statusText}`)
   }
 }
 
@@ -296,19 +296,31 @@ export async function POST(request: NextRequest) {
 
         // Step 3 — push files
         let pushed = 0
-        for (const [path, content] of fileEntries) {
-          if (platform === 'github') {
-            await pushFileToGitHub(accessToken, user.github_username, cleanRepoName, path, content)
-          } else if (gitlabProjectId !== null) {
-            await pushFileToGitLab(accessToken, gitlabProjectId, gitlabBranch, path, content)
+        try {
+          for (const [path, content] of fileEntries) {
+            if (platform === 'github') {
+              await pushFileToGitHub(accessToken, user.github_username, cleanRepoName, path, content)
+            } else if (gitlabProjectId !== null) {
+              await pushFileToGitLab(accessToken, gitlabProjectId, gitlabBranch, path, content)
+            }
+            pushed++
+            send({
+              step: 'pushing',
+              message: `Pushing files… (${pushed}/${fileEntries.length})`,
+              current: pushed,
+              total: fileEntries.length,
+              repoUrl,
+            })
           }
-          pushed++
+        } catch (e) {
           send({
-            step: 'pushing',
-            message: `Pushing files… (${pushed}/${fileEntries.length})`,
-            current: pushed,
-            total: fileEntries.length,
+            step: 'error',
+            message: e instanceof Error ? e.message : 'Failed to push generated files.',
+            repoUrl,
+            filesCreated: pushed,
           })
+          controller.close()
+          return
         }
 
         send({
