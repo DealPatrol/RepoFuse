@@ -128,13 +128,6 @@ export async function POST(request: NextRequest) {
   const webhookSecret = getWebhookSecret()
   if (!signature || !webhookSecret) {
     return NextResponse.json({ error: 'Webhook not configured' }, { status: 400 })
-  if (!process.env.STRIPE_WEBHOOK_SECRET || !process.env.STRIPE_SECRET_KEY) {
-    console.error('[stripe/webhook] Missing STRIPE_WEBHOOK_SECRET or STRIPE_SECRET_KEY in environment')
-    return NextResponse.json({ error: 'Webhook not configured' }, { status: 503 })
-  }
-
-  if (!signature) {
-    return NextResponse.json({ error: 'Missing stripe-signature header' }, { status: 400 })
   }
 
   let body: string
