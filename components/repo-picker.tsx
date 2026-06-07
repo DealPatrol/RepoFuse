@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Loader2, FolderGit2, Code2, Sparkles, AlertCircle } from 'lucide-react'
+import { Loader2, FolderGit2, Code2, Sparkles, AlertCircle, Github } from 'lucide-react'
 
 interface Repo {
   id: string
@@ -28,8 +28,11 @@ export function RepoPicker() {
   useEffect(() => {
     const fetchRepos = async () => {
       try {
-        const res = await fetch('/api/github/repos')
-        if (!res.ok) throw new Error('Failed to fetch repositories')
+        const res = await fetch('/api/repositories', { cache: 'no-store' })
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({ error: 'Failed to fetch imported repositories' }))
+          throw new Error(data.error || 'Failed to fetch imported repositories')
+        }
         const data = await res.json()
         setRepos(data)
       } catch (err) {
@@ -108,8 +111,14 @@ export function RepoPicker() {
         <FolderGit2 className="mx-auto h-12 w-12 text-muted-foreground/30 mb-3" />
         <h3 className="text-lg font-semibold text-foreground mb-2">No repositories found</h3>
         <p className="text-sm text-muted-foreground">
-          Make sure you have repositories on your GitHub account and that you signed in with GitHub.
+          Import repositories from GitHub before starting an analysis.
         </p>
+        <Button asChild className="mt-4">
+          <a href="/dashboard/repositories">
+            <Github className="h-4 w-4 mr-2" />
+            Import repositories
+          </a>
+        </Button>
       </Card>
     )
   }

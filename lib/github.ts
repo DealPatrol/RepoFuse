@@ -22,6 +22,17 @@ interface GitHubApiRepository {
   private: boolean
 }
 
+export class GitHubApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public responseBody: string,
+  ) {
+    super(message)
+    this.name = 'GitHubApiError'
+  }
+}
+
 async function githubRequest<T>(url: string, accessToken: string): Promise<T> {
   const response = await fetch(url, {
     headers: {
@@ -34,7 +45,7 @@ async function githubRequest<T>(url: string, accessToken: string): Promise<T> {
 
   if (!response.ok) {
     const message = await response.text()
-    throw new Error(`GitHub request failed (${response.status}): ${message}`)
+    throw new GitHubApiError(`GitHub request failed (${response.status})`, response.status, message)
   }
 
   return response.json() as Promise<T>
@@ -43,7 +54,7 @@ async function githubRequest<T>(url: string, accessToken: string): Promise<T> {
 export async function listGitHubRepositories(accessToken: string): Promise<GitHubRepositorySummary[]> {
   const repositories: GitHubRepositorySummary[] = []
 
-  for (let page = 1; page <= 5; page += 1) {
+  for (let page = 1; page <= 10; page += 1) {
     const pageItems = await githubRequest<GitHubApiRepository[]>(
       `https://api.github.com/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member&page=${page}`,
       accessToken,

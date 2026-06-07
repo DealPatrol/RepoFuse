@@ -13,7 +13,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const repositoryIds = Array.isArray(body.repositoryIds) ? body.repositoryIds : []
+    const repositoryIds = Array.isArray(body.repositoryIds)
+      ? body.repositoryIds
+          .map((id: unknown) => Number(id))
+          .filter((id: number) => Number.isInteger(id))
+      : []
 
     if (repositoryIds.length === 0) {
       return NextResponse.json({ error: 'At least one repository must be selected' }, { status: 400 })
@@ -51,7 +55,8 @@ export async function POST(request: NextRequest) {
     }
 
     const githubRepositories = await listGitHubRepositories(accessToken)
-    const selectedRepositories = githubRepositories.filter((repo) => repositoryIds.includes(repo.id))
+    const selectedRepositoryIds = new Set(repositoryIds)
+    const selectedRepositories = githubRepositories.filter((repo) => selectedRepositoryIds.has(repo.id))
 
     if (selectedRepositories.length === 0) {
       return NextResponse.json({ error: 'Selected repositories were not found on GitHub' }, { status: 404 })
@@ -78,6 +83,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ imported, count: imported.length })
   } catch (error) {
     console.error('Error importing repositories:', error)
+    if (error instanceof Error && error.message.includes('DATABASE_URL')) {
+      return NextResponse.json(
+        { error: 'Database is not configured, so repositories cannot be imported yet.' },
+        { status: 500 },
+      )
+    }
+
     return NextResponse.json({ error: 'Failed to import repositories' }, { status: 500 })
   }
 }

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import { FolderGit2, Sparkles, AlertCircle, Loader2 } from 'lucide-react'
+import { FolderGit2, Sparkles, AlertCircle, Loader2, Github } from 'lucide-react'
 
 interface Repository {
   id: string
@@ -27,8 +27,11 @@ export function RepositorySelector() {
   const fetchRepositories = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetch('/api/github/repos')
-      if (!res.ok) throw new Error('Failed to fetch repos')
+      const res = await fetch('/api/repositories', { cache: 'no-store' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: 'Failed to fetch imported repositories' }))
+        throw new Error(data.error || 'Failed to fetch imported repositories')
+      }
       const data = await res.json()
       setRepos(data)
     } catch (err) {
@@ -178,8 +181,14 @@ export function RepositorySelector() {
           <FolderGit2 className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
           <h3 className="font-semibold text-foreground mb-1">No repositories found</h3>
           <p className="text-sm text-muted-foreground">
-            Create some repositories on GitHub to get started with RepoFuse.
+            Import repositories from GitHub before starting an analysis.
           </p>
+          <Button asChild className="mt-4">
+            <a href="/dashboard/repositories">
+              <Github className="h-4 w-4 mr-2" />
+              Import repositories
+            </a>
+          </Button>
         </Card>
       )}
 
