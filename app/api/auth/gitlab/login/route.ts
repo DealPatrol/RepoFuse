@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
+import { sanitizeReturnTo } from '@/lib/auth'
 
 function getBaseUrl(request: NextRequest) {
   return process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
@@ -18,6 +19,7 @@ export async function GET(request: NextRequest) {
 
   const state = crypto.randomUUID()
   const redirectUri = `${getBaseUrl(request)}/api/auth/gitlab/callback`
+  const returnTo = sanitizeReturnTo(request.nextUrl.searchParams.get('returnTo'), '/dashboard/repositories?connected=gitlab')
 
   console.log('[v0] GitLab OAuth login initiated', {
     clientId,
@@ -36,6 +38,13 @@ export async function GET(request: NextRequest) {
 
   const response = NextResponse.redirect(`https://gitlab.com/oauth/authorize?${params.toString()}`)
   response.cookies.set('gitlab_oauth_state', state, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 60 * 10,
+  })
+  response.cookies.set('gitlab_oauth_return_to', returnTo, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { getDb } from '@/lib/db'
+import { sanitizeReturnTo } from '@/lib/auth'
 import { upsertSubscription } from '@/lib/queries'
 
 function getBaseUrl(request: NextRequest) {
@@ -20,6 +21,7 @@ export async function GET(request: NextRequest) {
     const errorDescription = searchParams.get('error_description')
     const cookieStore = await cookies()
     const savedState = cookieStore.get('gitlab_oauth_state')?.value
+    const returnTo = sanitizeReturnTo(cookieStore.get('gitlab_oauth_return_to')?.value, '/dashboard/repositories?connected=gitlab')
 
     console.log('[v0] GitLab OAuth callback received', {
       hasCode: !!code,
@@ -107,7 +109,7 @@ export async function GET(request: NextRequest) {
 
     // Check if this is a launch signup flow
     const launchSignupCookie = cookieStore.get('launch_signup')?.value
-    let redirectUrl = '/dashboard/repositories?connected=gitlab'
+    let redirectUrl = returnTo
     
     if (launchSignupCookie) {
       try {
@@ -143,6 +145,7 @@ export async function GET(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 30,
     })
     response.cookies.set('gitlab_oauth_state', '', { path: '/', maxAge: 0 })
+    response.cookies.set('gitlab_oauth_return_to', '', { path: '/', maxAge: 0 })
     // Clear the launch signup cookie after use
     response.cookies.set('launch_signup', '', { path: '/', maxAge: 0 })
 
