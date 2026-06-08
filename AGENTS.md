@@ -53,3 +53,11 @@ pnpm build      # production build (requires valid DATABASE_URL at build time)
 - `pnpm install` may show a warning about ignored build scripts for `sharp` and `unrs-resolver`. These do not affect development.
 - The GitHub OAuth env vars in this repo use `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` (not `GITHUB_ID` / `GITHUB_SECRET`). If secrets are injected under different names, map them in `.env.local`.
 - `NEXT_PUBLIC_APP_URL` must be set to the local dev server URL (default port 3000) for local OAuth callback redirects to work.
+
+### Cloud agent secrets and local bootstrap
+
+- Copy `.env.example` to `.env.local` and fill in secrets — `.env.local` is gitignored and is **not** injected automatically by the VM; request `DATABASE_URL`, `GITHUB_CLIENT_SECRET`, and an AI credential (`AI_GATEWAY_API_KEY` or `ANTHROPIC_API_KEY`) via Cursor secrets if missing.
+- One-time schema init: `curl http://localhost:3000/api/setup/init-db` (idempotent; safe to re-run).
+- `pnpm mcp:test` runs a structural MCP smoke test (no live GitHub/AI credentials required).
+- Cookie auth bypass gets you past `/dashboard/*` middleware, but API routes still validate the token against GitHub or a matching `user_auth` row. Analysis detail pages return 404 when the analysis is not owned by the signed-in user.
+- Running an analysis (`POST /api/analyses/[id]/run`) requires a configured AI provider; without it the UI shows "AI is not configured".
