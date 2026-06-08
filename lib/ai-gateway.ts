@@ -136,7 +136,7 @@ function isGatewayAccessError(error: unknown): boolean {
 
 async function generateWithDirectAnthropic(params: {
   system?: string
-  messages: ModelMessage[]
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>
   maxOutputTokens?: number
   temperature?: number
 }): Promise<string> {
@@ -153,7 +153,7 @@ async function generateWithDirectAnthropic(params: {
     ...(params.system ? { system: params.system } : {}),
     messages: params.messages.map((message) => ({
       role: message.role,
-      content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+      content: message.content,
     })),
   })
 
@@ -183,7 +183,7 @@ export async function generateWithGateway(params: {
   if (!usesGatewayAuth() && directAnthropicKey()) {
     return generateWithDirectAnthropic({
       system: params.system,
-      messages: modelMessages,
+      messages: params.messages,
       maxOutputTokens: params.maxOutputTokens,
       temperature: params.temperature,
     })
@@ -207,7 +207,7 @@ export async function generateWithGateway(params: {
         console.warn('[ai] Vercel AI Gateway access failed; retrying with direct Anthropic fallback.')
         return generateWithDirectAnthropic({
           system: params.system,
-          messages: modelMessages,
+          messages: params.messages,
           maxOutputTokens: params.maxOutputTokens,
           temperature: params.temperature,
         })
