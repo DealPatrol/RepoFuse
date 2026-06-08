@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { FolderGit2, Sparkles, Plus, ArrowRight, Zap, AlertCircle, Lightbulb, CheckCircle2, Clock, Activity, BarChart3, GitBranch, type LucideIcon } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
+import { Rocket } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -202,6 +203,30 @@ export default async function DashboardPage() {
           <span className="text-xs font-mono text-zinc-500">Live</span>
         </div>
       </div>
+
+      {/* Flagship CTA — Build It For Me */}
+      <Link
+        href="/dashboard/build"
+        className="group relative block overflow-hidden rounded-2xl border border-cyan-500/30 bg-gradient-to-r from-cyan-950/50 via-black to-violet-950/40 px-6 py-5 sm:px-8 sm:py-6 transition-all hover:border-cyan-400/50"
+      >
+        <div className="absolute -top-16 -right-16 h-48 w-48 rounded-full bg-cyan-500/10 blur-3xl group-hover:bg-cyan-500/20 transition-colors" />
+        <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-cyan-500 to-violet-500 flex items-center justify-center flex-shrink-0">
+              <Rocket className="h-6 w-6 text-black" />
+            </div>
+            <div>
+              <p className="text-[10px] font-mono uppercase tracking-widest text-cyan-400/70 mb-0.5">The flagship feature</p>
+              <h2 className="text-xl sm:text-2xl font-black text-white leading-tight">Click here and I&apos;ll build it.</h2>
+              <p className="text-sm text-zinc-400 mt-0.5">Turn the apps hidden in your code into real, deployed repositories &mdash; automatically.</p>
+            </div>
+          </div>
+          <span className="flex-shrink-0 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-5 py-3 text-sm font-bold text-black group-hover:from-cyan-400 group-hover:to-violet-400 transition-all">
+            Build an app <ArrowRight className="h-4 w-4" />
+          </span>
+        </div>
+      </Link>
+
 
       {/* stat strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
