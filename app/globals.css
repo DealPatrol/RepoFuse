@@ -15,6 +15,29 @@
   50% { opacity: 0.8; }
 }
 
+@keyframes rfDrift {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-16px); }
+}
+
+@keyframes rfRise {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes rfPulseDot {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.25);
+  }
+}
+
 :root {
   --background: oklch(0.95 0 0);
   --foreground: oklch(0.15 0 0);
@@ -134,4 +157,22 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+.rf-float-slow {
+  animation: rfDrift 8s ease-in-out infinite;
+}
+
+.rf-float-fast {
+  animation: rfDrift 6s ease-in-out infinite reverse;
+}
+
+.rf-slide-in {
+  opacity: 0;
+  transform: translateY(12px);
+  animation: rfRise 0.7s ease-out forwards;
+}
+
+.rf-pulse-dot {
+  animation: rfPulseDot 1.8s ease-in-out infinite;
 }
