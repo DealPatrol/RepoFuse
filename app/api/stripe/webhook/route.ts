@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getStripeWebhookSecret, getStripe, getPriceIdForPlan } from '@/lib/stripe'
+import { getWebhookSecret, getStripe, getPriceIdForPlan } from '@/lib/stripe'
 import { upsertSubscription, getSubscriptionByStripeCustomerId, getUserByGithubId, updateUserBilling } from '@/lib/queries'
 import { grantCredits, CREDITS } from '@/lib/credits'
 import type Stripe from 'stripe'
@@ -125,7 +125,7 @@ async function persistSubscriptionState(params: {
 export async function POST(request: NextRequest) {
   const signature = request.headers.get('stripe-signature')
 
-  const webhookSecret = getStripeWebhookSecret()
+  const webhookSecret = getWebhookSecret()
   if (!signature || !webhookSecret) {
     return NextResponse.json({ error: 'Webhook not configured' }, { status: 400 })
   }

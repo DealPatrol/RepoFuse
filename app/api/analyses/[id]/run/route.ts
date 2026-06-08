@@ -133,20 +133,23 @@ const CODE_EXTENSIONS = new Set([
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  // Await params in Next.js 16
+  const { id } = await params
+
   // Check authentication first - redirect if not authenticated
   const accessToken = await getCurrentAccessToken().catch(() => null)
   if (!accessToken) {
     const redirectUrl = new URL('/api/auth/github/login', req.url)
-    redirectUrl.searchParams.set('returnTo', `/dashboard/analyses/${params.id}`)
+    redirectUrl.searchParams.set('returnTo', `/dashboard/analyses/${id}`)
     return NextResponse.redirect(redirectUrl)
   }
 
   const user = await getCurrentUser().catch(() => null)
   if (!user) {
     const redirectUrl = new URL('/api/auth/github/login', req.url)
-    redirectUrl.searchParams.set('returnTo', `/dashboard/analyses/${params.id}`)
+    redirectUrl.searchParams.set('returnTo', `/dashboard/analyses/${id}`)
     return NextResponse.redirect(redirectUrl)
   }
 

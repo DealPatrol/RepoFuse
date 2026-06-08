@@ -60,7 +60,6 @@ export async function POST(request: NextRequest) {
     const imported = []
 
     for (const repo of selectedRepositories) {
-      console.log('[v0] Importing repo:', repo.full_name)
       const saved = await createRepository({
         user_id: user.id,
         github_id: repo.id,
@@ -71,9 +70,6 @@ export async function POST(request: NextRequest) {
         default_branch: repo.default_branch,
         language: repo.language,
         stars: repo.stars,
-      }).catch(err => {
-        console.error('[v0] Error creating repository:', err)
-        throw err
       })
 
       imported.push(saved)
@@ -81,8 +77,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ imported, count: imported.length })
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    console.error('[v0] Error importing repositories:', errorMessage, error)
-    return NextResponse.json({ error: `Failed to import repositories: ${errorMessage}` }, { status: 500 })
+    console.error('Error importing repositories:', error)
+    return NextResponse.json({ error: 'Failed to import repositories' }, { status: 500 })
   }
 }
