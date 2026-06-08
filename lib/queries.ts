@@ -1,3 +1,17 @@
+
+
+export async function getAllBlueprints(userId?: string): Promise<AppBlueprint[]> {
+  const sql = getDb()
+  const blueprints = userId
+    ? await sql`
+        SELECT b.* FROM app_blueprints b
+        JOIN analyses a ON a.id = b.analysis_id
+        WHERE a.user_id = ${userId}
+        ORDER BY b.reuse_percentage DESC, b.created_at DESC
+      `
+    : await sql`SELECT * FROM app_blueprints ORDER BY reuse_percentage DESC, created_at DESC`
+  return blueprints as AppBlueprint[]
+}
 import { getDb } from './db'
 
 // Types
@@ -837,4 +851,17 @@ export async function canViewBlueprint(userId: string, blueprintId: string, limi
     // Table may not exist yet - allow view
     return true
   }
+}
+
+export async function getAllBlueprints(userId?: string): Promise<AppBlueprint[]> {
+  const sql = getDb()
+  const blueprints = userId
+    ? await sql`
+        SELECT b.* FROM app_blueprints b
+        JOIN analyses a ON a.id = b.analysis_id
+        WHERE a.user_id = ${userId}
+        ORDER BY b.reuse_percentage DESC, b.created_at DESC
+      `
+    : await sql`SELECT * FROM app_blueprints ORDER BY reuse_percentage DESC, created_at DESC`
+  return blueprints as AppBlueprint[]
 }
