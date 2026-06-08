@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAppUrl, getStripe } from '@/lib/stripe'
-import { updateUserBilling } from '@/lib/queries'
+import { updateUserBilling, upsertSubscription } from '@/lib/queries'
+import { getDb } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   const sessionId = request.nextUrl.searchParams.get('session_id')
@@ -21,13 +22,39 @@ export async function GET(request: NextRequest) {
     const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id
 
     if (appUserId) {
+      const isActive = !!subscription && ['active', 'trialing'].includes(subscription.status)
+      const planTier = isActive ? 'pro' : 'free'
+
+      // Update the user_auth billing columns.
       await updateUserBilling(appUserId, {
         stripe_customer_id: customerId ?? null,
         stripe_subscription_id: subscription?.id ?? null,
         stripe_price_id: subscription?.items.data[0]?.price.id ?? null,
-        plan_tier: subscription && ['active', 'trialing'].includes(subscription.status) ? 'pro' : 'free',
+        plan_tier: planTier,
         subscription_status: subscription?.status ?? null,
       })
+
+      // Keep the subscriptions table (read by the billing page) in sync so the
+      // dashboard reflects the upgraded plan instead of defaulting to "free".
+      try {
+        const sql = getDb()
+        const rows = await sql`SELECT github_id FROM user_auth WHERE id = ${appUserId} LIMIT 1`
+        const githubId = rows[0]?.github_id as number | undefined
+        if (githubId) {
+          await upsertSubscription({
+            github_id: githubId,
+            stripe_customer_id: customerId ?? null,
+            stripe_subscription_id: subscription?.id ?? null,
+            plan: planTier,
+            status: subscription?.status === 'trialing' ? 'trialing' : 'active',
+            current_period_end: subscription?.current_period_end
+              ? new Date(subscription.current_period_end * 1000).toISOString()
+              : null,
+          })
+        }
+      } catch (syncError) {
+        console.error('Failed to sync subscriptions table:', syncError)
+      }
     }
 
     return NextResponse.redirect(new URL('/pricing?upgraded=pro', appUrl))
