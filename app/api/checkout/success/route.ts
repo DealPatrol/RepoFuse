@@ -25,6 +25,14 @@ export async function GET(request: NextRequest) {
       const isActive = !!subscription && ['active', 'trialing'].includes(subscription.status)
       const planTier = isActive ? 'pro' : 'free'
 
+      // current_period_end is not on the typed Subscription in this Stripe SDK
+      // version, so read it defensively from the raw object.
+      const periodEndUnix = (subscription as unknown as { current_period_end?: number } | null)
+        ?.current_period_end
+      const currentPeriodEnd = periodEndUnix
+        ? new Date(periodEndUnix * 1000).toISOString()
+        : null
+
       // Update the user_auth billing columns.
       await updateUserBilling(appUserId, {
         stripe_customer_id: customerId ?? null,
@@ -47,9 +55,7 @@ export async function GET(request: NextRequest) {
             stripe_subscription_id: subscription?.id ?? null,
             plan: planTier,
             status: subscription?.status === 'trialing' ? 'trialing' : 'active',
-            current_period_end: subscription?.current_period_end
-              ? new Date(subscription.current_period_end * 1000).toISOString()
-              : null,
+            current_period_end: currentPeriodEnd,
           })
         }
       } catch (syncError) {
