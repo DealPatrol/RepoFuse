@@ -12,6 +12,7 @@ import {
   MessageSquare,
   LayoutTemplate,
   AlertTriangle,
+  Package,
   Settings,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -30,6 +31,7 @@ const navItems = [
   { href: '/dashboard/repositories', label: 'Repos', icon: FolderGit2 },
   { href: '/dashboard/analyses', label: 'Analyses', icon: Sparkles },
   { href: '/dashboard/pattern-analyzer', label: 'App Idea Chat', icon: MessageSquare },
+  { href: '/dashboard/component-hunter', label: 'Component Hunter', icon: Package },
   { href: '/dashboard/templates/browse', label: 'Templates', icon: LayoutTemplate },
   { href: '/dashboard/gaps', label: 'Gaps', icon: AlertTriangle },
   { href: '/dashboard/idea-board', label: 'Liked Apps', icon: LayoutGrid },
