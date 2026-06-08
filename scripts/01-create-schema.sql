@@ -135,3 +135,68 @@ CREATE INDEX IF NOT EXISTS idx_analysis_repositories_analysis_id ON analysis_rep
 CREATE INDEX IF NOT EXISTS idx_app_blueprints_analysis_id ON app_blueprints(analysis_id);
 CREATE INDEX IF NOT EXISTS idx_app_blueprints_user_id ON app_blueprints(user_id);
 CREATE INDEX IF NOT EXISTS idx_app_blueprints_reuse_percentage ON app_blueprints(reuse_percentage DESC);
+
+-- Missing file gaps discovered from blueprints
+CREATE TABLE IF NOT EXISTS missing_file_gaps (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  blueprint_id UUID NOT NULL REFERENCES app_blueprints(id) ON DELETE CASCADE,
+  file_name VARCHAR(255) NOT NULL,
+  file_path TEXT NOT NULL,
+  purpose TEXT,
+  complexity VARCHAR(20) DEFAULT 'medium' CHECK (complexity IN ('low', 'medium', 'high')),
+  estimated_hours NUMERIC(6,2) DEFAULT 0,
+  category VARCHAR(20) DEFAULT 'other' CHECK (category IN ('auth', 'api', 'ui', 'database', 'utils', 'config', 'other')),
+  dependencies JSONB DEFAULT '[]',
+  is_blocking BOOLEAN DEFAULT false,
+  suggested_stub TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(blueprint_id, file_path)
+);
+
+-- Gaps a user has marked complete
+CREATE TABLE IF NOT EXISTS completed_gaps (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  gap_id UUID NOT NULL REFERENCES missing_file_gaps(id) ON DELETE CASCADE,
+  blueprint_id UUID NOT NULL REFERENCES app_blueprints(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES user_auth(id) ON DELETE CASCADE,
+  completed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(gap_id, user_id)
+);
+
+-- Templates that combine multiple blueprints
+CREATE TABLE IF NOT EXISTS templates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES user_auth(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  blueprint_ids JSONB DEFAULT '[]',
+  tech_stack JSONB DEFAULT '[]',
+  estimated_hours NUMERIC(8,2) DEFAULT 0,
+  reuse_percentage NUMERIC(5,2) DEFAULT 0,
+  total_files INTEGER DEFAULT 0,
+  missing_files INTEGER DEFAULT 0,
+  tier VARCHAR(20) DEFAULT 'standard' CHECK (tier IN ('quick_start', 'standard', 'comprehensive')),
+  featured BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Blueprint view tracking for usage limits
+CREATE TABLE IF NOT EXISTS blueprint_views (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES user_auth(id) ON DELETE CASCADE,
+  blueprint_id UUID NOT NULL REFERENCES app_blueprints(id) ON DELETE CASCADE,
+  first_viewed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  view_count INTEGER DEFAULT 1,
+  last_viewed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(user_id, blueprint_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_missing_file_gaps_blueprint_id ON missing_file_gaps(blueprint_id);
+CREATE INDEX IF NOT EXISTS idx_completed_gaps_blueprint_id ON completed_gaps(blueprint_id);
+CREATE INDEX IF NOT EXISTS idx_completed_gaps_user_id ON completed_gaps(user_id);
+CREATE INDEX IF NOT EXISTS idx_templates_user_id ON templates(user_id);
+CREATE INDEX IF NOT EXISTS idx_blueprint_views_user_id ON blueprint_views(user_id);
+
