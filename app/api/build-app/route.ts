@@ -257,6 +257,7 @@ export async function POST(request: NextRequest) {
           step: 'generated',
           message: `${fileEntries.length} files ready. Creating repository…`,
           fileCount: fileEntries.length,
+          files: fileEntries.map(([p]) => p),
         })
 
         // Step 2 — create repo
@@ -308,6 +309,8 @@ export async function POST(request: NextRequest) {
             message: `Pushing files… (${pushed}/${fileEntries.length})`,
             current: pushed,
             total: fileEntries.length,
+            path,
+            preview: content.slice(0, 600),
           })
         }
 
