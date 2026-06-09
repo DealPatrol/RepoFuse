@@ -95,6 +95,22 @@ export async function generateWithGateway(params: {
   userId?: string
   feature: AiGatewayFeature
 }): Promise<string> {
+  // When we have a direct Anthropic key (no gateway auth), use the SDK client directly
+  // to avoid routing through Vercel AI Gateway which requires paid gateway credits.
+  if (!usesGatewayAuth() && directAnthropicKey()) {
+    const client = getAnthropicClient()
+    const directModel = process.env.ANTHROPIC_ANALYSIS_MODEL?.trim() || 'claude-sonnet-4-5-20250929'
+    const response = await client.messages.create({
+      model: directModel,
+      max_tokens: params.maxOutputTokens ?? 4096,
+      ...(params.system ? { system: params.system } : {}),
+      messages: params.messages,
+    })
+    const block = response.content[0]
+    return block.type === 'text' ? block.text : ''
+  }
+
+  // Otherwise route through Vercel AI Gateway
   const modelMessages: ModelMessage[] = params.messages.map((message) => ({
     role: message.role,
     content: message.content,
