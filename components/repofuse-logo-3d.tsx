@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 
-export function RepoFuseLogo3D({ className = "h-12 w-12" }: { className?: string }) {
+export function RepoFuseLogo3D({ className = "h-12 w-12", showWordmark = true }: { className?: string; showWordmark?: boolean }) {
   const [lightningActive, setLightningActive] = useState(false)
 
   useEffect(() => {
@@ -17,7 +17,7 @@ export function RepoFuseLogo3D({ className = "h-12 w-12" }: { className?: string
     <div className={`relative ${className}`}>
       {/* Glow effect behind logo */}
       <div className={`absolute inset-0 bg-cyan-500/30 blur-xl rounded-full transition-opacity duration-200 ${lightningActive ? 'opacity-80' : 'opacity-30'}`} />
-      
+
       <svg
         viewBox="0 0 60 72"
         fill="none"
@@ -30,7 +30,7 @@ export function RepoFuseLogo3D({ className = "h-12 w-12" }: { className?: string
             <stop offset="0%" stopColor="#00e5ff" />
             <stop offset="100%" stopColor="#ff6b35" />
           </linearGradient>
-          
+
           {/* Lightning gradient */}
           <linearGradient id="lightningGradient" x1="0" y1="0" x2="100%" y2="0">
             <stop offset="0%" stopColor="#00e5ff" />
@@ -60,19 +60,19 @@ export function RepoFuseLogo3D({ className = "h-12 w-12" }: { className?: string
         </defs>
 
         {/* Hexagon border - 3D effect with multiple layers */}
-        <polygon 
-          points="30,2 56,16 56,56 30,70 4,56 4,16" 
-          fill="#0d1f3a" 
-          stroke="url(#hexGradient)" 
+        <polygon
+          points="30,2 56,16 56,56 30,70 4,56 4,16"
+          fill="#0d1f3a"
+          stroke="url(#hexGradient)"
           strokeWidth="2"
           filter="url(#glow)"
         />
-        
+
         {/* Inner hexagon for depth */}
-        <polygon 
-          points="30,8 50,20 50,52 30,64 10,52 10,20" 
-          fill="transparent" 
-          stroke="rgba(0,229,255,0.3)" 
+        <polygon
+          points="30,8 50,20 50,52 30,64 10,52 10,20"
+          fill="transparent"
+          stroke="rgba(0,229,255,0.3)"
           strokeWidth="1"
         />
 
@@ -129,19 +129,19 @@ export function RepoFuseLogo3D({ className = "h-12 w-12" }: { className?: string
         {/* Lightning bolt effect - appears periodically */}
         {lightningActive && (
           <g className="animate-pulse">
-            <path 
-              d="M30,10 L28,24 L34,24 L26,42 L32,42 L24,62" 
-              fill="none" 
-              stroke="#ffffff" 
+            <path
+              d="M30,10 L28,24 L34,24 L26,42 L32,42 L24,62"
+              fill="none"
+              stroke="#ffffff"
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
               filter="url(#electricGlow)"
             />
-            <path 
-              d="M30,10 L28,24 L34,24 L26,42 L32,42 L24,62" 
-              fill="none" 
-              stroke="#00e5ff" 
+            <path
+              d="M30,10 L28,24 L34,24 L26,42 L32,42 L24,62"
+              fill="none"
+              stroke="#00e5ff"
               strokeWidth="1"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -159,12 +159,14 @@ export function RepoFuseLogo3D({ className = "h-12 w-12" }: { className?: string
       </svg>
 
       {/* Text beneath logo */}
-      <div className="absolute -bottom-5 left-1/2 transform -translate-x-1/2 whitespace-nowrap">
-        <span className="text-xs font-bold tracking-widest">
-          <span className="text-cyan-400">REPO</span>
-          <span className="text-orange-400">FUSE</span>
-        </span>
-      </div>
+      {showWordmark && (
+        <div className="absolute -bottom-5 left-1/2 transform -translate-x-1/2 whitespace-nowrap">
+          <span className="text-xs font-bold tracking-widest">
+            <span className="text-cyan-400">REPO</span>
+            <span className="text-orange-400">FUSE</span>
+          </span>
+        </div>
+      )}
     </div>
   )
 }
