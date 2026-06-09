@@ -27,6 +27,7 @@ interface BillingClientProps {
   blueprintsUsed?: number
   blueprintsLimit?: number
   reposLimit: number
+  creditsPerMonth: number
   status: string
   currentPeriodEnd: string | null
   hasStripeCustomer: boolean
@@ -42,7 +43,7 @@ const PLAN_CONFIGS = [
     period: 'forever',
     description: 'Try it out',
     icon: Zap,
-    features: ['1 repository', '1 analysis/month', '1 blueprint view', '200 credits'],
+    features: ['1 repository', '1 analysis/month', '1 blueprint view', 'Credits shown from your balance'],
     cta: null,
     ctaHref: null,
   },
@@ -78,7 +79,7 @@ const PLAN_CONFIGS = [
     period: '/mo',
     description: 'Your own API key',
     icon: Key,
-    features: ['Unlimited repos', 'Unlimited analyses', 'Use own Anthropic/OpenAI key', 'No per-credit billing', 'Up to 90% cheaper'],
+    features: ['Unlimited repos', 'Unlimited analyses', 'Use own Anthropic/OpenAI key', 'No included RepoFuse credits', 'Up to 90% cheaper'],
     cta: 'Set Up BYOK',
     ctaHref: '/dashboard/settings',
   },
@@ -92,10 +93,12 @@ export function BillingClient({
   blueprintsUsed = 0,
   blueprintsLimit = 1,
   reposLimit,
+  creditsPerMonth,
   status,
   currentPeriodEnd,
   hasStripeCustomer,
   userId,
+  isTrialing = false,
 }: BillingClientProps) {
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [portalLoading, setPortalLoading] = useState(false)
@@ -103,6 +106,18 @@ export function BillingClient({
   const isPaid = plan === 'pro' || plan === 'scale' || plan === 'byok'
   const isPro = plan === 'pro'
   const usagePercent = analysesLimit > 0 ? Math.min(100, Math.round((analysesUsed / analysesLimit) * 100)) : 0
+  const creditAllowanceLabel =
+    creditsPerMonth > 0
+      ? `${creditsPerMonth.toLocaleString()} credits/month`
+      : plan === 'byok'
+        ? 'No included RepoFuse credits; use your own API key'
+        : 'Credits shown from your balance'
+  const paidCreditNote =
+    plan === 'byok'
+      ? 'BYOK runs through your own provider key, so RepoFuse does not grant monthly built-in credits.'
+      : isTrialing
+        ? 'Your trial uses the credits already in your balance. Monthly credits are granted on paid subscription renewal.'
+        : `${creditAllowanceLabel} are granted on paid subscription renewal.`
 
   const handleCheckout = async (targetPlan: 'pro' | 'scale' = 'pro') => {
     setCheckoutLoading(true)
@@ -200,6 +215,10 @@ export function BillingClient({
               <>
                 <div className="flex items-center gap-2 text-sm">
                   <Check className="h-4 w-4 text-chart-1" />
+                  <span className="text-muted-foreground">{creditAllowanceLabel}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <Check className="h-4 w-4 text-chart-1" />
                   <span className="text-muted-foreground">Scaffold generation</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
@@ -283,7 +302,7 @@ export function BillingClient({
                   <div>
                     <p className="text-sm font-medium text-foreground">Unlock unlimited analyses</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Pro gives you unlimited analyses, repos, scaffold generation, and priority AI.
+                      Pro gives you unlimited analyses, repos, scaffold generation, priority AI, and 3,000 credits/month after paid renewal.
                     </p>
                     <Button size="sm" className="mt-3" onClick={() => handleCheckout('pro')} disabled={checkoutLoading}>
                       Upgrade Now <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
@@ -296,14 +315,14 @@ export function BillingClient({
         </Card>
       </div>
 
-      {/* Credits for paid users */}
-      {isPaid && userId && (
+      {/* Credits */}
+      {userId && (
         <div className="space-y-4">
           <div>
             <h2 className="text-lg font-semibold text-foreground mb-1">Credits & Usage</h2>
-            <p className="text-sm text-muted-foreground">Track your credits and see how they&apos;re used</p>
+            <p className="text-sm text-muted-foreground">{isPaid ? paidCreditNote : 'Track your actual available balance and credit usage.'}</p>
           </div>
-          <CreditsDisplay userId={userId} />
+          <CreditsDisplay userId={userId} plan={plan} monthlyCredits={creditsPerMonth} isTrialing={isTrialing} />
         </div>
       )}
 

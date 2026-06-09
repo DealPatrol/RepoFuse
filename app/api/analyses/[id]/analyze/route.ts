@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateText } from 'ai'
 import { getCreditBalance, deductCredits, CREDITS } from '@/lib/credits'
-import { getAnalysisById } from '@/lib/queries'
 
 const model = 'openai/gpt-4-turbo'
 
@@ -40,7 +39,7 @@ export async function POST(request: NextRequest) {
           error: 'Insufficient credits',
           required: CREDITS.ANALYSIS_COST,
           available: currentBalance,
-          message: 'Upgrade to Pro to get unlimited analyses with 5,000 monthly credits.',
+          message: 'Upgrade to Pro to get unlimited analyses with 3,000 monthly credits.',
         },
         { status: 402 }
       )

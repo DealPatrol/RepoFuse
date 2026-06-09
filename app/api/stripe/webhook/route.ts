@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type Stripe from 'stripe'
-import { grantCredits, CREDITS } from '@/lib/credits'
+import { grantCredits, renewMonthlyCredits, CREDITS } from '@/lib/credits'
 import {
   getSubscriptionByStripeCustomerId,
   getUserByGithubId,
@@ -59,7 +59,8 @@ function getPlanFromPriceId(priceId: string | null | undefined): BillingPlan {
 }
 
 function getCreditGrantForPrice(priceId: string | null | undefined, fallback: number): number {
-  if (priceId && priceId === process.env.STRIPE_SCALE_PRICE_ID) {
+  const scalePriceId = getPriceIdForPlan('scale')
+  if (priceId && scalePriceId && priceId === scalePriceId) {
     return CREDITS.SCALE_MONTHLY_GRANT
   }
 
@@ -303,7 +304,7 @@ export async function POST(request: NextRequest) {
 
             if (user && billingReason !== 'subscription_create') {
               const amount = getCreditGrantForPrice(priceId, CREDITS.MONTHLY_GRANT)
-              await grantCredits(user.id, amount, 'Monthly subscription renewal', {
+              await renewMonthlyCredits(user.id, amount, 'Monthly subscription renewal', {
                 invoice_id: invoice.id,
                 stripe_customer_id: customerId,
                 stripe_subscription_id: subscription.id,

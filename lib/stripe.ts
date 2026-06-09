@@ -73,7 +73,7 @@ export const PLANS = {
     blueprints_viewable: 1,
     repos_limit: 1,
     price_monthly: 0,
-    credits_per_month: 200,
+    credits_per_month: 0,
     ai_provider: 'builtin' as const,
     description: 'Explore the basics, no card needed',
   },

@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
             error: 'Insufficient credits',
             required: CREDITS.SCAFFOLD_COST,
             available: currentBalance,
-            message: 'Upgrade to Pro to get unlimited scaffold generation with 5,000 monthly credits.',
+            message: 'Upgrade to Pro to get unlimited scaffold generation with 3,000 monthly credits.',
           },
           { status: 402 },
         )

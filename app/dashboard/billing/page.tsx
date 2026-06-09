@@ -32,6 +32,7 @@ export default async function BillingPage() {
       blueprintsUsed={blueprintViewCount}
       blueprintsLimit={limits.blueprints_viewable}
       reposLimit={limits.repos_limit}
+      creditsPerMonth={limits.credits_per_month}
       status={subscription?.status ?? 'active'}
       currentPeriodEnd={subscription?.current_period_end ?? null}
       hasStripeCustomer={!!subscription?.stripe_customer_id}

@@ -9,11 +9,19 @@ import { CREDITS } from '@/lib/credits'
 
 interface CreditsDisplayProps {
   userId: string
+  plan?: 'free' | 'pro' | 'scale' | 'byok'
+  monthlyCredits?: number
+  isTrialing?: boolean
 }
 
-export function CreditsDisplay({ userId }: CreditsDisplayProps) {
+interface CreditSummary {
+  analyses_used: number
+  scaffolds_used: number
+}
+
+export function CreditsDisplay({ userId, plan = 'free', monthlyCredits = 0, isTrialing = false }: CreditsDisplayProps) {
   const [credits, setCredits] = useState<UserCredit | null>(null)
-  const [summary, setSummary] = useState<any>(null)
+  const [summary, setSummary] = useState<CreditSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -64,6 +72,14 @@ export function CreditsDisplay({ userId }: CreditsDisplayProps) {
   const usagePercent = credits.total_granted > 0 
     ? Math.round((credits.total_used / credits.total_granted) * 100)
     : 0
+  const renewalMessage =
+    plan === 'byok'
+      ? 'BYOK uses your own provider key, so RepoFuse does not add built-in credits.'
+      : monthlyCredits > 0
+        ? isTrialing
+          ? `${monthlyCredits.toLocaleString()} credits/month begin on paid subscription renewal.`
+          : `You receive ${monthlyCredits.toLocaleString()} credits on each paid subscription renewal.`
+        : 'Credits are limited to the balance shown above.'
 
   return (
     <div className="space-y-6">
@@ -132,7 +148,7 @@ export function CreditsDisplay({ userId }: CreditsDisplayProps) {
             Last renewal: {new Date(credits.last_renewal_date).toLocaleDateString()}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            You receive 5,000 credits monthly on your Pro subscription renewal.
+            {renewalMessage}
           </p>
         </Card>
       )}

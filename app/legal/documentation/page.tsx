@@ -45,7 +45,7 @@ export default function DocumentationPage() {
           <section>
             <h2 className="text-2xl font-bold mb-4">API Credits</h2>
             <p>
-              RepoFuse uses a credit-based system. Free trial includes 3,000 credits/month. Pro plan includes unlimited credits and advanced features.
+              RepoFuse uses a credit-based system. Pro includes 3,000 credits/month and Scale includes 12,000 credits/month. Monthly renewals top your balance up to the plan allowance instead of stacking unused credits.
             </p>
           </section>
 

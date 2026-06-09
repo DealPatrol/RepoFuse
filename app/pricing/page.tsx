@@ -19,7 +19,7 @@
       monthlyPrice: 0,
       period: 'forever',
       description: "Explore what's possible. No card needed.",
-      credits: 200,
+      credits: 0,
       maxCredits: 12000,
       icon: Zap,
       iconBg: '#161B22',
@@ -31,7 +31,7 @@
       features: [
         { text: '1 repository', included: true },
         { text: '1 analysis / month', included: true },
-        { text: '200 credits to start', included: true },
+        { text: 'Credits shown from your balance', included: true },
         { text: 'AI app blueprints', included: true },
         { text: 'Unlimited repositories', included: false },
         { text: 'Scaffold generation', included: false },

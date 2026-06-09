@@ -2,7 +2,7 @@ import { getDb } from '@/lib/db'
 
 // Credit constants
 export const CREDITS = {
-  INITIAL_GRANT: 500,           // Credits given on free signup (trial)
+  INITIAL_GRANT: 500,           // Credits given when a paid subscription trial starts
   PRO_MONTHLY_GRANT: 3000,      // Credits given to Pro on monthly renewal
   SCALE_MONTHLY_GRANT: 12000,   // Credits given to Scale on monthly renewal
   MONTHLY_GRANT: 3000,          // Legacy alias — matches Pro grant
@@ -106,6 +106,50 @@ export async function grantCredits(
     RETURNING *
   `
   
+  return transaction[0] as CreditTransaction
+}
+
+// Renew monthly credits without stacking unused balance above the plan allowance.
+export async function renewMonthlyCredits(
+  userId: string,
+  monthlyAllowance: number,
+  reason: string,
+  metadata: Record<string, any> = {}
+): Promise<CreditTransaction | null> {
+  const sql = getDb()
+  const userCredits = await getOrCreateUserCredits(userId)
+  const topUpAmount = Math.max(0, monthlyAllowance - userCredits.current_balance)
+
+  if (topUpAmount === 0) {
+    await sql`
+      UPDATE user_credits
+      SET last_renewal_date = CURRENT_TIMESTAMP
+      WHERE user_id = ${userId}
+    `
+    return null
+  }
+
+  const newBalance = userCredits.current_balance + topUpAmount
+
+  await sql`
+    UPDATE user_credits
+    SET
+      current_balance = ${newBalance},
+      total_granted = total_granted + ${topUpAmount},
+      last_renewal_date = CURRENT_TIMESTAMP
+    WHERE user_id = ${userId}
+  `
+
+  const transaction = await sql`
+    INSERT INTO credit_transactions (
+      user_id, amount, transaction_type, reason, metadata, balance_after
+    )
+    VALUES (
+      ${userId}, ${topUpAmount}, 'renewal', ${reason}, ${JSON.stringify(metadata)}::jsonb, ${newBalance}
+    )
+    RETURNING *
+  `
+
   return transaction[0] as CreditTransaction
 }
 
