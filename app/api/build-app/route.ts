@@ -15,66 +15,60 @@ interface BuildAppRequest {
   >
 }
 
-async function generateFiles(
+/** Generate a single file's content using Claude */
+async function generateSingleFile(
   blueprint: BuildAppRequest['blueprint'],
+  filePath: string,
+  filePurpose: string,
   userId: string,
-): Promise<Record<string, string>> {
-  const missingList = blueprint.missing_files
-    .map((f) => `  - ${f.name}: ${f.purpose}`)
-    .join('\n')
-
+): Promise<string> {
   const existingList = blueprint.existing_files
-    .slice(0, 20)
-    .map((f) => `  - ${f.path}: ${f.purpose}`)
+    .slice(0, 15)
+    .map((f) => ` - ${f.path}: ${f.purpose}`)
     .join('\n')
 
-  const prompt = `You are a senior software engineer. Generate complete, production-ready source code for all the missing files in this project.
+  const prompt = `You are a senior software engineer. Generate complete, production-ready source code for ONE file.
 
 Project: ${blueprint.name}
 Description: ${blueprint.description ?? ''}
 Type: ${blueprint.app_type ?? 'application'}
 Technologies: ${blueprint.technologies.join(', ')}
-Complexity: ${blueprint.complexity}
-${blueprint.estimated_effort ? `Estimated effort: ${blueprint.estimated_effort}` : ''}
 ${blueprint.ai_explanation ? `Context: ${blueprint.ai_explanation}` : ''}
 
-Existing files already in the codebase (reference but do NOT regenerate these):
-${existingList || '  (none listed)'}
+Existing files in the codebase (reference only, do NOT regenerate):
+${existingList || ' (none listed)'}
 
-Missing files to generate (write FULL working implementations):
-${missingList || '  (none)'}
+File to generate:
+  Path: ${filePath}
+  Purpose: ${filePurpose}
 
-Also generate these project files:
-  - README.md (comprehensive setup and usage instructions)
-  - package.json (correct for the tech stack, with all needed dependencies)
-  - .env.example (all required environment variables with placeholder values)
-  - .gitignore (appropriate for this stack)
+Write the FULL, working implementation for this file.
+Return ONLY the raw file content — no markdown fences, no explanation, no preamble.
+Just the file content itself, ready to save.`
 
-Rules:
-- Return ONLY valid JSON, no markdown fences, no extra text
-- Keys are relative file paths (e.g. "src/auth/index.ts")
-- Values are complete file content as strings
-- All strings must use proper JSON escaping (\\n for newlines, \\" for quotes)
-- Write real, working code — not placeholder stubs
+  return generateWithGateway({
+    feature: 'build-app',
+    userId,
+    maxOutputTokens: 4096,
+    messages: [{ role: 'user', content: prompt }],
+  })
+}
 
-Return format: {"path/to/file.ts": "...full content...", "README.md": "..."}
-`
+/** Build the list of all files to generate */
+function getFilesToGenerate(blueprint: BuildAppRequest['blueprint']): Array<{ path: string; purpose: string }> {
+  const files: Array<{ path: string; purpose: string }> = []
 
-  const raw = (
-    await generateWithGateway({
-      feature: 'build-app',
-      userId,
-      maxOutputTokens: 8192,
-      messages: [{ role: 'user', content: prompt }],
-    })
-  ).trim()
-  const jsonText = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
-
-  const obj = JSON.parse(jsonText) as Record<string, unknown>
-  const files: Record<string, string> = {}
-  for (const [k, v] of Object.entries(obj)) {
-    files[k] = typeof v === 'string' ? v : JSON.stringify(v, null, 2)
+  // Missing files from the blueprint
+  for (const f of blueprint.missing_files) {
+    files.push({ path: f.name, purpose: f.purpose })
   }
+
+  // Standard project files
+  files.push({ path: 'README.md', purpose: 'Comprehensive setup, usage, and API documentation' })
+  files.push({ path: 'package.json', purpose: 'Project dependencies and scripts for the tech stack' })
+  files.push({ path: '.env.example', purpose: 'All required environment variables with placeholder values' })
+  files.push({ path: '.gitignore', purpose: 'Gitignore file appropriate for this stack' })
+
   return files
 }
 
@@ -237,30 +231,15 @@ export async function POST(request: NextRequest) {
 
         const cleanRepoName = repoName.trim().replace(/\s+/g, '-').toLowerCase()
 
-        // Step 1 — generate files with Claude
-        send({ step: 'generating', message: 'Generating file contents with Claude…' })
-
-        let files: Record<string, string>
-        try {
-          files = await generateFiles(blueprint, user.id)
-        } catch (e) {
-          send({
-            step: 'error',
-            message: `File generation failed: ${e instanceof Error ? e.message : String(e)}`,
-          })
-          controller.close()
-          return
-        }
-
-        const fileEntries = Object.entries(files)
+        // Step 1 — determine files to generate
+        const filesToGenerate = getFilesToGenerate(blueprint)
         send({
-          step: 'generated',
-          message: `${fileEntries.length} files ready. Creating repository…`,
-          fileCount: fileEntries.length,
-          files: fileEntries.map(([p]) => p),
+          step: 'generating',
+          message: `Generating ${filesToGenerate.length} files with Claude…`,
+          files: filesToGenerate.map((f) => f.path),
         })
 
-        // Step 2 — create repo
+        // Step 2 — create repo early so we can push as files complete
         const accessToken = user.access_token
         let repoUrl: string
         let gitlabProjectId: number | null = null
@@ -293,22 +272,35 @@ export async function POST(request: NextRequest) {
           return
         }
 
-        send({ step: 'repo_created', message: 'Repository created. Pushing files…', repoUrl })
+        send({ step: 'repo_created', message: 'Repository created. Generating and pushing files…', repoUrl })
 
-        // Step 3 — push files
+        // Step 3 — generate and push each file individually
         let pushed = 0
-        for (const [path, content] of fileEntries) {
+        const total = filesToGenerate.length
+
+        for (const { path, purpose } of filesToGenerate) {
+          // Generate this file
+          let content: string
+          try {
+            content = await generateSingleFile(blueprint, path, purpose, user.id)
+          } catch (e) {
+            console.warn(`[build-app] Failed to generate ${path}:`, e)
+            content = `# Error generating ${path}\n# ${e instanceof Error ? e.message : String(e)}\n`
+          }
+
+          // Push to platform
           if (platform === 'github') {
             await pushFileToGitHub(accessToken, user.github_username, cleanRepoName, path, content)
           } else if (gitlabProjectId !== null) {
             await pushFileToGitLab(accessToken, gitlabProjectId, gitlabBranch, path, content)
           }
+
           pushed++
           send({
             step: 'pushing',
-            message: `Pushing files… (${pushed}/${fileEntries.length})`,
+            message: `Pushed ${pushed}/${total} files`,
             current: pushed,
-            total: fileEntries.length,
+            total,
             path,
             preview: content.slice(0, 600),
           })
@@ -316,7 +308,7 @@ export async function POST(request: NextRequest) {
 
         send({
           step: 'done',
-          message: `${pushed} files pushed successfully.`,
+          message: `${pushed} files generated and pushed successfully.`,
           repoUrl,
           filesCreated: pushed,
         })
