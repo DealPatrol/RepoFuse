@@ -1,0 +1,270 @@
+import { NextRequest } from 'next/server'
+import Anthropic from '@anthropic-ai/sdk'
+import { getCurrentUser } from '@/lib/auth'
+import { getAnthropicModel } from '@/lib/anthropic-model'
+import { deductCredits, getCreditBalance, CREDITS } from '@/lib/credits'
+import type { DebtIssue } from '@/app/api/debt-scan/route'
+
+export const maxDuration = 60
+export const dynamic = 'force-dynamic'
+
+const anthropic = new Anthropic()
+
+interface DebtFixRequest {
+  issue: DebtIssue
+  analysisId: string
+  repoOwner: string
+  repoName: string
+}
+
+async function getFileFromGitHub(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  path: string,
+): Promise<{ content: string; sha: string } | null> {
+  const res = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/vnd.github+json',
+      },
+    },
+  )
+  if (!res.ok) return null
+  const data = (await res.json()) as { content?: string; sha?: string }
+  if (!data.content || !data.sha) return null
+  return {
+    content: Buffer.from(data.content, 'base64').toString('utf-8'),
+    sha: data.sha,
+  }
+}
+
+async function generateFix(
+  issue: DebtIssue,
+  currentContent: string,
+): Promise<string> {
+  const prompt = `You are a senior engineer fixing technical debt. Apply the following fix to this file.
+
+Issue: ${issue.title}
+Category: ${issue.category}
+Severity: ${issue.severity}
+Description: ${issue.description}
+Suggestion: ${issue.suggestion}
+${issue.fix ? `\nExpected change:\nBefore: ${issue.fix.before}\nAfter: ${issue.fix.after}` : ''}
+
+Current file content:
+\`\`\`
+${currentContent.slice(0, 4000)}
+\`\`\`
+
+Return ONLY the complete fixed file content, no explanations, no markdown fences.`
+
+  const response = await anthropic.messages.create({
+    model: getAnthropicModel(),
+    max_tokens: 4096,
+    messages: [{ role: 'user', content: prompt }],
+  })
+
+  const raw = response.content[0].type === 'text' ? response.content[0].text.trim() : ''
+  return raw.replace(/^```(?:\w+)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
+}
+
+async function createGitHubPR(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  filePath: string,
+  fixedContent: string,
+  sha: string,
+  issue: DebtIssue,
+): Promise<string> {
+  const branchName = `debt-fix/${issue.id}-${Date.now()}`
+  const encoded = Buffer.from(fixedContent).toString('base64')
+
+  // Get default branch SHA
+  const repoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/vnd.github+json' },
+  })
+  if (!repoRes.ok) throw new Error('Failed to fetch repo info')
+  const repoData = (await repoRes.json()) as { default_branch: string }
+  const defaultBranch = repoData.default_branch || 'main'
+
+  const refRes = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/git/ref/heads/${defaultBranch}`,
+    { headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/vnd.github+json' } },
+  )
+  if (!refRes.ok) throw new Error('Failed to get ref')
+  const refData = (await refRes.json()) as { object: { sha: string } }
+  const baseSha = refData.object.sha
+
+  // Create branch
+  const branchRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/refs`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ ref: `refs/heads/${branchName}`, sha: baseSha }),
+  })
+  if (!branchRes.ok) throw new Error('Failed to create branch')
+
+  // Update file on new branch
+  const updateRes = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(filePath)}`,
+    {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: `fix: ${issue.title}`,
+        content: encoded,
+        sha,
+        branch: branchName,
+      }),
+    },
+  )
+  if (!updateRes.ok) {
+    const err = (await updateRes.json()) as { message?: string }
+    throw new Error(err.message ?? 'Failed to update file')
+  }
+
+  // Create PR
+  const prRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      title: `[RepoFuse] fix: ${issue.title}`,
+      body: `## Technical Debt Fix\n\n**Category:** ${issue.category}\n**Severity:** ${issue.severity}\n**File:** \`${filePath}\`\n\n### Problem\n${issue.description}\n\n### Fix Applied\n${issue.suggestion}\n\n---\n*Generated by RepoFuse Debt Scanner*`,
+      head: branchName,
+      base: defaultBranch,
+    }),
+  })
+  if (!prRes.ok) {
+    const err = (await prRes.json()) as { message?: string }
+    throw new Error(err.message ?? 'Failed to create PR')
+  }
+  const prData = (await prRes.json()) as { html_url: string }
+  return prData.html_url
+}
+
+export async function POST(request: NextRequest) {
+  const encoder = new TextEncoder()
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (data: object) => {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+      }
+
+      try {
+        const user = await getCurrentUser()
+        if (!user) {
+          send({ step: 'error', message: 'Sign in to apply fixes.' })
+          controller.close()
+          return
+        }
+
+        const body = (await request.json()) as DebtFixRequest
+        const { issue, repoOwner, repoName } = body
+
+        if (!issue || !repoOwner || !repoName) {
+          send({ step: 'error', message: 'Missing required fields.' })
+          controller.close()
+          return
+        }
+
+        // Check credit balance before any work
+        const balance = await getCreditBalance(user.id)
+        if (balance < CREDITS.DEBT_FIX_COST) {
+          send({ step: 'error', message: `Insufficient credits. Required: ${CREDITS.DEBT_FIX_COST}, Available: ${balance}` })
+          controller.close()
+          return
+        }
+
+        // Step 1 — fetch current file
+        send({ step: 'fetching', message: 'Fetching current file from GitHub…' })
+
+        const fileData = await getFileFromGitHub(
+          user.access_token,
+          repoOwner,
+          repoName,
+          issue.file,
+        )
+
+        if (!fileData) {
+          send({ step: 'error', message: `Could not fetch file: ${issue.file}. Make sure the repository is connected.` })
+          controller.close()
+          return
+        }
+
+        // Step 2 — generate fix with Claude
+        send({ step: 'generating', message: 'Generating fix with Claude…' })
+
+        let fixedContent: string
+        try {
+          fixedContent = await generateFix(issue, fileData.content)
+        } catch (e) {
+          send({
+            step: 'error',
+            message: `Fix generation failed: ${e instanceof Error ? e.message : String(e)}`,
+          })
+          controller.close()
+          return
+        }
+
+        // Step 3 — create PR
+        send({ step: 'pr_creating', message: 'Creating pull request on GitHub…' })
+
+        let prUrl: string
+        try {
+          prUrl = await createGitHubPR(
+            user.access_token,
+            repoOwner,
+            repoName,
+            issue.file,
+            fixedContent,
+            fileData.sha,
+            issue,
+          )
+        } catch (e) {
+          send({
+            step: 'error',
+            message: `PR creation failed: ${e instanceof Error ? e.message : String(e)}`,
+          })
+          controller.close()
+          return
+        }
+
+        try {
+          await deductCredits(user.id, CREDITS.DEBT_FIX_COST, 'debt_fix', { issueId: issue.id, repoOwner, repoName })
+        } catch (e) {
+          console.error('[debt-fix] credit deduction failed:', e)
+        }
+
+        send({ step: 'done', message: 'Pull request created!', prUrl })
+      } catch (e) {
+        console.error('[debt-fix] unhandled error:', e)
+        send({ step: 'error', message: 'An unexpected error occurred.' })
+      } finally {
+        controller.close()
+      }
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    },
+  })
+}

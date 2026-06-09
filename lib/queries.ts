@@ -792,8 +792,8 @@ export async function trackBlueprintView(userId: string, blueprintId: string): P
         view_count = blueprint_views.view_count + 1,
         last_viewed_at = NOW()
     `
-  } catch {
-    // Table may not exist yet - silently ignore
+  } catch (error) {
+    console.error('[queries] trackBlueprintView failed (blueprint_views table may be missing):', error)
   }
 }
 
@@ -804,8 +804,8 @@ export async function countUserBlueprintViews(userId: string): Promise<number> {
       SELECT COUNT(*) as count FROM blueprint_views WHERE user_id = ${userId}
     `
     return Number(result[0]?.count || 0)
-  } catch {
-    // Table may not exist yet - return 0
+  } catch (error) {
+    console.error('[queries] countUserBlueprintViews failed (blueprint_views table may be missing):', error)
     return 0
   }
 }
@@ -817,8 +817,8 @@ export async function getUserViewedBlueprintIds(userId: string): Promise<string[
       SELECT blueprint_id FROM blueprint_views WHERE user_id = ${userId}
     `
     return (result as Array<{ blueprint_id: string }> || []).map((r) => r.blueprint_id)
-  } catch {
-    // Table may not exist yet - return empty array
+  } catch (error) {
+    console.error('[queries] getUserViewedBlueprintIds failed (blueprint_views table may be missing):', error)
     return []
   }
 }
@@ -835,8 +835,8 @@ export async function canViewBlueprint(userId: string, blueprintId: string, limi
     // Check if under limit
     const viewCount = await countUserBlueprintViews(userId)
     return viewCount < limit
-  } catch {
-    // Table may not exist yet - allow view
+  } catch (error) {
+    console.error('[queries] canViewBlueprint failed (blueprint_views table may be missing):', error)
     return true
   }
 }

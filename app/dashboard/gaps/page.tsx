@@ -179,8 +179,8 @@ async function GapsDashboardContent({ userId }: { userId: string }) {
       getAllMissingGaps(userId),
       getGapSummary(userId),
     ])
-  } catch {
-    // Database tables may not exist yet
+  } catch (error) {
+    console.error('[gaps] Failed to re-fetch gaps:', error)
   }
 
   let completedGapIds: string[] = []
