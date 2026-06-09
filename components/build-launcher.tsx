@@ -46,7 +46,7 @@ function stepIndex(step: BuildStep): number {
 }
 
 function slugify(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+  return name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/, '')
 }
 
 export function BuildLauncher({
@@ -87,6 +87,8 @@ export function BuildLauncher({
     setFiles([])
     setPushedFiles([])
     setPreview(null)
+    // Track repoUrl locally to avoid stale closure in async loop
+    let latestRepoUrl = ''
     try {
       const res = await fetch('/api/build-app', {
         method: 'POST',
@@ -132,21 +134,34 @@ export function BuildLauncher({
               current?: number; total?: number; filesCreated?: number
               files?: string[]; path?: string; preview?: string
             }
-            if (data.step === 'generating') setStep({ id: 'generating' })
-            else if (data.step === 'generated') {
-              setStep({ id: 'generated', fileCount: data.fileCount ?? 0 })
+            if (data.step === 'generating') {
+              setStep({ id: 'generating' })
+              // New flow: file list is sent immediately in the generating event
               if (data.files) setFiles(data.files)
             }
-            else if (data.step === 'repo_created') setStep({ id: 'repo_created', repoUrl: data.repoUrl! })
+            else if (data.step === 'generated') {
+              setStep({ id: 'generated', fileCount: data.fileCount ?? 0 })
+              // Legacy flow fallback: file list in generated event
+              if (data.files) setFiles(data.files)
+            }
+            else if (data.step === 'repo_created') {
+              latestRepoUrl = data.repoUrl ?? ''
+              setStep({ id: 'repo_created', repoUrl: latestRepoUrl })
+            }
             else if (data.step === 'pushing') {
-              setStep({ id: 'pushing', current: data.current ?? 0, total: data.total ?? 0, repoUrl: data.repoUrl ?? repoUrl ?? '' })
+              const url = data.repoUrl ?? latestRepoUrl
+              setStep({ id: 'pushing', current: data.current ?? 0, total: data.total ?? 0, repoUrl: url })
               if (data.path) {
                 setPushedFiles((prev) => prev.includes(data.path!) ? prev : [...prev, data.path!])
-                if (data.preview !== undefined) setPreview({ path: data.path, code: data.preview })
+                if (data.preview !== undefined) setPreview({ path: data.path!, code: data.preview })
               }
             }
-            else if (data.step === 'done') setStep({ id: 'done', repoUrl: data.repoUrl!, filesCreated: data.filesCreated ?? 0 })
-            else if (data.step === 'error') setStep({ id: 'error', message: data.message ?? 'Build failed' })
+            else if (data.step === 'done') {
+              setStep({ id: 'done', repoUrl: data.repoUrl ?? latestRepoUrl, filesCreated: data.filesCreated ?? 0 })
+            }
+            else if (data.step === 'error') {
+              setStep({ id: 'error', message: data.message ?? 'Build failed' })
+            }
           } catch {
             // incomplete chunk
           }
