@@ -66,8 +66,14 @@ export function DashboardSidebar({ user }: DashboardSidebarProps) {
       {/* Logo + collapse toggle */}
       <div className="flex items-center h-16 px-3 border-b border-white/5">
         <Link href="/" className="flex items-center flex-shrink-0">
-          <RepoFuseLogo3D className="h-9 w-9" />
+          <RepoFuseLogo3D className="h-9 w-9" showWordmark={false} />
         </Link>
+        {open && (
+          <span className="ml-2 text-sm font-bold tracking-widest whitespace-nowrap">
+            <span className="text-cyan-400">REPO</span>
+            <span className="text-orange-400">FUSE</span>
+          </span>
+        )}
         <button
           onClick={() => setPinned((p) => !p)}
           className={cn(
@@ -196,8 +202,12 @@ export function DashboardMobileNav({ user }: DashboardSidebarProps) {
   return (
     <header className="md:hidden sticky top-0 z-50 border-b border-cyan-500/20 bg-black/95 backdrop-blur-xl">
       <div className="flex items-center justify-between px-4 py-3">
-        <Link href="/" className="flex items-center">
-          <RepoFuseLogo3D className="h-8 w-8" />
+        <Link href="/" className="flex items-center gap-2">
+          <RepoFuseLogo3D className="h-8 w-8" showWordmark={false} />
+          <span className="text-sm font-bold tracking-widest whitespace-nowrap">
+            <span className="text-cyan-400">REPO</span>
+            <span className="text-orange-400">FUSE</span>
+          </span>
         </Link>
         {user && !isClerkEnabled() && user.github_avatar_url && (
           <img src={user.github_avatar_url} alt={user.github_username} className="h-7 w-7 rounded-full ring-2 ring-cyan-500/40" />
