@@ -439,6 +439,8 @@ export interface MissingFileGap {
   suggested_stub: string | null
   created_at: string
   updated_at: string
+  blueprint_name?: string // name of the app/project these missing files belong to
+  analysis_name?: string
 }
 
 export interface CompletedGap {
@@ -498,7 +500,7 @@ export async function getAllMissingGaps(userId?: string): Promise<MissingFileGap
   const sql = getDb()
   const gaps = userId
     ? await sql`
-      SELECT g.* FROM missing_file_gaps g
+              SELECT g.*, b.name AS blueprint_name, a.name AS analysis_name FROM missing_file_gaps g
       JOIN app_blueprints b ON b.id = g.blueprint_id
       JOIN analyses a ON a.id = b.analysis_id
       WHERE a.user_id = ${userId}
