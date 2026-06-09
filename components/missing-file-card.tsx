@@ -2,11 +2,11 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { 
-  Copy, 
-  CheckCircle2, 
-  AlertCircle, 
-  Clock, 
+import {
+  Copy,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
   Zap,
   ChevronRight,
 } from 'lucide-react'
@@ -56,6 +56,7 @@ export function MissingFileCard({
   const effort = calculateEffortScore(gap)
   const priority = getPriority(impact, effort)
   const category = gapCategories[gap.category] || gapCategories.other
+  const projectName = gap.blueprint_name || gap.analysis_name
 
   const blockedByCount = gap.dependencies.length
   const blockers = gap.dependencies
@@ -94,6 +95,16 @@ export function MissingFileCard({
         {/* Header */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
+            {projectName && (
+              <div className="mb-1.5">
+                <span
+                  className="inline-flex items-center gap-1 rounded-md bg-violet-500/15 text-violet-700 border border-violet-300 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide truncate max-w-full"
+                  title={`Project: ${projectName}`}
+                >
+                  {projectName}
+                </span>
+              </div>
+            )}
             <div className="flex items-center gap-2 mb-1">
               <span className="text-lg">{category.icon}</span>
               <h3 className="font-semibold text-sm truncate">{gap.file_name}</h3>
