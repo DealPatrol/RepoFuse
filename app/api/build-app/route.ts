@@ -128,7 +128,7 @@ async function pushFileToGitHub(
 
   if (!res.ok) {
     const err = (await res.json()) as { message?: string }
-    console.warn(`[build-app] Failed to push ${path}: ${err.message}`)
+    throw new Error(`Failed to push ${path}: ${err.message ?? res.statusText}`)
   }
 }
 
@@ -190,7 +190,7 @@ async function pushFileToGitLab(
 
   if (!res.ok) {
     const err = (await res.json()) as { message?: string }
-    console.warn(`[build-app] Failed to push ${path} to GitLab: ${err.message}`)
+    throw new Error(`Failed to push ${path} to GitLab: ${err.message ?? res.statusText}`)
   }
 }
 
@@ -206,7 +206,6 @@ export async function POST(request: NextRequest) {
         const user = await getCurrentUser()
         if (!user) {
           send({ step: 'error', message: 'Sign in before building an app.' })
-          controller.close()
           return
         }
 
@@ -216,7 +215,6 @@ export async function POST(request: NextRequest) {
         }
         if (!hasProAccess(user, sub)) {
           send({ step: 'error', message: 'Build This App is available on paid plans. Upgrade to create and push a generated repo.' })
-          controller.close()
           return
         }
 
@@ -225,7 +223,6 @@ export async function POST(request: NextRequest) {
 
         if (!repoName?.trim()) {
           send({ step: 'error', message: 'Repository name is required.' })
-          controller.close()
           return
         }
 
@@ -268,7 +265,6 @@ export async function POST(request: NextRequest) {
             step: 'error',
             message: `Could not create repository: ${e instanceof Error ? e.message : String(e)}. Make sure you are connected to ${platform === 'github' ? 'GitHub' : 'GitLab'}.`,
           })
-          controller.close()
           return
         }
 
@@ -285,14 +281,27 @@ export async function POST(request: NextRequest) {
             content = await generateSingleFile(blueprint, path, purpose, user.id)
           } catch (e) {
             console.warn(`[build-app] Failed to generate ${path}:`, e)
-            content = `# Error generating ${path}\n# ${e instanceof Error ? e.message : String(e)}\n`
+            send({
+              step: 'error',
+              message: `Could not generate ${path}: ${e instanceof Error ? e.message : String(e)}`,
+            })
+            return
           }
 
           // Push to platform
-          if (platform === 'github') {
-            await pushFileToGitHub(accessToken, user.github_username, cleanRepoName, path, content)
-          } else if (gitlabProjectId !== null) {
-            await pushFileToGitLab(accessToken, gitlabProjectId, gitlabBranch, path, content)
+          try {
+            if (platform === 'github') {
+              await pushFileToGitHub(accessToken, user.github_username, cleanRepoName, path, content)
+            } else if (gitlabProjectId !== null) {
+              await pushFileToGitLab(accessToken, gitlabProjectId, gitlabBranch, path, content)
+            }
+          } catch (e) {
+            console.warn(`[build-app] Failed to push ${path}:`, e)
+            send({
+              step: 'error',
+              message: e instanceof Error ? e.message : `Could not push ${path}`,
+            })
+            return
           }
 
           pushed++
