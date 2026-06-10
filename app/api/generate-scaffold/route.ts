@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { aiConfigErrorMessage, generateWithGateway, getGatewayModel, isAiConfigured } from '@/lib/ai-gateway'
+import { aiConfigErrorMessage, generateWithGateway, isAiConfigured } from '@/lib/ai-gateway'
 import { getCreditBalance, deductCredits, CREDITS } from '@/lib/credits'
 import { getCurrentUser } from '@/lib/auth'
 import { getSubscriptionByGithubId, upsertSubscription } from '@/lib/queries'
@@ -46,8 +46,6 @@ export async function POST(request: NextRequest) {
         )
       }
     }
-
-    console.log('[scaffold] Generating for app:', appName, 'model:', getGatewayModel())
 
     const raw = await generateWithGateway({
       feature: 'scaffold',

@@ -101,7 +101,7 @@ Return as JSON array of app suggestions. Focus on practical, buildable applicati
     })
 
     if (!deductResult.success) {
-      console.error('[v0] Failed to deduct credits:', deductResult.error)
+      console.error('Failed to deduct credits:', deductResult.error)
       return NextResponse.json(
         { error: 'Failed to process analysis' },
         { status: 500 }

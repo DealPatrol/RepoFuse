@@ -160,8 +160,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
   }
 
-  console.log('[stripe/webhook] Received event', { id: event.id, type: event.type })
-
   if (!HANDLED_EVENTS.has(event.type)) {
     return NextResponse.json({ received: true, ignored: event.type })
   }

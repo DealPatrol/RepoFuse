@@ -8,19 +8,16 @@ export async function GET(request: NextRequest) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
 
     if (!isStripeConfigured()) {
-      console.error('[v0] Stripe not configured')
       return NextResponse.redirect(new URL('/dashboard?error=stripe_not_configured', appUrl))
     }
 
     const user = await getCurrentUser()
     if (!user) {
-      console.error('[v0] No user found for checkout redirect')
       return NextResponse.redirect(new URL('/?error=auth_required', appUrl))
     }
 
     const priceId = getPriceId()
     if (!priceId) {
-      console.error('[v0] STRIPE_PRO_PRICE_ID is not set')
       return NextResponse.redirect(new URL('/dashboard?error=price_not_configured', appUrl))
     }
 
@@ -44,7 +41,6 @@ export async function GET(request: NextRequest) {
       await upsertSubscription({ github_id: user.github_id, stripe_customer_id: customerId })
     }
 
-    console.log('[v0] Creating checkout session for launch signup:', { priceId, customerId })
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
@@ -58,16 +54,14 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    console.log('[v0] Checkout session created, redirecting:', session.id)
-    
     if (!session.url) {
-      console.error('[v0] No checkout URL in session')
+      console.error('Stripe checkout session missing redirect URL')
       return NextResponse.redirect(new URL('/dashboard?error=checkout_failed', appUrl))
     }
 
     return NextResponse.redirect(session.url)
   } catch (error) {
-    console.error('[v0] Checkout redirect error:', error instanceof Error ? error.message : String(error))
+    console.error('Checkout redirect error:', error instanceof Error ? error.message : String(error))
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
     return NextResponse.redirect(new URL('/dashboard?error=checkout_failed', appUrl))
   }

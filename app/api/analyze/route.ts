@@ -1,14 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { generateText } from 'ai'
 import { scanCrossPlatformCode } from '@/lib/cross-platform-scanner'
 import { analyzeScannedFiles, createAnthropicPromptRunner } from '@/lib/repofuse-core.js'
 
-export async function POST(_request: NextRequest) {
+export async function POST() {
   try {
-    console.log('[v0] Starting cross-platform analysis...')
-
     const scannedFiles = await scanCrossPlatformCode()
-    console.log(`[v0] Scanned ${scannedFiles.length} files`)
 
     if (scannedFiles.length === 0) {
       return NextResponse.json({ error: 'No code files found to analyze' }, { status: 400 })
@@ -36,8 +33,6 @@ export async function POST(_request: NextRequest) {
       }),
     })
 
-    console.log(`[v0] Discovered ${result.blueprints.length} apps`)
-
     return NextResponse.json({
       success: true,
       filesScanned: scannedFiles.length,
@@ -46,7 +41,7 @@ export async function POST(_request: NextRequest) {
       files: scannedFiles,
     })
   } catch (error) {
-    console.error('[v0] Analysis error:', error)
+    console.error('Analysis error:', error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Analysis failed' },
       { status: 500 },

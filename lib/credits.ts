@@ -30,9 +30,29 @@ export interface CreditTransaction {
   amount: number
   transaction_type: 'grant' | 'analysis' | 'scaffold' | 'build_app' | 'pattern_analyzer' | 'refund' | 'renewal'
   reason: string | null
-  metadata: Record<string, any>
+  metadata: CreditMetadata
   balance_after: number
   created_at: string
+}
+
+type CreditMetadata = Record<string, unknown>
+
+interface CreditBalanceRow {
+  current_balance: number
+}
+
+interface CreditUsageBreakdownRow {
+  analyses_used: string | number | null
+  scaffolds_used: string | number | null
+}
+
+interface MonthlyTokenUsageRow {
+  total: string | number | null
+}
+
+function toCount(value: string | number | null | undefined): number {
+  if (typeof value === 'number') return value
+  return Number.parseInt(value ?? '0', 10)
 }
 
 // Initialize or get user credits
@@ -69,7 +89,7 @@ export async function getCreditBalance(userId: string): Promise<number> {
     return 0
   }
   
-  return (result[0] as any).current_balance as number
+  return (result[0] as CreditBalanceRow).current_balance
 }
 
 // Grant credits (for signup or renewal)
@@ -77,7 +97,7 @@ export async function grantCredits(
   userId: string,
   amount: number,
   reason: string,
-  metadata: Record<string, any> = {}
+  metadata: CreditMetadata = {}
 ): Promise<CreditTransaction> {
   const sql = getDb()
   
@@ -114,7 +134,7 @@ export async function renewMonthlyCredits(
   userId: string,
   monthlyAllowance: number,
   reason: string,
-  metadata: Record<string, any> = {}
+  metadata: CreditMetadata = {}
 ): Promise<CreditTransaction | null> {
   const sql = getDb()
   const userCredits = await getOrCreateUserCredits(userId)
@@ -158,7 +178,7 @@ export async function deductCredits(
   userId: string,
   amount: number,
   type: 'analysis' | 'scaffold' | 'build_app' | 'pattern_analyzer',
-  metadata: Record<string, any> = {}
+  metadata: CreditMetadata = {}
 ): Promise<{ success: boolean; transaction?: CreditTransaction; error?: string }> {
   const sql = getDb()
   
@@ -207,7 +227,7 @@ export async function refundCredits(
   userId: string,
   amount: number,
   reason: string,
-  metadata: Record<string, any> = {}
+  metadata: CreditMetadata = {}
 ): Promise<CreditTransaction> {
   const sql = getDb()
   
@@ -273,14 +293,14 @@ export async function getCreditUsageSummary(userId: string): Promise<{
     WHERE user_id = ${userId} AND amount < 0
   `
   
-  const breakdown = usageBreakdown[0] as any
+  const breakdown = usageBreakdown[0] as CreditUsageBreakdownRow | undefined
   
   return {
     total_granted: credits.total_granted,
     total_used: credits.total_used,
     current_balance: credits.current_balance,
-    analyses_used: parseInt(breakdown?.analyses_used || '0'),
-    scaffolds_used: parseInt(breakdown?.scaffolds_used || '0'),
+    analyses_used: toCount(breakdown?.analyses_used),
+    scaffolds_used: toCount(breakdown?.scaffolds_used),
   }
 }
 
@@ -319,7 +339,7 @@ export async function trackTokenUsage(
         FOREIGN KEY (analysis_id) REFERENCES analyses(id) ON DELETE CASCADE
       )
     `
-  } catch (e) {
+  } catch {
     // Table might already exist
   }
   
@@ -329,7 +349,7 @@ export async function trackTokenUsage(
       VALUES (${userId}, ${analysisId}, ${tokensUsed}, ${estimatedCost}, ${modelUsed})
     `
   } catch (error) {
-    console.error('[v0] Error tracking token usage:', error)
+    console.error('Error tracking token usage:', error)
   }
 }
 
@@ -343,9 +363,9 @@ export async function getMonthlyTokenUsage(userId: string): Promise<number> {
       AND created_at > NOW() - INTERVAL '30 days'
     `
     
-    return parseInt(result[0]?.total || '0')
+    return toCount((result[0] as MonthlyTokenUsageRow | undefined)?.total)
   } catch (error) {
-    console.error('[v0] Error getting monthly token usage:', error)
+    console.error('Error getting monthly token usage:', error)
     return 0
   }
 }
