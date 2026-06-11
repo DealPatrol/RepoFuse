@@ -7,6 +7,7 @@ import {
   Github,
   BarChart3,
   FolderGit2,
+  FolderOpen,
   Sparkles,
   CreditCard,
   LayoutGrid,
@@ -33,6 +34,7 @@ const flagshipItem = { href: '/dashboard/build', label: "Build It For Me", icon:
 
 const navItems = [
   { href: '/dashboard', label: 'Overview', icon: BarChart3 },
+  { href: '/dashboard/projects', label: 'Projects', icon: FolderOpen },
   { href: '/dashboard/repositories', label: 'Repos', icon: FolderGit2 },
   { href: '/dashboard/analyses', label: 'Analyses', icon: Sparkles },
   { href: '/dashboard/pattern-analyzer', label: 'App Idea Chat', icon: MessageSquare },
