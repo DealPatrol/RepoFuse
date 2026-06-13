@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateText } from 'ai'
 import { getCreditBalance, deductCredits, CREDITS } from '@/lib/credits'
+import { getCurrentUser } from '@/lib/auth'
 
 const model = 'openai/gpt-4-turbo'
 
@@ -21,18 +22,17 @@ interface AppSuggestion {
 
 export async function POST(request: NextRequest) {
   try {
-    const { analysisId, selectedRepos, userId } = (await request.json()) as {
+    const user = await getCurrentUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    const { analysisId, selectedRepos } = (await request.json()) as {
       analysisId: string
       selectedRepos: SelectedRepository[]
-      userId: string
     }
 
-    // Check credit balance before proceeding
-    if (!userId) {
-      return NextResponse.json({ error: 'User ID required' }, { status: 401 })
-    }
-
-    const currentBalance = await getCreditBalance(userId)
+    const currentBalance = await getCreditBalance(user.id)
     if (currentBalance < CREDITS.ANALYSIS_COST) {
       return NextResponse.json(
         {
@@ -95,7 +95,7 @@ Return as JSON array of app suggestions. Focus on practical, buildable applicati
     }
 
     // Deduct credits for successful analysis
-    const deductResult = await deductCredits(userId, CREDITS.ANALYSIS_COST, 'analysis', {
+    const deductResult = await deductCredits(user.id, CREDITS.ANALYSIS_COST, 'analysis', {
       analysisId,
       selectedRepos: selectedRepos.map((r) => r.name),
     })
