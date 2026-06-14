@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { aiConfigErrorMessage, generateWithGateway, isAiConfigured } from '@/lib/ai-gateway'
-import { getCreditBalance, deductCredits, CREDITS } from '@/lib/credits'
+import { getCreditBalance, deductCredits, refundCredits, CREDITS } from '@/lib/credits'
 import { getCurrentUser } from '@/lib/auth'
 import { getSubscriptionByGithubId, upsertSubscription } from '@/lib/queries'
 import { hasProAccess } from '@/lib/pro-access'
@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: aiConfigErrorMessage() }, { status: 503 })
     }
 
-    const { appName, description, technologies, existingFiles, missingFiles, userId } = await request.json()
+    const { appName, description, technologies, existingFiles, missingFiles } = await request.json()
     const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json({ error: 'Sign in with GitHub to generate scaffolds.' }, { status: 401 })
@@ -32,29 +32,44 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    if (userId) {
-      const currentBalance = await getCreditBalance(userId)
-      if (currentBalance < CREDITS.SCAFFOLD_COST) {
-        return NextResponse.json(
-          {
-            error: 'Insufficient credits',
-            required: CREDITS.SCAFFOLD_COST,
-            available: currentBalance,
-            message: 'Upgrade to Pro to get unlimited scaffold generation with 3,000 monthly credits.',
-          },
-          { status: 402 },
-        )
-      }
+    const currentBalance = await getCreditBalance(user.id)
+    if (currentBalance < CREDITS.SCAFFOLD_COST) {
+      return NextResponse.json(
+        {
+          error: 'Insufficient credits',
+          required: CREDITS.SCAFFOLD_COST,
+          available: currentBalance,
+          message: 'Upgrade to Pro to get 3,000 monthly credits for scaffold generation.',
+        },
+        { status: 402 },
+      )
     }
 
-    const raw = await generateWithGateway({
-      feature: 'scaffold',
-      userId: user.id,
-      maxOutputTokens: 8192,
-      messages: [
+    const creditMetadata = { appName, technologies }
+    const deductResult = await deductCredits(user.id, CREDITS.SCAFFOLD_COST, 'scaffold', creditMetadata)
+    if (!deductResult.success) {
+      const latestBalance = await getCreditBalance(user.id)
+      return NextResponse.json(
         {
-          role: 'user',
-          content: `Generate a complete project scaffold for "${appName}".
+          error: 'Insufficient credits',
+          required: CREDITS.SCAFFOLD_COST,
+          available: latestBalance,
+          message: deductResult.error ?? 'Not enough credits for scaffold generation.',
+        },
+        { status: 402 },
+      )
+    }
+
+    let raw = ''
+    try {
+      raw = await generateWithGateway({
+        feature: 'scaffold',
+        userId: user.id,
+        maxOutputTokens: 8192,
+        messages: [
+          {
+            role: 'user',
+            content: `Generate a complete project scaffold for "${appName}".
 
 Description: ${description}
 Technologies: ${(technologies ?? []).join(', ')}
@@ -87,9 +102,18 @@ Example structure:
     "src/index.ts": "// TODO: implement main logic\\nconsole.log('Hello')"
   }
 }`,
-        },
-      ],
-    })
+          },
+        ],
+      })
+    } catch (error) {
+      await refundCredits(user.id, CREDITS.SCAFFOLD_COST, 'Scaffold generation failed', {
+        ...creditMetadata,
+        error: error instanceof Error ? error.message : String(error),
+      }).catch((refundError: unknown) => {
+        console.error('[scaffold] Failed to refund credits after generation failure:', refundError)
+      })
+      throw error
+    }
 
     let scaffold
     try {
@@ -116,26 +140,20 @@ Example structure:
       }
     } catch (e) {
       console.error('[scaffold] Failed to parse AI response:', raw.slice(0, 500))
-      throw new Error(`Failed to parse scaffold: ${e instanceof Error ? e.message : 'Invalid JSON'}`)
-    }
-
-    let creditsUsed = 0
-    if (userId) {
-      const deductResult = await deductCredits(userId, CREDITS.SCAFFOLD_COST, 'scaffold', {
-        appName,
-        technologies,
+      await refundCredits(user.id, CREDITS.SCAFFOLD_COST, 'Scaffold response parsing failed', {
+        ...creditMetadata,
+        error: e instanceof Error ? e.message : 'Invalid JSON',
+      }).catch((refundError: unknown) => {
+        console.error('[scaffold] Failed to refund credits after parse failure:', refundError)
       })
-
-      if (deductResult.success) {
-        creditsUsed = CREDITS.SCAFFOLD_COST
-      }
+      throw new Error(`Failed to parse scaffold: ${e instanceof Error ? e.message : 'Invalid JSON'}`)
     }
 
     return NextResponse.json({
       success: true,
       scaffold,
       appName,
-      creditsUsed,
+      creditsUsed: CREDITS.SCAFFOLD_COST,
     })
   } catch (error) {
     console.error('[scaffold] Generation error:', error)

@@ -181,40 +181,35 @@ export async function deductCredits(
   metadata: CreditMetadata = {}
 ): Promise<{ success: boolean; transaction?: CreditTransaction; error?: string }> {
   const sql = getDb()
-  
-  // Get current balance
-  const userCredits = await getOrCreateUserCredits(userId)
-  const currentBalance = userCredits.current_balance
-  
-  // Check if sufficient balance
-  if (currentBalance < amount) {
+
+  await getOrCreateUserCredits(userId)
+
+  const transaction = await sql`
+    WITH updated AS (
+      UPDATE user_credits
+      SET
+        current_balance = current_balance - ${amount},
+        total_used = total_used + ${amount}
+      WHERE user_id = ${userId}
+        AND current_balance >= ${amount}
+      RETURNING current_balance
+    )
+    INSERT INTO credit_transactions (
+      user_id, amount, transaction_type, reason, metadata, balance_after
+    )
+    SELECT
+      ${userId}, ${-amount}, ${type}, ${`${type} deduction`}, ${JSON.stringify(metadata)}::jsonb, updated.current_balance
+    FROM updated
+    RETURNING *
+  `
+
+  if (transaction.length === 0) {
+    const currentBalance = await getCreditBalance(userId)
     return {
       success: false,
       error: `Insufficient credits. Required: ${amount}, Available: ${currentBalance}`,
     }
   }
-  
-  const newBalance = currentBalance - amount
-  
-  // Update balance
-  await sql`
-    UPDATE user_credits
-    SET 
-      current_balance = ${newBalance},
-      total_used = total_used + ${amount}
-    WHERE user_id = ${userId}
-  `
-  
-  // Record transaction
-  const transaction = await sql`
-    INSERT INTO credit_transactions (
-      user_id, amount, transaction_type, reason, metadata, balance_after
-    )
-    VALUES (
-      ${userId}, ${-amount}, ${type}, ${`${type} deduction`}, ${JSON.stringify(metadata)}::jsonb, ${newBalance}
-    )
-    RETURNING *
-  `
   
   return {
     success: true,

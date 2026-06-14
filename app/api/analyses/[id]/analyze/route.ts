@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateText } from 'ai'
-import { getCreditBalance, deductCredits, CREDITS } from '@/lib/credits'
+import { getCreditBalance, deductCredits, refundCredits, CREDITS } from '@/lib/credits'
+import { getCurrentUser } from '@/lib/auth'
 
 const model = 'openai/gpt-4-turbo'
 
@@ -20,19 +21,26 @@ interface AppSuggestion {
 }
 
 export async function POST(request: NextRequest) {
+  let chargedUserId: string | null = null
+  let chargedMetadata: Record<string, unknown> | null = null
+
   try {
-    const { analysisId, selectedRepos, userId } = (await request.json()) as {
+    const { analysisId, selectedRepos } = (await request.json()) as {
       analysisId: string
       selectedRepos: SelectedRepository[]
-      userId: string
     }
 
-    // Check credit balance before proceeding
-    if (!userId) {
-      return NextResponse.json({ error: 'User ID required' }, { status: 401 })
+    const user = await getCurrentUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Sign in with GitHub to analyze repositories.' }, { status: 401 })
     }
 
-    const currentBalance = await getCreditBalance(userId)
+    if (!analysisId || !Array.isArray(selectedRepos)) {
+      return NextResponse.json({ error: 'Missing required analysis data' }, { status: 400 })
+    }
+
+    // Check and deduct from the authenticated user only.
+    const currentBalance = await getCreditBalance(user.id)
     if (currentBalance < CREDITS.ANALYSIS_COST) {
       return NextResponse.json(
         {
@@ -44,6 +52,26 @@ export async function POST(request: NextRequest) {
         { status: 402 }
       )
     }
+
+    chargedMetadata = {
+      analysisId,
+      selectedRepos: selectedRepos.map((r) => r.name),
+    }
+    const deductResult = await deductCredits(user.id, CREDITS.ANALYSIS_COST, 'analysis', chargedMetadata)
+
+    if (!deductResult.success) {
+      const latestBalance = await getCreditBalance(user.id)
+      return NextResponse.json(
+        {
+          error: 'Insufficient credits',
+          required: CREDITS.ANALYSIS_COST,
+          available: latestBalance,
+          message: deductResult.error ?? 'Not enough credits for analysis.',
+        },
+        { status: 402 }
+      )
+    }
+    chargedUserId = user.id
 
     // Get all repo files from database
     const filesByRepo: Record<string, RepositoryTreeFile[]> = {}
@@ -94,20 +122,6 @@ Return as JSON array of app suggestions. Focus on practical, buildable applicati
       console.error('Failed to parse AI response:', e)
     }
 
-    // Deduct credits for successful analysis
-    const deductResult = await deductCredits(userId, CREDITS.ANALYSIS_COST, 'analysis', {
-      analysisId,
-      selectedRepos: selectedRepos.map((r) => r.name),
-    })
-
-    if (!deductResult.success) {
-      console.error('Failed to deduct credits:', deductResult.error)
-      return NextResponse.json(
-        { error: 'Failed to process analysis' },
-        { status: 500 }
-      )
-    }
-
     const newBalance = deductResult.transaction?.balance_after || 0
 
     return NextResponse.json({
@@ -120,6 +134,14 @@ Return as JSON array of app suggestions. Focus on practical, buildable applicati
     })
   } catch (error) {
     console.error('Analysis error:', error)
+    if (chargedUserId) {
+      await refundCredits(chargedUserId, CREDITS.ANALYSIS_COST, 'Legacy analysis failed', {
+        ...(chargedMetadata ?? {}),
+        error: error instanceof Error ? error.message : String(error),
+      }).catch((refundError: unknown) => {
+        console.error('Failed to refund credits after analysis error:', refundError)
+      })
+    }
     return NextResponse.json({ error: 'Failed to analyze repositories' }, { status: 500 })
   }
 }

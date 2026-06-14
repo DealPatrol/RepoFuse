@@ -15,6 +15,16 @@ interface BuildAppRequest {
   >
 }
 
+async function readApiError(res: Response, fallback: string): Promise<string> {
+  try {
+    const body = (await res.json()) as { message?: unknown; error?: unknown }
+    const message = typeof body.message === 'string' ? body.message : body.error
+    return typeof message === 'string' && message.trim() ? message : fallback
+  } catch {
+    return fallback
+  }
+}
+
 /** Generate a single file's content using Claude */
 async function generateSingleFile(
   blueprint: BuildAppRequest['blueprint'],
@@ -56,20 +66,27 @@ Just the file content itself, ready to save.`
 
 /** Build the list of all files to generate */
 function getFilesToGenerate(blueprint: BuildAppRequest['blueprint']): Array<{ path: string; purpose: string }> {
-  const files: Array<{ path: string; purpose: string }> = []
+  const files = new Map<string, { path: string; purpose: string }>()
+  const addFile = (path: string, purpose: string) => {
+    const normalizedPath = path.trim()
+    if (!normalizedPath || files.has(normalizedPath)) {
+      return
+    }
+    files.set(normalizedPath, { path: normalizedPath, purpose })
+  }
 
   // Missing files from the blueprint
   for (const f of blueprint.missing_files) {
-    files.push({ path: f.name, purpose: f.purpose })
+    addFile(f.name, f.purpose)
   }
 
   // Standard project files
-  files.push({ path: 'README.md', purpose: 'Comprehensive setup, usage, and API documentation' })
-  files.push({ path: 'package.json', purpose: 'Project dependencies and scripts for the tech stack' })
-  files.push({ path: '.env.example', purpose: 'All required environment variables with placeholder values' })
-  files.push({ path: '.gitignore', purpose: 'Gitignore file appropriate for this stack' })
+  addFile('README.md', 'Comprehensive setup, usage, and API documentation')
+  addFile('package.json', 'Project dependencies and scripts for the tech stack')
+  addFile('.env.example', 'All required environment variables with placeholder values')
+  addFile('.gitignore', 'Gitignore file appropriate for this stack')
 
-  return files
+  return Array.from(files.values())
 }
 
 async function createGitHubRepo(
@@ -88,14 +105,13 @@ async function createGitHubRepo(
     body: JSON.stringify({
       name: repoName,
       description,
-      private: false,
+      private: true,
       auto_init: false,
     }),
   })
 
   if (!res.ok) {
-    const err = (await res.json()) as { message?: string }
-    throw new Error(err.message ?? 'Failed to create GitHub repository')
+    throw new Error(await readApiError(res, 'Failed to create GitHub repository'))
   }
 
   const repo = (await res.json()) as { html_url: string }
@@ -127,8 +143,7 @@ async function pushFileToGitHub(
   )
 
   if (!res.ok) {
-    const err = (await res.json()) as { message?: string }
-    console.warn(`[build-app] Failed to push ${path}: ${err.message}`)
+    throw new Error(await readApiError(res, `Failed to push ${path} to GitHub`))
   }
 }
 
@@ -152,12 +167,7 @@ async function createGitLabProject(
   })
 
   if (!res.ok) {
-    const err = (await res.json()) as { message?: string | Record<string, string[]> }
-    const msg =
-      typeof err.message === 'string'
-        ? err.message
-        : JSON.stringify(err.message)
-    throw new Error(msg ?? 'Failed to create GitLab project')
+    throw new Error(await readApiError(res, 'Failed to create GitLab project'))
   }
 
   return res.json() as Promise<{ id: number; web_url: string; default_branch: string }>
@@ -189,8 +199,7 @@ async function pushFileToGitLab(
   )
 
   if (!res.ok) {
-    const err = (await res.json()) as { message?: string }
-    console.warn(`[build-app] Failed to push ${path} to GitLab: ${err.message}`)
+    throw new Error(await readApiError(res, `Failed to push ${path} to GitLab`))
   }
 }
 
@@ -223,8 +232,25 @@ export async function POST(request: NextRequest) {
         const body = (await request.json()) as BuildAppRequest
         const { platform, repoName, blueprint } = body
 
+        if (platform !== 'github' && platform !== 'gitlab') {
+          send({ step: 'error', message: 'Choose GitHub or GitLab before building.' })
+          controller.close()
+          return
+        }
+
         if (!repoName?.trim()) {
           send({ step: 'error', message: 'Repository name is required.' })
+          controller.close()
+          return
+        }
+
+        if (
+          !blueprint ||
+          !Array.isArray(blueprint.technologies) ||
+          !Array.isArray(blueprint.existing_files) ||
+          !Array.isArray(blueprint.missing_files)
+        ) {
+          send({ step: 'error', message: 'Blueprint data is incomplete. Re-run the analysis before building.' })
           controller.close()
           return
         }
@@ -284,15 +310,32 @@ export async function POST(request: NextRequest) {
           try {
             content = await generateSingleFile(blueprint, path, purpose, user.id)
           } catch (e) {
-            console.warn(`[build-app] Failed to generate ${path}:`, e)
-            content = `# Error generating ${path}\n# ${e instanceof Error ? e.message : String(e)}\n`
+            const message = e instanceof Error ? e.message : String(e)
+            console.error(`[build-app] Failed to generate ${path}:`, e)
+            send({
+              step: 'error',
+              message: `Failed to generate ${path}: ${message}. The repository may be incomplete; no success event was emitted.`,
+              repoUrl,
+            })
+            return
           }
 
           // Push to platform
-          if (platform === 'github') {
-            await pushFileToGitHub(accessToken, user.github_username, cleanRepoName, path, content)
-          } else if (gitlabProjectId !== null) {
-            await pushFileToGitLab(accessToken, gitlabProjectId, gitlabBranch, path, content)
+          try {
+            if (platform === 'github') {
+              await pushFileToGitHub(accessToken, user.github_username, cleanRepoName, path, content)
+            } else if (gitlabProjectId !== null) {
+              await pushFileToGitLab(accessToken, gitlabProjectId, gitlabBranch, path, content)
+            }
+          } catch (e) {
+            const message = e instanceof Error ? e.message : String(e)
+            console.error(`[build-app] Failed to push ${path}:`, e)
+            send({
+              step: 'error',
+              message: `Failed to push ${path}: ${message}. The repository may be incomplete; no success event was emitted.`,
+              repoUrl,
+            })
+            return
           }
 
           pushed++
@@ -301,6 +344,7 @@ export async function POST(request: NextRequest) {
             message: `Pushed ${pushed}/${total} files`,
             current: pushed,
             total,
+            repoUrl,
             path,
             preview: content.slice(0, 600),
           })
