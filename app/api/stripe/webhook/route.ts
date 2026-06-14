@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getWebhookSecret, getStripe, getPriceIdForPlan } from '@/lib/stripe'
+import { getStripeWebhookSecret, getStripe, getPriceIdForPlan } from '@/lib/stripe'
 import { upsertSubscription, getSubscriptionByStripeCustomerId, getUserByGithubId, updateUserBilling } from '@/lib/queries'
 import { grantCredits, CREDITS } from '@/lib/credits'
 import type Stripe from 'stripe'
