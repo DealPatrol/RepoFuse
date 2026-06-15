@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers'
 import { Anthropic } from '@anthropic-ai/sdk'
+import { getAnthropicModel } from '@/lib/anthropic-model'
 
 let __anthropicClient: Anthropic | null = null
 function getAnthropic(): Anthropic {
@@ -65,7 +66,7 @@ For each file, provide:
 - Can this be combined with other files to build apps?`
 
   const response = await getAnthropic().messages.create({
-    model: 'claude-3-5-sonnet-20241022',
+    model: getAnthropicModel(),
     max_tokens: 4000,
     messages: [
       {

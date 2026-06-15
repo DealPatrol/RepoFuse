@@ -1,4 +1,5 @@
 import { Anthropic } from '@anthropic-ai/sdk'
+import { getAnthropicModel } from '@/lib/anthropic-model'
 
 let __anthropicClient: Anthropic | null = null
 function getAnthropic(): Anthropic {
@@ -34,27 +35,34 @@ export async function discoverApps(scannedFiles: any[]): Promise<DiscoveredApp[]
     .map((f) => `- ${f.path} (${f.language}, purpose: ${f.purpose}, reusability: ${f.reusabilityScore}/10)`)
     .join('\n')
 
-  const prompt = `You are an expert software architect. Given this list of files from a developer's codebase across multiple platforms, identify 8-12 complete applications they could build by combining existing files and writing minimal new code.
+  const prompt = `You are an expert software architect and product strategist. The files below come from products a developer has ALREADY built. Your job is to identify 8-12 genuinely NEW applications they could build by recombining the capabilities in this code — not to re-describe what they already have.
 
 Files available:
 ${filesList}
 
+First, privately inventory the transferable CAPABILITIES in these files (auth, payments, scraping, dashboards, notifications, API clients, AI integration, etc.). Capabilities transfer across domains even when the product doesn't.
+
+HARD RULES for every suggestion:
+1. NOT A REBUILD: never suggest an app that is one of the developer's existing products plus or minus a feature or two. If the file list clearly forms a complete app, that app already exists — do not suggest it.
+2. DIFFERENT MARKET: each suggestion must target a different audience, use case, or business model than the code it borrows from. (Auth + billing from a dev tool can power a gym portal, a paywalled newsletter, a booking system.)
+3. DIVERSE SET: spread suggestions across different product categories — B2B SaaS, consumer, internal tool, marketplace, API-as-product, automation.
+4. HONEST REUSE: a genuinely new product with 40-60% reuse beats a "95% reuse" near-clone. Do not inflate reuse by picking clones.
+
 For each app, provide:
 1. App name
-2. Description (1-2 sentences)
+2. Description (1-2 sentences, including WHO it is for)
 3. Type (SaaS, Tool, Dashboard, API, etc)
 4. List of existing files to reuse
-5. Missing files needed (max 3)
+5. Missing files needed (be honest — novel apps may need several)
 6. Estimated build time (1-3 hours, 4-8 hours, 1-2 days, etc)
 7. Core technologies required
 8. Difficulty level (easy, medium, hard)
-9. Why this is a good idea given their codebase
-10. If missing ≤ 2 files, add a "QUICK WIN" label
+9. Why this is a good idea — name the capabilities being transferred and the new market they unlock
 
 Format as JSON array with objects containing these fields.`
 
   const response = await getAnthropic().messages.create({
-    model: 'claude-3-5-sonnet-20241022',
+    model: getAnthropicModel(),
     max_tokens: 8000,
     messages: [
       {

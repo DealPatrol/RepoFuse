@@ -277,37 +277,46 @@ export async function POST(
         const filesToSend = allFiles.slice(0, 400)
         const fileSummary = filesToSend.map(f => `- ${f.repo}: ${f.path}`).join('\n')
 
+        // Repo-level summary so the model knows what the user has ALREADY built
+        const repoSummary = repositories
+          .map(r => `- ${r.full_name}${r.language ? ` (${r.language})` : ''}: ${r.description ?? 'no description'}`)
+          .join('\n')
+
         // Use Claude to analyze and discover app blueprints (structured tool output)
         const client = getAnthropicClient()
 
         const userPrompt = `You are acting as an expert software architect and product strategist.
-Analyze these files from GitHub repositories and discover what applications can be built by combining and reusing the existing code.
+The developer below has already shipped the products listed under EXISTING PRODUCTS. Your job is to find NEW products they could build by recombining the capabilities buried in their code — not to describe what they already have.
 
-REPOSITORIES AND FILES:
+EXISTING PRODUCTS (already built — NEVER re-suggest these or close variants of them):
+${repoSummary}
+
+FILES AVAILABLE FOR REUSE:
 ${fileSummary}
 
-Identify 3-6 practical applications that match these buckets:
-1) Quick wins (ship-ready or very close),
-2) Missing only a few files,
-3) Larger but still feasible foundations.
+First, privately inventory the transferable CAPABILITIES in these files — things like: authentication flows, payment/billing integration, file upload, data scraping, scheduling, email/notification systems, dashboards/charting, API clients, search, real-time features, AI/LLM integration. Capabilities transfer across domains even when the product doesn't.
+
+Then propose 4-6 NEW applications that recombine those capabilities into different product categories.
+
+HARD RULES — every suggestion must pass all of these:
+1. NOT A REBUILD: if removing one or two features would turn the suggestion into one of the EXISTING PRODUCTS above, reject it and think of something else.
+2. DIFFERENT MARKET: each suggestion must target a different audience, use case, or business model than the repo(s) it borrows code from. (Example: auth + Stripe billing from a developer SaaS could power a gym membership portal, a paywalled newsletter, or a booking system — same capabilities, completely different products.)
+3. CROSS-REPO: prefer suggestions that combine files from at least two different repositories.
+4. DIVERSE SET: no two suggestions may be in the same product category. Spread across e.g. B2B SaaS, consumer app, internal tool, marketplace, API-as-product, automation service.
+5. HONEST REUSE: existing_files must reference real paths from the list, and reuse_percentage must be realistic. A genuinely new product with 40-60% reuse is far more valuable than a "95% reuse" suggestion that is the old app renamed. Do NOT inflate reuse by picking near-clones.
+
+Distribution: at most ONE quick win (high reuse, few missing files); at least TWO ambitious cross-domain products where the missing files represent real new value.
 
 For each app blueprint:
 - Give it a clear, descriptive name
-- Describe what the app does
+- Describe what the app does and WHO it is for
 - Estimate complexity (simple/moderate/complex)
-- Calculate reuse percentage (how much existing code can be reused) and be realistic
+- Calculate reuse percentage realistically
 - List existing files that can be reused (with their purpose); prefer highest-value files
 - List missing files needed (with their purpose)
 - For missing_files.name, provide concrete file paths (e.g. "app/api/billing/route.ts")
 - List technologies detected
-- Provide a brief explanation of why this app is possible, including a suggested first build step
-
-Constraints:
-- Use ONLY evidence from the provided files; do not invent major subsystems.
-- Prefer opportunities that combine code across multiple repositories where possible.
-- Keep missing_files concise and implementation-oriented.
-- Avoid duplicate ideas that differ only by naming.
-- Focus on practical, buildable applications based on the actual code patterns you see.`
+- In the explanation, name the capabilities being transferred and which repos they come from, plus a suggested first build step`
 
         const aiResponse = await client.messages.create({
           model: getAnthropicModel(),
@@ -315,7 +324,7 @@ Constraints:
           system: [
             {
               type: 'text',
-              text: 'You are an expert software architect. Your job is to analyze GitHub repository file structures and identify what new applications can be built by combining and reusing the existing code. Focus on practical, buildable applications based on actual code patterns.',
+              text: 'You are an expert software architect and product strategist. Your job is to analyze GitHub repository file structures and identify genuinely NEW applications that can be built by recombining existing code capabilities into different product categories. Never suggest rebuilds or minor variations of products the developer has already shipped — the value you provide is showing them markets and use cases their code unlocks that they have not thought of. Stay grounded: reuse claims must reference real files.',
               cache_control: { type: 'ephemeral' },
             },
           ],

@@ -4,18 +4,63 @@ import {
   CodeSnippet,
   batchGenerateCompletions,
 } from '@/lib/code-completion'
+import { getDb } from '@/lib/db'
 
-/**
- * POST /api/code-completion
- * Generates intelligent code completions using relevance-guided context selection
- *
- * Request body:
- * {
- *   incompleteCode: string - The incomplete code to complete
- *   codebaseSnippets?: CodeSnippet[] - Optional codebase examples (or use from DB)
- *   language?: string - Programming language (default: 'python')
- * }
- */
+const LANG_EXTENSIONS: Record<string, string[]> = {
+  python: ['.py'],
+  javascript: ['.js', '.jsx', '.mjs', '.cjs'],
+  typescript: ['.ts', '.tsx'],
+  java: ['.java'],
+  go: ['.go'],
+  rust: ['.rs'],
+  ruby: ['.rb'],
+  php: ['.php'],
+  csharp: ['.cs'],
+  cpp: ['.cpp', '.cc', '.cxx', '.h', '.hpp'],
+  c: ['.c', '.h'],
+  swift: ['.swift'],
+  kotlin: ['.kt'],
+  scala: ['.scala'],
+  shell: ['.sh', '.bash'],
+}
+
+async function fetchSnippetsFromDb(language: string): Promise<CodeSnippet[]> {
+  try {
+    const sql = getDb()
+    const extensions = LANG_EXTENSIONS[language.toLowerCase()] ?? []
+    if (extensions.length === 0) return []
+
+    const rows = await sql`
+      SELECT id, path, name, extension, ai_summary, reusability_score, exports, imports
+      FROM repo_files
+      WHERE extension = ANY(${extensions}::text[])
+        AND ai_summary IS NOT NULL
+      ORDER BY reusability_score DESC
+      LIMIT 20
+    `
+
+    return (rows as Array<{
+      id: string
+      path: string
+      name: string
+      extension: string
+      ai_summary: string
+      reusability_score: number
+      exports: string[]
+      imports: string[]
+    }>).map((row) => ({
+      id: row.id,
+      name: row.name,
+      code: row.ai_summary,
+      language,
+      path: row.path,
+      reusabilityScore: row.reusability_score ?? 0,
+    }))
+  } catch {
+    return []
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -28,14 +73,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // TODO: In production, fetch codebaseSnippets from database if not provided
-    // const snippets = codebaseSnippets.length > 0
-    //   ? codebaseSnippets
-    //   : await fetchSnippetsFromDb(language)
+    const snippets: CodeSnippet[] = codebaseSnippets.length > 0
+      ? codebaseSnippets
+      : await fetchSnippetsFromDb(language)
 
     const result = await generateRelevanceGuidedCompletion(
       incompleteCode,
-      codebaseSnippets,
+      snippets,
       language
     )
 
@@ -86,9 +130,13 @@ export async function PUT(request: NextRequest) {
       )
     }
 
+    const snippets: CodeSnippet[] = codebaseSnippets.length > 0
+      ? codebaseSnippets
+      : await fetchSnippetsFromDb(language)
+
     const results = await batchGenerateCompletions(
       codeSnippets,
-      codebaseSnippets,
+      snippets,
       language
     )
 

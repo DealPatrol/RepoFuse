@@ -853,3 +853,247 @@ export async function getAllBlueprints(userId?: string): Promise<AppBlueprint[]>
     : await sql`SELECT * FROM app_blueprints ORDER BY reuse_percentage DESC, created_at DESC`
   return blueprints as AppBlueprint[]
 }
+
+// ── Project types ─────────────────────────────────────────────────────────────
+
+export interface Project {
+  id: string
+  user_id: string | null
+  blueprint_id: string | null
+  name: string
+  description: string | null
+  repo_url: string | null
+  deployment_url: string | null
+  status: 'planning' | 'building' | 'deployed' | 'paused' | 'archived'
+  tech_stack: string[]
+  frontend_status: 'not_started' | 'in_progress' | 'complete'
+  backend_status: 'not_started' | 'in_progress' | 'complete'
+  notes: string | null
+  created_at: string
+  updated_at: string
+  // computed after joining milestones
+  milestone_total?: number
+  milestone_done?: number
+}
+
+export interface ProjectMilestone {
+  id: string
+  project_id: string
+  title: string
+  phase: 'planning' | 'backend' | 'frontend' | 'integration' | 'deployment' | 'other'
+  completed: boolean
+  completed_at: string | null
+  sort_order: number
+  created_at: string
+}
+
+// ── Project queries ───────────────────────────────────────────────────────────
+
+export async function getProjectsByUser(userId: string): Promise<Project[]> {
+  const sql = getDb()
+  const rows = await sql`
+    SELECT
+      p.*,
+      COUNT(m.id)::int                                    AS milestone_total,
+      COUNT(m.id) FILTER (WHERE m.completed)::int         AS milestone_done
+    FROM projects p
+    LEFT JOIN project_milestones m ON m.project_id = p.id
+    WHERE p.user_id = ${userId}
+    GROUP BY p.id
+    ORDER BY p.updated_at DESC
+  `
+  return rows as Project[]
+}
+
+export async function getProjectById(id: string, userId?: string): Promise<Project | null> {
+  const sql = getDb()
+  const rows = userId
+    ? await sql`
+        SELECT
+          p.*,
+          COUNT(m.id)::int                                    AS milestone_total,
+          COUNT(m.id) FILTER (WHERE m.completed)::int         AS milestone_done
+        FROM projects p
+        LEFT JOIN project_milestones m ON m.project_id = p.id
+        WHERE p.id = ${id} AND p.user_id = ${userId}
+        GROUP BY p.id
+      `
+    : await sql`
+        SELECT p.*, 0 AS milestone_total, 0 AS milestone_done
+        FROM projects p WHERE p.id = ${id}
+      `
+  return (rows[0] as Project) || null
+}
+
+export async function createProject(data: {
+  user_id: string
+  blueprint_id?: string | null
+  name: string
+  description?: string | null
+  repo_url?: string | null
+  deployment_url?: string | null
+  status?: Project['status']
+  tech_stack?: string[]
+  frontend_status?: Project['frontend_status']
+  backend_status?: Project['backend_status']
+  notes?: string | null
+}): Promise<Project> {
+  const sql = getDb()
+  const result = await sql`
+    INSERT INTO projects (
+      user_id, blueprint_id, name, description, repo_url, deployment_url,
+      status, tech_stack, frontend_status, backend_status, notes
+    ) VALUES (
+      ${data.user_id},
+      ${data.blueprint_id ?? null},
+      ${data.name},
+      ${data.description ?? null},
+      ${data.repo_url ?? null},
+      ${data.deployment_url ?? null},
+      ${data.status ?? 'planning'},
+      ${JSON.stringify(data.tech_stack ?? [])}::jsonb,
+      ${data.frontend_status ?? 'not_started'},
+      ${data.backend_status ?? 'not_started'},
+      ${data.notes ?? null}
+    )
+    RETURNING *
+  `
+  return { ...result[0], milestone_total: 0, milestone_done: 0 } as Project
+}
+
+export async function updateProject(
+  id: string,
+  userId: string,
+  data: Partial<Omit<Project, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'milestone_total' | 'milestone_done'>>,
+): Promise<Project | null> {
+  const sql = getDb()
+  const result = await sql`
+    UPDATE projects SET
+      name              = COALESCE(${data.name ?? null}, name),
+      description       = COALESCE(${data.description ?? null}, description),
+      repo_url          = COALESCE(${data.repo_url ?? null}, repo_url),
+      deployment_url    = COALESCE(${data.deployment_url ?? null}, deployment_url),
+      status            = COALESCE(${data.status ?? null}, status),
+      tech_stack        = COALESCE(${data.tech_stack ? JSON.stringify(data.tech_stack) + '::jsonb' : null}, tech_stack),
+      frontend_status   = COALESCE(${data.frontend_status ?? null}, frontend_status),
+      backend_status    = COALESCE(${data.backend_status ?? null}, backend_status),
+      notes             = COALESCE(${data.notes ?? null}, notes),
+      updated_at        = NOW()
+    WHERE id = ${id} AND user_id = ${userId}
+    RETURNING *
+  `
+  return (result[0] as Project) || null
+}
+
+export async function updateProjectRaw(
+  id: string,
+  userId: string,
+  fields: Record<string, string | string[] | null>,
+): Promise<Project | null> {
+  const sql = getDb()
+  const allowed = ['name','description','repo_url','deployment_url','status','frontend_status','backend_status','notes']
+  const techStack = fields.tech_stack as string[] | undefined
+
+  const result = await sql`
+    UPDATE projects SET
+      name            = CASE WHEN ${fields.name !== undefined} THEN ${fields.name as string | null} ELSE name END,
+      description     = CASE WHEN ${fields.description !== undefined} THEN ${fields.description as string | null} ELSE description END,
+      repo_url        = CASE WHEN ${fields.repo_url !== undefined} THEN ${fields.repo_url as string | null} ELSE repo_url END,
+      deployment_url  = CASE WHEN ${fields.deployment_url !== undefined} THEN ${fields.deployment_url as string | null} ELSE deployment_url END,
+      status          = CASE WHEN ${fields.status !== undefined} THEN ${fields.status as string | null} ELSE status END,
+      frontend_status = CASE WHEN ${fields.frontend_status !== undefined} THEN ${fields.frontend_status as string | null} ELSE frontend_status END,
+      backend_status  = CASE WHEN ${fields.backend_status !== undefined} THEN ${fields.backend_status as string | null} ELSE backend_status END,
+      tech_stack      = CASE WHEN ${techStack !== undefined} THEN ${JSON.stringify(techStack ?? [])}::jsonb ELSE tech_stack END,
+      notes           = CASE WHEN ${fields.notes !== undefined} THEN ${fields.notes as string | null} ELSE notes END,
+      updated_at      = NOW()
+    WHERE id = ${id} AND user_id = ${userId}
+    RETURNING *
+  `
+  return (result[0] as Project) || null
+}
+
+export async function deleteProject(id: string, userId: string): Promise<void> {
+  const sql = getDb()
+  await sql`DELETE FROM projects WHERE id = ${id} AND user_id = ${userId}`
+}
+
+// ── Milestone queries ─────────────────────────────────────────────────────────
+
+export async function getMilestonesByProject(projectId: string): Promise<ProjectMilestone[]> {
+  const sql = getDb()
+  const rows = await sql`
+    SELECT * FROM project_milestones
+    WHERE project_id = ${projectId}
+    ORDER BY phase, sort_order, created_at
+  `
+  return rows as ProjectMilestone[]
+}
+
+export async function createMilestone(data: {
+  project_id: string
+  title: string
+  phase: ProjectMilestone['phase']
+  sort_order?: number
+}): Promise<ProjectMilestone> {
+  const sql = getDb()
+  const result = await sql`
+    INSERT INTO project_milestones (project_id, title, phase, sort_order)
+    VALUES (${data.project_id}, ${data.title}, ${data.phase}, ${data.sort_order ?? 0})
+    RETURNING *
+  `
+  return result[0] as ProjectMilestone
+}
+
+export async function toggleMilestone(id: string, completed: boolean): Promise<ProjectMilestone | null> {
+  const sql = getDb()
+  const result = completed
+    ? await sql`
+        UPDATE project_milestones
+        SET completed = true, completed_at = NOW()
+        WHERE id = ${id}
+        RETURNING *
+      `
+    : await sql`
+        UPDATE project_milestones
+        SET completed = false, completed_at = NULL
+        WHERE id = ${id}
+        RETURNING *
+      `
+  return (result[0] as ProjectMilestone) || null
+}
+
+export async function deleteMilestone(id: string): Promise<void> {
+  const sql = getDb()
+  await sql`DELETE FROM project_milestones WHERE id = ${id}`
+}
+
+export async function seedDefaultMilestones(projectId: string): Promise<void> {
+  const defaults: Array<{ title: string; phase: ProjectMilestone['phase']; sort_order: number }> = [
+    { title: 'Define app requirements', phase: 'planning', sort_order: 0 },
+    { title: 'Design data model', phase: 'planning', sort_order: 1 },
+    { title: 'Choose tech stack', phase: 'planning', sort_order: 2 },
+    { title: 'Set up database & schema', phase: 'backend', sort_order: 0 },
+    { title: 'Build API endpoints', phase: 'backend', sort_order: 1 },
+    { title: 'Implement authentication', phase: 'backend', sort_order: 2 },
+    { title: 'Write API tests', phase: 'backend', sort_order: 3 },
+    { title: 'Initialize UI project', phase: 'frontend', sort_order: 0 },
+    { title: 'Build core components', phase: 'frontend', sort_order: 1 },
+    { title: 'Implement pages & routing', phase: 'frontend', sort_order: 2 },
+    { title: 'Connect frontend to API', phase: 'frontend', sort_order: 3 },
+    { title: 'Responsive design & polish', phase: 'frontend', sort_order: 4 },
+    { title: 'End-to-end testing', phase: 'integration', sort_order: 0 },
+    { title: 'Bug fixes & code review', phase: 'integration', sort_order: 1 },
+    { title: 'Configure hosting provider', phase: 'deployment', sort_order: 0 },
+    { title: 'Set environment variables', phase: 'deployment', sort_order: 1 },
+    { title: 'Deploy to production', phase: 'deployment', sort_order: 2 },
+    { title: 'Set up custom domain', phase: 'deployment', sort_order: 3 },
+    { title: 'Set up monitoring & alerts', phase: 'deployment', sort_order: 4 },
+  ]
+  const sql = getDb()
+  for (const m of defaults) {
+    await sql`
+      INSERT INTO project_milestones (project_id, title, phase, sort_order)
+      VALUES (${projectId}, ${m.title}, ${m.phase}, ${m.sort_order})
+    `
+  }
+}

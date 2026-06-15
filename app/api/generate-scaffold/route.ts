@@ -67,13 +67,14 @@ Create a JSON object with:
    - "package.json": Object with package.json content
    - "README.md": String with markdown content
    - ".env.example": String with env vars
-   - Other files: String with complete code
+   - Other files: String with COMPLETE, working implementation code
 
-IMPORTANT: 
+IMPORTANT:
 - Return ONLY valid JSON, no markdown, no extra text
 - All strings must use proper JSON escaping
 - No trailing commas
 - All quoted keys and values
+- Write REAL, functional code — never use TODO placeholders or stub implementations
 
 Example structure:
 {
@@ -82,9 +83,9 @@ Example structure:
     "src/index.ts": "Entry point"
   },
   "files": {
-    "package.json": {"name": "app", "version": "1.0.0"},
+    "package.json": {"name": "app", "version": "1.0.0", "main": "src/index.ts"},
     "README.md": "# App\\n\\nDescription here",
-    "src/index.ts": "// TODO: implement main logic\\nconsole.log('Hello')"
+    "src/index.ts": "import express from 'express'\\nconst app = express()\\napp.get('/', (req, res) => res.json({ status: 'ok' }))\\napp.listen(3000)"
   }
 }`,
         },
