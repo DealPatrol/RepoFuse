@@ -380,6 +380,30 @@ export async function deleteBlueprintsByAnalysis(analysisId: string): Promise<vo
   await sql`DELETE FROM app_blueprints WHERE analysis_id = ${analysisId}`
 }
 
+export async function deleteBlueprintsByAnalysisExcept(
+  analysisId: string,
+  blueprintIdsToKeep: string[],
+): Promise<void> {
+  if (blueprintIdsToKeep.length === 0) {
+    await deleteBlueprintsByAnalysis(analysisId)
+    return
+  }
+
+  const sql = getDb()
+  await sql`
+    DELETE FROM app_blueprints
+    WHERE analysis_id = ${analysisId}
+      AND id <> ALL(${blueprintIdsToKeep}::uuid[])
+  `
+}
+
+export async function deleteBlueprintsByIds(blueprintIds: string[]): Promise<void> {
+  if (blueprintIds.length === 0) return
+
+  const sql = getDb()
+  await sql`DELETE FROM app_blueprints WHERE id = ANY(${blueprintIds}::uuid[])`
+}
+
 export async function updateUserBilling(userId: string, data: UserBillingUpdate): Promise<void> {
   const sql = getDb()
   await sql`

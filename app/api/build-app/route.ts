@@ -57,19 +57,40 @@ Just the file content itself, ready to save.`
 /** Build the list of all files to generate */
 function getFilesToGenerate(blueprint: BuildAppRequest['blueprint']): Array<{ path: string; purpose: string }> {
   const files: Array<{ path: string; purpose: string }> = []
+  const seenPaths = new Set<string>()
+
+  const addFile = (path: string, purpose: string) => {
+    const cleanPath = path.trim()
+    if (!cleanPath || seenPaths.has(cleanPath)) return
+    seenPaths.add(cleanPath)
+    files.push({ path: cleanPath, purpose })
+  }
 
   // Missing files from the blueprint
   for (const f of blueprint.missing_files) {
-    files.push({ path: f.name, purpose: f.purpose })
+    addFile(f.name, f.purpose)
   }
 
   // Standard project files
-  files.push({ path: 'README.md', purpose: 'Comprehensive setup, usage, and API documentation' })
-  files.push({ path: 'package.json', purpose: 'Project dependencies and scripts for the tech stack' })
-  files.push({ path: '.env.example', purpose: 'All required environment variables with placeholder values' })
-  files.push({ path: '.gitignore', purpose: 'Gitignore file appropriate for this stack' })
+  addFile('README.md', 'Comprehensive setup, usage, and API documentation')
+  addFile('package.json', 'Project dependencies and scripts for the tech stack')
+  addFile('.env.example', 'All required environment variables with placeholder values')
+  addFile('.gitignore', 'Gitignore file appropriate for this stack')
 
   return files
+}
+
+async function getApiErrorMessage(res: Response, fallback: string): Promise<string> {
+  const text = await res.text().catch(() => '')
+  if (!text) return fallback
+
+  try {
+    const err = JSON.parse(text) as { message?: unknown; error?: unknown }
+    const message = typeof err.message === 'string' ? err.message : err.error
+    return typeof message === 'string' ? message : fallback
+  } catch {
+    return text.slice(0, 300)
+  }
 }
 
 async function createGitHubRepo(
@@ -88,14 +109,13 @@ async function createGitHubRepo(
     body: JSON.stringify({
       name: repoName,
       description,
-      private: false,
+      private: true,
       auto_init: false,
     }),
   })
 
   if (!res.ok) {
-    const err = (await res.json()) as { message?: string }
-    throw new Error(err.message ?? 'Failed to create GitHub repository')
+    throw new Error(await getApiErrorMessage(res, 'Failed to create GitHub repository'))
   }
 
   const repo = (await res.json()) as { html_url: string }
@@ -127,8 +147,7 @@ async function pushFileToGitHub(
   )
 
   if (!res.ok) {
-    const err = (await res.json()) as { message?: string }
-    console.warn(`[build-app] Failed to push ${path}: ${err.message}`)
+    throw new Error(await getApiErrorMessage(res, `Failed to push ${path} to GitHub`))
   }
 }
 
@@ -152,12 +171,7 @@ async function createGitLabProject(
   })
 
   if (!res.ok) {
-    const err = (await res.json()) as { message?: string | Record<string, string[]> }
-    const msg =
-      typeof err.message === 'string'
-        ? err.message
-        : JSON.stringify(err.message)
-    throw new Error(msg ?? 'Failed to create GitLab project')
+    throw new Error(await getApiErrorMessage(res, 'Failed to create GitLab project'))
   }
 
   return res.json() as Promise<{ id: number; web_url: string; default_branch: string }>
@@ -189,8 +203,7 @@ async function pushFileToGitLab(
   )
 
   if (!res.ok) {
-    const err = (await res.json()) as { message?: string }
-    console.warn(`[build-app] Failed to push ${path} to GitLab: ${err.message}`)
+    throw new Error(await getApiErrorMessage(res, `Failed to push ${path} to GitLab`))
   }
 }
 
@@ -201,12 +214,19 @@ export async function POST(request: NextRequest) {
       const send = (data: object) => {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
       }
+      let closed = false
+      const close = () => {
+        if (!closed) {
+          controller.close()
+          closed = true
+        }
+      }
 
       try {
         const user = await getCurrentUser()
         if (!user) {
           send({ step: 'error', message: 'Sign in before building an app.' })
-          controller.close()
+          close()
           return
         }
 
@@ -216,7 +236,7 @@ export async function POST(request: NextRequest) {
         }
         if (!hasProAccess(user, sub)) {
           send({ step: 'error', message: 'Build This App is available on paid plans. Upgrade to create and push a generated repo.' })
-          controller.close()
+          close()
           return
         }
 
@@ -225,7 +245,7 @@ export async function POST(request: NextRequest) {
 
         if (!repoName?.trim()) {
           send({ step: 'error', message: 'Repository name is required.' })
-          controller.close()
+          close()
           return
         }
 
@@ -268,7 +288,7 @@ export async function POST(request: NextRequest) {
             step: 'error',
             message: `Could not create repository: ${e instanceof Error ? e.message : String(e)}. Make sure you are connected to ${platform === 'github' ? 'GitHub' : 'GitLab'}.`,
           })
-          controller.close()
+          close()
           return
         }
 
@@ -279,13 +299,9 @@ export async function POST(request: NextRequest) {
         const total = filesToGenerate.length
 
         for (const { path, purpose } of filesToGenerate) {
-          // Generate this file
-          let content: string
-          try {
-            content = await generateSingleFile(blueprint, path, purpose, user.id)
-          } catch (e) {
-            console.warn(`[build-app] Failed to generate ${path}:`, e)
-            content = `# Error generating ${path}\n# ${e instanceof Error ? e.message : String(e)}\n`
+          const content = await generateSingleFile(blueprint, path, purpose, user.id)
+          if (!content.trim()) {
+            throw new Error(`Generated empty content for ${path}`)
           }
 
           // Push to platform
@@ -314,13 +330,14 @@ export async function POST(request: NextRequest) {
         })
       } catch (e) {
         console.error('[build-app] unhandled error:', e)
+        const errorDetail = e instanceof Error ? e.message : String(e)
         controller.enqueue(
           encoder.encode(
-            `data: ${JSON.stringify({ step: 'error', message: 'An unexpected error occurred.' })}\n\n`,
+            `data: ${JSON.stringify({ step: 'error', message: `Build failed: ${errorDetail}` })}\n\n`,
           ),
         )
       } finally {
-        controller.close()
+        close()
       }
     },
   })
