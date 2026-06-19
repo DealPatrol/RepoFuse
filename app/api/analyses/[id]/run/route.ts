@@ -13,7 +13,7 @@ import {
   updateAnalysisStatus,
   createRepoFile,
   createBlueprint,
-  deleteBlueprintsByAnalysis,
+  deleteBlueprintByIdForAnalysis,
   getBlueprintsByAnalysis,
   getSubscriptionByGithubId,
   upsertSubscription,
@@ -190,6 +190,7 @@ export async function POST(
           controller.close()
           return
         }
+        const previousBlueprints = await getBlueprintsByAnalysis(id, user.id)
 
         const repositories = await getRepositoriesForAnalysis(id, user.id)
         if (repositories.length === 0) {
@@ -200,7 +201,6 @@ export async function POST(
 
         // Update status to scanning
         await updateAnalysisStatus(id, 'scanning')
-        await deleteBlueprintsByAnalysis(id)
         send({ status: 'scanning', progress: 10 })
 
         // Fetch file trees from GitHub for each repository
@@ -429,23 +429,44 @@ For each app blueprint:
           const rankedBlueprints = blueprintsFromAI
             .map((bp) => normalizeBlueprint(bp))
             .sort((a, b) => getOpportunityScore(b) - getOpportunityScore(a))
+          const createdBlueprintIds: string[] = []
 
-          for (const bp of rankedBlueprints) {
-            await createBlueprint({
-              analysis_id: id,
-              user_id: user.id,
-              name: bp.name.slice(0, 255),
-              description: bp.description,
-              app_type: bp.app_type?.slice(0, 100) ?? null,
-              complexity: bp.complexity,
-              reuse_percentage: bp.reuse_percentage,
-              existing_files: bp.existing_files,
-              missing_files: bp.missing_files,
-              estimated_effort: getEffortEstimate(bp.complexity, bp.missing_files.length),
-              technologies: bp.technologies,
-              ai_explanation: bp.explanation,
-            })
+          try {
+            for (const bp of rankedBlueprints) {
+              const created = await createBlueprint({
+                analysis_id: id,
+                user_id: user.id,
+                name: bp.name.slice(0, 255),
+                description: bp.description,
+                app_type: bp.app_type?.slice(0, 100) ?? null,
+                complexity: bp.complexity,
+                reuse_percentage: bp.reuse_percentage,
+                existing_files: bp.existing_files,
+                missing_files: bp.missing_files,
+                estimated_effort: getEffortEstimate(bp.complexity, bp.missing_files.length),
+                technologies: bp.technologies,
+                ai_explanation: bp.explanation,
+              })
+              createdBlueprintIds.push(created.id)
+            }
+          } catch (error) {
+            await Promise.all(
+              createdBlueprintIds.map((blueprintId) =>
+                deleteBlueprintByIdForAnalysis(blueprintId, id, user.id).catch((cleanupError) => {
+                  console.error('[analysis] Failed to clean up partial blueprint replacement:', cleanupError)
+                }),
+              ),
+            )
+            throw error
           }
+
+          await Promise.all(
+            previousBlueprints.map((blueprint) =>
+              deleteBlueprintByIdForAnalysis(blueprint.id, id, user.id).catch((cleanupError) => {
+                console.error('[analysis] Failed to remove replaced blueprint:', cleanupError)
+              }),
+            ),
+          )
         }
 
         // Update to complete
