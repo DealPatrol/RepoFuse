@@ -58,23 +58,20 @@ function toCount(value: string | number | null | undefined): number {
 // Initialize or get user credits
 export async function getOrCreateUserCredits(userId: string): Promise<UserCredit> {
   const sql = getDb()
-  
-  // Try to get existing
-  const existing = await sql`
-    SELECT * FROM user_credits WHERE user_id = ${userId}
-  `
-  
-  if (existing.length > 0) {
-    return existing[0] as UserCredit
-  }
-  
-  // Create new
+
   const result = await sql`
-    INSERT INTO user_credits (user_id, current_balance, total_granted, total_used)
-    VALUES (${userId}, 0, 0, 0)
-    RETURNING *
+    WITH inserted AS (
+      INSERT INTO user_credits (user_id, current_balance, total_granted, total_used)
+      VALUES (${userId}, 0, 0, 0)
+      ON CONFLICT (user_id) DO NOTHING
+      RETURNING *
+    )
+    SELECT * FROM inserted
+    UNION ALL
+    SELECT * FROM user_credits WHERE user_id = ${userId}
+    LIMIT 1
   `
-  
+
   return result[0] as UserCredit
 }
 
@@ -100,29 +97,28 @@ export async function grantCredits(
   metadata: CreditMetadata = {}
 ): Promise<CreditTransaction> {
   const sql = getDb()
-  
-  // Get or create user credits
-  const userCredits = await getOrCreateUserCredits(userId)
-  const newBalance = userCredits.current_balance + amount
-  
-  // Update balance
+
   await sql`
-    UPDATE user_credits
-    SET 
-      current_balance = ${newBalance},
-      total_granted = total_granted + ${amount},
-      last_renewal_date = CURRENT_TIMESTAMP
-    WHERE user_id = ${userId}
+    INSERT INTO user_credits (user_id, current_balance, total_granted, total_used)
+    VALUES (${userId}, 0, 0, 0)
+    ON CONFLICT (user_id) DO NOTHING
   `
-  
-  // Record transaction
+
   const transaction = await sql`
+    WITH updated AS (
+      UPDATE user_credits
+      SET
+        current_balance = current_balance + ${amount},
+        total_granted = total_granted + ${amount},
+        last_renewal_date = CURRENT_TIMESTAMP
+      WHERE user_id = ${userId}
+      RETURNING current_balance
+    )
     INSERT INTO credit_transactions (
       user_id, amount, transaction_type, reason, metadata, balance_after
     )
-    VALUES (
-      ${userId}, ${amount}, 'grant', ${reason}, ${JSON.stringify(metadata)}::jsonb, ${newBalance}
-    )
+    SELECT ${userId}, ${amount}, 'grant', ${reason}, ${JSON.stringify(metadata)}::jsonb, current_balance
+    FROM updated
     RETURNING *
   `
   
@@ -137,40 +133,42 @@ export async function renewMonthlyCredits(
   metadata: CreditMetadata = {}
 ): Promise<CreditTransaction | null> {
   const sql = getDb()
-  const userCredits = await getOrCreateUserCredits(userId)
-  const topUpAmount = Math.max(0, monthlyAllowance - userCredits.current_balance)
-
-  if (topUpAmount === 0) {
-    await sql`
-      UPDATE user_credits
-      SET last_renewal_date = CURRENT_TIMESTAMP
-      WHERE user_id = ${userId}
-    `
-    return null
-  }
-
-  const newBalance = userCredits.current_balance + topUpAmount
 
   await sql`
-    UPDATE user_credits
-    SET
-      current_balance = ${newBalance},
-      total_granted = total_granted + ${topUpAmount},
-      last_renewal_date = CURRENT_TIMESTAMP
-    WHERE user_id = ${userId}
+    INSERT INTO user_credits (user_id, current_balance, total_granted, total_used)
+    VALUES (${userId}, 0, 0, 0)
+    ON CONFLICT (user_id) DO NOTHING
   `
 
   const transaction = await sql`
+    WITH locked AS (
+      SELECT
+        current_balance,
+        GREATEST(0, ${monthlyAllowance} - current_balance) AS top_up
+      FROM user_credits
+      WHERE user_id = ${userId}
+      FOR UPDATE
+    ),
+    updated AS (
+      UPDATE user_credits u
+      SET
+        current_balance = u.current_balance + locked.top_up,
+        total_granted = u.total_granted + locked.top_up,
+        last_renewal_date = CURRENT_TIMESTAMP
+      FROM locked
+      WHERE u.user_id = ${userId}
+      RETURNING u.current_balance, locked.top_up
+    )
     INSERT INTO credit_transactions (
       user_id, amount, transaction_type, reason, metadata, balance_after
     )
-    VALUES (
-      ${userId}, ${topUpAmount}, 'renewal', ${reason}, ${JSON.stringify(metadata)}::jsonb, ${newBalance}
-    )
+    SELECT ${userId}, top_up, 'renewal', ${reason}, ${JSON.stringify(metadata)}::jsonb, current_balance
+    FROM updated
+    WHERE top_up > 0
     RETURNING *
   `
 
-  return transaction[0] as CreditTransaction
+  return (transaction[0] as CreditTransaction | undefined) ?? null
 }
 
 // Deduct credits (for analysis, scaffold, build_app, or pattern_analyzer)
@@ -181,41 +179,39 @@ export async function deductCredits(
   metadata: CreditMetadata = {}
 ): Promise<{ success: boolean; transaction?: CreditTransaction; error?: string }> {
   const sql = getDb()
-  
-  // Get current balance
-  const userCredits = await getOrCreateUserCredits(userId)
-  const currentBalance = userCredits.current_balance
-  
-  // Check if sufficient balance
-  if (currentBalance < amount) {
+
+  await sql`
+    INSERT INTO user_credits (user_id, current_balance, total_granted, total_used)
+    VALUES (${userId}, 0, 0, 0)
+    ON CONFLICT (user_id) DO NOTHING
+  `
+
+  const transaction = await sql`
+    WITH updated AS (
+      UPDATE user_credits
+      SET
+        current_balance = current_balance - ${amount},
+        total_used = total_used + ${amount}
+      WHERE user_id = ${userId}
+        AND current_balance >= ${amount}
+      RETURNING current_balance
+    )
+    INSERT INTO credit_transactions (
+      user_id, amount, transaction_type, reason, metadata, balance_after
+    )
+    SELECT ${userId}, ${-amount}, ${type}, ${`${type} deduction`}, ${JSON.stringify(metadata)}::jsonb, current_balance
+    FROM updated
+    RETURNING *
+  `
+
+  if (transaction.length === 0) {
+    const currentBalance = await getCreditBalance(userId)
     return {
       success: false,
       error: `Insufficient credits. Required: ${amount}, Available: ${currentBalance}`,
     }
   }
-  
-  const newBalance = currentBalance - amount
-  
-  // Update balance
-  await sql`
-    UPDATE user_credits
-    SET 
-      current_balance = ${newBalance},
-      total_used = total_used + ${amount}
-    WHERE user_id = ${userId}
-  `
-  
-  // Record transaction
-  const transaction = await sql`
-    INSERT INTO credit_transactions (
-      user_id, amount, transaction_type, reason, metadata, balance_after
-    )
-    VALUES (
-      ${userId}, ${-amount}, ${type}, ${`${type} deduction`}, ${JSON.stringify(metadata)}::jsonb, ${newBalance}
-    )
-    RETURNING *
-  `
-  
+
   return {
     success: true,
     transaction: transaction[0] as CreditTransaction,
@@ -230,26 +226,25 @@ export async function refundCredits(
   metadata: CreditMetadata = {}
 ): Promise<CreditTransaction> {
   const sql = getDb()
-  
-  // Get or create user credits
-  const userCredits = await getOrCreateUserCredits(userId)
-  const newBalance = userCredits.current_balance + amount
-  
-  // Update balance
+
   await sql`
-    UPDATE user_credits
-    SET current_balance = ${newBalance}
-    WHERE user_id = ${userId}
+    INSERT INTO user_credits (user_id, current_balance, total_granted, total_used)
+    VALUES (${userId}, 0, 0, 0)
+    ON CONFLICT (user_id) DO NOTHING
   `
-  
-  // Record transaction
+
   const transaction = await sql`
+    WITH updated AS (
+      UPDATE user_credits
+      SET current_balance = current_balance + ${amount}
+      WHERE user_id = ${userId}
+      RETURNING current_balance
+    )
     INSERT INTO credit_transactions (
       user_id, amount, transaction_type, reason, metadata, balance_after
     )
-    VALUES (
-      ${userId}, ${amount}, 'refund', ${reason}, ${JSON.stringify(metadata)}::jsonb, ${newBalance}
-    )
+    SELECT ${userId}, ${amount}, 'refund', ${reason}, ${JSON.stringify(metadata)}::jsonb, current_balance
+    FROM updated
     RETURNING *
   `
   

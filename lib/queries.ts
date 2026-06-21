@@ -380,6 +380,11 @@ export async function deleteBlueprintsByAnalysis(analysisId: string): Promise<vo
   await sql`DELETE FROM app_blueprints WHERE analysis_id = ${analysisId}`
 }
 
+export async function deleteBlueprintByIdForAnalysis(id: string, analysisId: string): Promise<void> {
+  const sql = getDb()
+  await sql`DELETE FROM app_blueprints WHERE id = ${id} AND analysis_id = ${analysisId}`
+}
+
 export async function updateUserBilling(userId: string, data: UserBillingUpdate): Promise<void> {
   const sql = getDb()
   await sql`
@@ -392,6 +397,29 @@ export async function updateUserBilling(userId: string, data: UserBillingUpdate)
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ${userId}
   `
+}
+
+export async function claimStripeWebhookEvent(eventId: string, eventType: string): Promise<boolean> {
+  const sql = getDb()
+  await sql`
+    CREATE TABLE IF NOT EXISTS stripe_webhook_events (
+      event_id TEXT PRIMARY KEY,
+      event_type TEXT NOT NULL,
+      processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `
+  const result = await sql`
+    INSERT INTO stripe_webhook_events (event_id, event_type)
+    VALUES (${eventId}, ${eventType})
+    ON CONFLICT (event_id) DO NOTHING
+    RETURNING event_id
+  `
+  return result.length > 0
+}
+
+export async function releaseStripeWebhookEvent(eventId: string): Promise<void> {
+  const sql = getDb()
+  await sql`DELETE FROM stripe_webhook_events WHERE event_id = ${eventId}`
 }
 
 export async function createBlueprint(data: {
@@ -1044,27 +1072,49 @@ export async function createMilestone(data: {
   return result[0] as ProjectMilestone
 }
 
-export async function toggleMilestone(id: string, completed: boolean): Promise<ProjectMilestone | null> {
+export async function toggleMilestone(
+  id: string,
+  projectId: string,
+  userId: string,
+  completed: boolean,
+): Promise<ProjectMilestone | null> {
   const sql = getDb()
   const result = completed
     ? await sql`
-        UPDATE project_milestones
+        UPDATE project_milestones m
         SET completed = true, completed_at = NOW()
-        WHERE id = ${id}
-        RETURNING *
+        FROM projects p
+        WHERE m.id = ${id}
+          AND m.project_id = ${projectId}
+          AND p.id = m.project_id
+          AND p.user_id = ${userId}
+        RETURNING m.*
       `
     : await sql`
-        UPDATE project_milestones
+        UPDATE project_milestones m
         SET completed = false, completed_at = NULL
-        WHERE id = ${id}
-        RETURNING *
+        FROM projects p
+        WHERE m.id = ${id}
+          AND m.project_id = ${projectId}
+          AND p.id = m.project_id
+          AND p.user_id = ${userId}
+        RETURNING m.*
       `
   return (result[0] as ProjectMilestone) || null
 }
 
-export async function deleteMilestone(id: string): Promise<void> {
+export async function deleteMilestone(id: string, projectId: string, userId: string): Promise<boolean> {
   const sql = getDb()
-  await sql`DELETE FROM project_milestones WHERE id = ${id}`
+  const result = await sql`
+    DELETE FROM project_milestones m
+    USING projects p
+    WHERE m.id = ${id}
+      AND m.project_id = ${projectId}
+      AND p.id = m.project_id
+      AND p.user_id = ${userId}
+    RETURNING m.id
+  `
+  return result.length > 0
 }
 
 export async function seedDefaultMilestones(projectId: string): Promise<void> {
