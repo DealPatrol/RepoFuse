@@ -36,6 +36,8 @@ pnpm build      # production build (requires valid DATABASE_URL at build time)
 ### Key architecture notes
 
 - The Neon serverless driver (`@neondatabase/serverless`) uses HTTPS to communicate with Neon's proxy. It does **not** support standard PostgreSQL connections (no local pg via `psql`). You must have a real Neon `DATABASE_URL`.
+- To bootstrap the schema against a fresh `DATABASE_URL`, hit `GET` (or `POST`) `/api/setup/init-db` (e.g. `curl -X POST localhost:3000/api/setup/init-db`). It creates every table idempotently (`IF NOT EXISTS`). Prefer this over the `psql`/`scripts/01-create-schema.sql` path in `README.md`, which does not work with the Neon HTTP driver.
+- When `DATABASE_URL` is set, the `github_user_id` + `github_access_token` cookie bypass only authenticates if a `user_auth` row exists whose `github_id` matches the cookie and whose `access_token` equals the `github_access_token` cookie (otherwise it falls back to validating the cookie as a real GitHub token). Seed such a row directly when testing without real OAuth.
 - Blueprint creation happens entirely in `POST /api/analyses/[id]/run` via SSE streaming. The `/api/analyses/[id]/analyze` endpoint is a legacy route that does NOT write blueprints to the database.
 - Auth: legacy GitHub OAuth cookies (`github_user_id` + `github_access_token`), or Clerk when configured. `middleware.ts` protects `/dashboard/*` (Clerk `auth.protect()` or cookie check).
 - Do **not** add both `middleware.ts` and `proxy.ts` — Next.js 16 build fails if both exist.
