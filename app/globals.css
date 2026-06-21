@@ -15,6 +15,14 @@
   50% { opacity: 0.8; }
 }
 
+/* Hero grid background */
+.hero-grid {
+  background-image:
+    linear-gradient(rgba(240, 246, 252, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(240, 246, 252, 0.035) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
 :root {
   --background: oklch(0.95 0 0);
   --foreground: oklch(0.15 0 0);

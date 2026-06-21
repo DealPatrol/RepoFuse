@@ -183,11 +183,26 @@ export default async function HomePage({
       </header>
 
       <main>
-        <section className="border-b border-[#30363D] bg-[linear-gradient(180deg,#0B0F14_0%,#101722_100%)]">
-          <div className="mx-auto max-w-7xl px-4 pb-16 pt-10 sm:px-6 lg:pb-20 lg:pt-14">
+        {/* Hero — full viewport, grid background */}
+        <section className="hero-grid relative flex min-h-[calc(100vh-57px)] items-center border-b border-[#30363D] bg-[#0B0F14]">
+          {/* radial fade to hide grid edges */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                'radial-gradient(ellipse 80% 60% at 50% 50%, transparent 40%, #0B0F14 100%)',
+            }}
+          />
+          <div className="relative z-10 mx-auto w-full max-w-4xl px-4 py-24 sm:px-6">
             <HeroChat />
+          </div>
+        </section>
 
-            <div className="mt-14 grid gap-12 lg:grid-cols-[0.92fr_1.08fr] lg:items-center">
+        {/* Scan demo section */}
+        <section id="scan" className="border-b border-[#30363D] bg-[linear-gradient(180deg,#0B0F14_0%,#101722_100%)]">
+          <div className="mx-auto max-w-7xl px-4 pb-16 pt-14 sm:px-6 lg:pb-20">
+            <div className="grid gap-12 lg:grid-cols-[0.92fr_1.08fr] lg:items-center">
               <div>
                 <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#F59E0B]/30 bg-[#F59E0B]/10 px-3 py-1.5 text-xs font-mono font-semibold text-[#FBBF24]">
                   <Zap className="h-3.5 w-3.5" />
@@ -221,77 +236,77 @@ export default async function HomePage({
                 </div>
               </div>
 
-            <div id="scan" className="relative">
-              <div className="rounded-2xl border border-[#30363D] bg-[#111827] shadow-2xl shadow-black/50">
-                <div className="flex items-center gap-2 border-b border-[#30363D] bg-[#0D1117] px-4 py-3">
-                  <span className="h-3 w-3 rounded-full bg-[#F85149]" />
-                  <span className="h-3 w-3 rounded-full bg-[#F59E0B]" />
-                  <span className="h-3 w-3 rounded-full bg-[#10B981]" />
-                  <span className="ml-3 font-mono text-xs text-[#8B949E]">RepoFuse Opportunity Scan</span>
-                  <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-[#10B981]/10 px-2 py-1 text-[11px] font-mono text-[#3FB950]">
-                    <span className="h-1.5 w-1.5 rounded-full bg-[#3FB950]" />
-                    live
-                  </span>
-                </div>
-
-                <div className="p-5 sm:p-6">
-                  <div className="mb-5 flex items-center gap-4 rounded-xl border border-[#30363D] bg-[#0B0F14] p-4">
-                    <Image
-                      src="/repofuse-logo-3d.jpg"
-                      alt="RepoFuse logo"
-                      width={64}
-                      height={64}
-                      className="h-14 w-14 rounded-xl object-cover"
-                      priority
-                    />
-                    <div>
-                      <div className="font-mono text-sm font-bold text-[#F0F6FC]">DealPatrol workspace</div>
-                      <div className="mt-1 text-xs text-[#8B949E]">Analyzing 14 repos, 43 services, 2,813 files</div>
-                    </div>
+              <div className="relative">
+                <div className="rounded-2xl border border-[#30363D] bg-[#111827] shadow-2xl shadow-black/50">
+                  <div className="flex items-center gap-2 border-b border-[#30363D] bg-[#0D1117] px-4 py-3">
+                    <span className="h-3 w-3 rounded-full bg-[#F85149]" />
+                    <span className="h-3 w-3 rounded-full bg-[#F59E0B]" />
+                    <span className="h-3 w-3 rounded-full bg-[#10B981]" />
+                    <span className="ml-3 font-mono text-xs text-[#8B949E]">RepoFuse Opportunity Scan</span>
+                    <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-[#10B981]/10 px-2 py-1 text-[11px] font-mono text-[#3FB950]">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#3FB950]" />
+                      live
+                    </span>
                   </div>
 
-                  <div className="mb-5 rounded-xl border border-[#30363D] bg-[#0B0F14] p-4 font-mono text-sm">
-                    <div className="flex gap-3 text-[#8B949E]">
-                      <Terminal className="mt-0.5 h-4 w-4 text-[#06B6D4]" />
-                      <span className="text-[#F0F6FC]">repofuse scan --find-subscription-products</span>
-                    </div>
-                    <div className="mt-3 space-y-2 pl-7 text-xs text-[#8B949E]">
-                      <div>Connected with read-only access</div>
-                      <div className="text-[#06B6D4]">Mapped reusable billing, auth, and analytics logic</div>
-                      <div className="text-[#F59E0B]">Detected 3 monetizable product wedges</div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    {scanFindings.map((finding) => (
-                      <div key={finding.title} className="rounded-xl border border-[#30363D] bg-[#161B22] p-4">
-                        <div className="flex items-start justify-between gap-4">
-                          <div>
-                            <h3 className="font-mono text-sm font-bold text-[#F0F6FC]">{finding.title}</h3>
-                            <p className="mt-1 text-xs text-[#8B949E]">Found in {finding.source}</p>
-                          </div>
-                          <span
-                            className="rounded-lg px-2.5 py-1 font-mono text-xs font-black"
-                            style={{ backgroundColor: `${finding.color}1A`, color: finding.color }}
-                          >
-                            {finding.score}%
-                          </span>
-                        </div>
-                        <div className="mt-3 flex items-center justify-between gap-3">
-                          <span className="text-xs font-semibold text-[#D0D7DE]">{finding.revenue}</span>
-                          <span className="h-2 flex-1 overflow-hidden rounded-full bg-[#30363D]">
-                            <span
-                              className="block h-full rounded-full"
-                              style={{ width: `${finding.score}%`, backgroundColor: finding.color }}
-                            />
-                          </span>
-                        </div>
+                  <div className="p-5 sm:p-6">
+                    <div className="mb-5 flex items-center gap-4 rounded-xl border border-[#30363D] bg-[#0B0F14] p-4">
+                      <Image
+                        src="/repofuse-logo-3d.jpg"
+                        alt="RepoFuse logo"
+                        width={64}
+                        height={64}
+                        className="h-14 w-14 rounded-xl object-cover"
+                        priority
+                      />
+                      <div>
+                        <div className="font-mono text-sm font-bold text-[#F0F6FC]">DealPatrol workspace</div>
+                        <div className="mt-1 text-xs text-[#8B949E]">Analyzing 14 repos, 43 services, 2,813 files</div>
                       </div>
-                    ))}
+                    </div>
+
+                    <div className="mb-5 rounded-xl border border-[#30363D] bg-[#0B0F14] p-4 font-mono text-sm">
+                      <div className="flex gap-3 text-[#8B949E]">
+                        <Terminal className="mt-0.5 h-4 w-4 text-[#06B6D4]" />
+                        <span className="text-[#F0F6FC]">repofuse scan --find-subscription-products</span>
+                      </div>
+                      <div className="mt-3 space-y-2 pl-7 text-xs text-[#8B949E]">
+                        <div>Connected with read-only access</div>
+                        <div className="text-[#06B6D4]">Mapped reusable billing, auth, and analytics logic</div>
+                        <div className="text-[#F59E0B]">Detected 3 monetizable product wedges</div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {scanFindings.map((finding) => (
+                        <div key={finding.title} className="rounded-xl border border-[#30363D] bg-[#161B22] p-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <h3 className="font-mono text-sm font-bold text-[#F0F6FC]">{finding.title}</h3>
+                              <p className="mt-1 text-xs text-[#8B949E]">Found in {finding.source}</p>
+                            </div>
+                            <span
+                              className="rounded-lg px-2.5 py-1 font-mono text-xs font-black"
+                              style={{ backgroundColor: `${finding.color}1A`, color: finding.color }}
+                            >
+                              {finding.score}%
+                            </span>
+                          </div>
+                          <div className="mt-3 flex items-center justify-between gap-3">
+                            <span className="text-xs font-semibold text-[#D0D7DE]">{finding.revenue}</span>
+                            <span className="h-2 flex-1 overflow-hidden rounded-full bg-[#30363D]">
+                              <span
+                                className="block h-full rounded-full"
+                                style={{ width: `${finding.score}%`, backgroundColor: finding.color }}
+                              />
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
             </div>
           </div>
         </section>
