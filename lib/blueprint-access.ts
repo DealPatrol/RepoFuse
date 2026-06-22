@@ -27,7 +27,7 @@ export async function applyBlueprintAccess(
   blueprints: AppBlueprint[],
 ): Promise<BlueprintAccessResult> {
   let userPlan: PlanId = 'free'
-  let blueprintLimit = PLANS.free.blueprints_viewable
+  let blueprintLimit: number = PLANS.free.blueprints_viewable
   let viewedBlueprintIds: string[] = []
   let isTrialing = false
 
