@@ -8,7 +8,7 @@ import {
 } from '@/lib/queries'
 import { getAnthropicModel } from '@/lib/anthropic-model'
 import { getCurrentUser } from '@/lib/auth'
-import { deductCredits, CREDITS } from '@/lib/credits'
+import { CREDITS, deductCredits, refundCredits } from '@/lib/credits'
 
 let __anthropicClient: Anthropic | null = null
 function getAnthropic(): Anthropic {
@@ -42,6 +42,23 @@ export interface PatternAnalyzerResult {
 }
 
 export async function POST(request: NextRequest) {
+  let chargedUserId: string | null = null
+  let chargedAnalysisId: string | null = null
+
+  async function refundCharge(reason: string, metadata: Record<string, unknown> = {}) {
+    if (!chargedUserId) return
+    const userId = chargedUserId
+    chargedUserId = null
+    try {
+      await refundCredits(userId, CREDITS.PATTERN_ANALYZER_COST, reason, {
+        analysisId: chargedAnalysisId,
+        ...metadata,
+      })
+    } catch (refundError) {
+      console.error('[pattern-analyzer] refund failed:', refundError)
+    }
+  }
+
   try {
     const user = await getCurrentUser()
     if (!user) {
@@ -61,11 +78,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const creditResult = await deductCredits(user.id, CREDITS.PATTERN_ANALYZER_COST, 'pattern_analyzer', { analysisId })
-    if (!creditResult.success) {
-      return NextResponse.json({ error: creditResult.error || 'Insufficient credits' }, { status: 402 })
-    }
-
     const analysis = await getAnalysisById(analysisId, user.id)
     if (!analysis) {
       return NextResponse.json({ error: 'Analysis not found' }, { status: 404 })
@@ -76,6 +88,13 @@ export async function POST(request: NextRequest) {
         { status: 422 },
       )
     }
+
+    const creditResult = await deductCredits(user.id, CREDITS.PATTERN_ANALYZER_COST, 'pattern_analyzer', { analysisId })
+    if (!creditResult.success) {
+      return NextResponse.json({ error: creditResult.error || 'Insufficient credits' }, { status: 402 })
+    }
+    chargedUserId = user.id
+    chargedAnalysisId = analysisId
 
     // Gather repo files and blueprints
     const [repositories, blueprints] = await Promise.all([
@@ -184,7 +203,10 @@ Respond ONLY with a valid JSON object (no markdown fences) matching this exact s
     let parsed: { patterns: string[]; suggestions: ProjectSuggestion[] }
     try {
       parsed = JSON.parse(jsonText)
-    } catch {
+    } catch (parseError) {
+      await refundCharge('Pattern Analyzer response parse failed', {
+        error: parseError instanceof Error ? parseError.message : String(parseError),
+      })
       return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 })
     }
 
@@ -197,6 +219,9 @@ Respond ONLY with a valid JSON object (no markdown fences) matching this exact s
 
     return NextResponse.json(result)
   } catch (error) {
+    await refundCharge('Pattern Analyzer failed', {
+      error: error instanceof Error ? error.message : String(error),
+    })
     console.error('[pattern-analyzer] error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

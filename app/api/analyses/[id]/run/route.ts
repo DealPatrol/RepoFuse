@@ -13,7 +13,7 @@ import {
   updateAnalysisStatus,
   createRepoFile,
   createBlueprint,
-  deleteBlueprintsByAnalysis,
+  deleteBlueprintsByIds,
   getBlueprintsByAnalysis,
   getSubscriptionByGithubId,
   upsertSubscription,
@@ -190,6 +190,7 @@ export async function POST(
           controller.close()
           return
         }
+        const previousBlueprintIds = (await getBlueprintsByAnalysis(id, user.id)).map((blueprint) => blueprint.id)
 
         const repositories = await getRepositoriesForAnalysis(id, user.id)
         if (repositories.length === 0) {
@@ -200,7 +201,6 @@ export async function POST(
 
         // Update status to scanning
         await updateAnalysisStatus(id, 'scanning')
-        await deleteBlueprintsByAnalysis(id)
         send({ status: 'scanning', progress: 10 })
 
         // Fetch file trees from GitHub for each repository
@@ -447,6 +447,8 @@ For each app blueprint:
             })
           }
         }
+
+        await deleteBlueprintsByIds(previousBlueprintIds, user.id)
 
         // Update to complete
         await updateAnalysisStatus(id, 'complete', { analyzed_files: allFiles.length })
