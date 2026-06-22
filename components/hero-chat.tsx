@@ -146,6 +146,7 @@ export function HeroChat() {
             type="button"
             onClick={() => void handleSubmit()}
             disabled={!message.trim() || submitted}
+            aria-label="Send message"
             className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#10B981] text-white transition-all hover:bg-[#059669] disabled:cursor-not-allowed disabled:opacity-40"
           >
             {submitted ? (
