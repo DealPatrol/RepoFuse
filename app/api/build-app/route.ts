@@ -88,7 +88,7 @@ async function createGitHubRepo(
     body: JSON.stringify({
       name: repoName,
       description,
-      private: false,
+      private: true,
       auto_init: false,
     }),
   })
@@ -128,7 +128,7 @@ async function pushFileToGitHub(
 
   if (!res.ok) {
     const err = (await res.json()) as { message?: string }
-    console.warn(`[build-app] Failed to push ${path}: ${err.message}`)
+    throw new Error(err.message ?? `Failed to push ${path}`)
   }
 }
 
@@ -190,7 +190,7 @@ async function pushFileToGitLab(
 
   if (!res.ok) {
     const err = (await res.json()) as { message?: string }
-    console.warn(`[build-app] Failed to push ${path} to GitLab: ${err.message}`)
+    throw new Error(err.message ?? `Failed to push ${path} to GitLab`)
   }
 }
 
@@ -285,14 +285,40 @@ export async function POST(request: NextRequest) {
             content = await generateSingleFile(blueprint, path, purpose, user.id)
           } catch (e) {
             console.warn(`[build-app] Failed to generate ${path}:`, e)
-            content = `# Error generating ${path}\n# ${e instanceof Error ? e.message : String(e)}\n`
+            send({
+              step: 'error',
+              message: `Failed to generate ${path}: ${e instanceof Error ? e.message : String(e)}`,
+              repoUrl,
+            })
+            return
+          }
+
+          if (!content.trim()) {
+            send({
+              step: 'error',
+              message: `Failed to generate ${path}: empty content returned.`,
+              repoUrl,
+            })
+            return
           }
 
           // Push to platform
-          if (platform === 'github') {
-            await pushFileToGitHub(accessToken, user.github_username, cleanRepoName, path, content)
-          } else if (gitlabProjectId !== null) {
-            await pushFileToGitLab(accessToken, gitlabProjectId, gitlabBranch, path, content)
+          try {
+            if (platform === 'github') {
+              await pushFileToGitHub(accessToken, user.github_username, cleanRepoName, path, content)
+            } else if (gitlabProjectId !== null) {
+              await pushFileToGitLab(accessToken, gitlabProjectId, gitlabBranch, path, content)
+            } else {
+              throw new Error('GitLab project was not initialized.')
+            }
+          } catch (e) {
+            console.warn(`[build-app] Failed to push ${path}:`, e)
+            send({
+              step: 'error',
+              message: `Failed to push ${path}: ${e instanceof Error ? e.message : String(e)}`,
+              repoUrl,
+            })
+            return
           }
 
           pushed++
