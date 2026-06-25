@@ -32,6 +32,7 @@ export interface CreditTransaction {
   reason: string | null
   metadata: CreditMetadata
   balance_after: number
+  idempotency_key: string | null
   created_at: string
 }
 
@@ -55,27 +56,30 @@ function toCount(value: string | number | null | undefined): number {
   return Number.parseInt(value ?? '0', 10)
 }
 
+function getIdempotencyKey(metadata: CreditMetadata): string | null {
+  const value = metadata.idempotency_key
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+}
+
 // Initialize or get user credits
 export async function getOrCreateUserCredits(userId: string): Promise<UserCredit> {
   const sql = getDb()
-  
-  // Try to get existing
+
+  await sql`
+    INSERT INTO user_credits (user_id, current_balance, total_granted, total_used)
+    VALUES (${userId}, 0, 0, 0)
+    ON CONFLICT (user_id) DO NOTHING
+  `
+
   const existing = await sql`
     SELECT * FROM user_credits WHERE user_id = ${userId}
   `
-  
+
   if (existing.length > 0) {
     return existing[0] as UserCredit
   }
-  
-  // Create new
-  const result = await sql`
-    INSERT INTO user_credits (user_id, current_balance, total_granted, total_used)
-    VALUES (${userId}, 0, 0, 0)
-    RETURNING *
-  `
-  
-  return result[0] as UserCredit
+
+  throw new Error('Failed to initialize user credits')
 }
 
 // Get current credit balance
@@ -100,32 +104,60 @@ export async function grantCredits(
   metadata: CreditMetadata = {}
 ): Promise<CreditTransaction> {
   const sql = getDb()
-  
-  // Get or create user credits
-  const userCredits = await getOrCreateUserCredits(userId)
-  const newBalance = userCredits.current_balance + amount
-  
-  // Update balance
-  await sql`
-    UPDATE user_credits
-    SET 
-      current_balance = ${newBalance},
-      total_granted = total_granted + ${amount},
-      last_renewal_date = CURRENT_TIMESTAMP
-    WHERE user_id = ${userId}
-  `
-  
-  // Record transaction
+  const idempotencyKey = getIdempotencyKey(metadata)
+
+  if (idempotencyKey) {
+    const existing = await sql`
+      SELECT * FROM credit_transactions
+      WHERE idempotency_key = ${idempotencyKey}
+      LIMIT 1
+    `
+    if (existing[0]) return existing[0] as CreditTransaction
+  }
+
+  await getOrCreateUserCredits(userId)
+
   const transaction = await sql`
-    INSERT INTO credit_transactions (
-      user_id, amount, transaction_type, reason, metadata, balance_after
+    WITH inserted AS (
+      INSERT INTO credit_transactions (
+        user_id, amount, transaction_type, reason, metadata, balance_after, idempotency_key
+      )
+      VALUES (
+        ${userId}, ${amount}, 'grant', ${reason}, ${JSON.stringify(metadata)}::jsonb, 0, ${idempotencyKey}
+      )
+      ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+      RETURNING id
+    ),
+    updated AS (
+      UPDATE user_credits
+      SET
+        current_balance = current_balance + ${amount},
+        total_granted = total_granted + ${amount},
+        last_renewal_date = CURRENT_TIMESTAMP
+      WHERE user_id = ${userId}
+        AND EXISTS (SELECT 1 FROM inserted)
+      RETURNING current_balance
     )
-    VALUES (
-      ${userId}, ${amount}, 'grant', ${reason}, ${JSON.stringify(metadata)}::jsonb, ${newBalance}
-    )
-    RETURNING *
+    UPDATE credit_transactions ct
+    SET balance_after = updated.current_balance
+    FROM updated
+    WHERE ct.id IN (SELECT id FROM inserted)
+    RETURNING ct.*
   `
-  
+
+  if (!transaction[0] && idempotencyKey) {
+    const existing = await sql`
+      SELECT * FROM credit_transactions
+      WHERE idempotency_key = ${idempotencyKey}
+      LIMIT 1
+    `
+    if (existing[0]) return existing[0] as CreditTransaction
+  }
+
+  if (!transaction[0]) {
+    throw new Error('Failed to grant credits')
+  }
+
   return transaction[0] as CreditTransaction
 }
 
@@ -137,10 +169,57 @@ export async function renewMonthlyCredits(
   metadata: CreditMetadata = {}
 ): Promise<CreditTransaction | null> {
   const sql = getDb()
+  const idempotencyKey = getIdempotencyKey(metadata)
+
+  if (idempotencyKey) {
+    const existing = await sql`
+      SELECT * FROM credit_transactions
+      WHERE idempotency_key = ${idempotencyKey}
+      LIMIT 1
+    `
+    if (existing[0]) return existing[0] as CreditTransaction
+  }
+
   const userCredits = await getOrCreateUserCredits(userId)
   const topUpAmount = Math.max(0, monthlyAllowance - userCredits.current_balance)
 
   if (topUpAmount === 0) {
+    if (idempotencyKey) {
+      const transaction = await sql`
+        WITH inserted AS (
+          INSERT INTO credit_transactions (
+            user_id, amount, transaction_type, reason, metadata, balance_after, idempotency_key
+          )
+          VALUES (
+            ${userId}, 0, 'renewal', ${reason}, ${JSON.stringify(metadata)}::jsonb, 0, ${idempotencyKey}
+          )
+          ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+          RETURNING id
+        ),
+        updated AS (
+          UPDATE user_credits
+          SET last_renewal_date = CURRENT_TIMESTAMP
+          WHERE user_id = ${userId}
+            AND EXISTS (SELECT 1 FROM inserted)
+          RETURNING current_balance
+        )
+        UPDATE credit_transactions ct
+        SET balance_after = updated.current_balance
+        FROM updated
+        WHERE ct.id IN (SELECT id FROM inserted)
+        RETURNING ct.*
+      `
+
+      if (transaction[0]) return transaction[0] as CreditTransaction
+
+      const existing = await sql`
+        SELECT * FROM credit_transactions
+        WHERE idempotency_key = ${idempotencyKey}
+        LIMIT 1
+      `
+      if (existing[0]) return existing[0] as CreditTransaction
+    }
+
     await sql`
       UPDATE user_credits
       SET last_renewal_date = CURRENT_TIMESTAMP
@@ -149,26 +228,46 @@ export async function renewMonthlyCredits(
     return null
   }
 
-  const newBalance = userCredits.current_balance + topUpAmount
-
-  await sql`
-    UPDATE user_credits
-    SET
-      current_balance = ${newBalance},
-      total_granted = total_granted + ${topUpAmount},
-      last_renewal_date = CURRENT_TIMESTAMP
-    WHERE user_id = ${userId}
-  `
-
   const transaction = await sql`
-    INSERT INTO credit_transactions (
-      user_id, amount, transaction_type, reason, metadata, balance_after
+    WITH inserted AS (
+      INSERT INTO credit_transactions (
+        user_id, amount, transaction_type, reason, metadata, balance_after, idempotency_key
+      )
+      VALUES (
+        ${userId}, ${topUpAmount}, 'renewal', ${reason}, ${JSON.stringify(metadata)}::jsonb, 0, ${idempotencyKey}
+      )
+      ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+      RETURNING id
+    ),
+    updated AS (
+      UPDATE user_credits
+      SET
+        current_balance = current_balance + ${topUpAmount},
+        total_granted = total_granted + ${topUpAmount},
+        last_renewal_date = CURRENT_TIMESTAMP
+      WHERE user_id = ${userId}
+        AND EXISTS (SELECT 1 FROM inserted)
+      RETURNING current_balance
     )
-    VALUES (
-      ${userId}, ${topUpAmount}, 'renewal', ${reason}, ${JSON.stringify(metadata)}::jsonb, ${newBalance}
-    )
-    RETURNING *
+    UPDATE credit_transactions ct
+    SET balance_after = updated.current_balance
+    FROM updated
+    WHERE ct.id IN (SELECT id FROM inserted)
+    RETURNING ct.*
   `
+
+  if (!transaction[0] && idempotencyKey) {
+    const existing = await sql`
+      SELECT * FROM credit_transactions
+      WHERE idempotency_key = ${idempotencyKey}
+      LIMIT 1
+    `
+    if (existing[0]) return existing[0] as CreditTransaction
+  }
+
+  if (!transaction[0]) {
+    throw new Error('Failed to renew credits')
+  }
 
   return transaction[0] as CreditTransaction
 }
@@ -181,45 +280,44 @@ export async function deductCredits(
   metadata: CreditMetadata = {}
 ): Promise<{ success: boolean; transaction?: CreditTransaction; error?: string }> {
   const sql = getDb()
-  
-  // Get current balance
-  const userCredits = await getOrCreateUserCredits(userId)
-  const currentBalance = userCredits.current_balance
-  
-  // Check if sufficient balance
+
+  await getOrCreateUserCredits(userId)
+
+  const transaction = await sql`
+    WITH updated AS (
+      UPDATE user_credits
+      SET
+        current_balance = current_balance - ${amount},
+        total_used = total_used + ${amount}
+      WHERE user_id = ${userId}
+        AND current_balance >= ${amount}
+      RETURNING current_balance
+    )
+    INSERT INTO credit_transactions (
+      user_id, amount, transaction_type, reason, metadata, balance_after
+    )
+    SELECT
+      ${userId}, ${-amount}, ${type}, ${`${type} deduction`}, ${JSON.stringify(metadata)}::jsonb, current_balance
+    FROM updated
+    RETURNING *
+  `
+
+  if (transaction[0]) {
+    return {
+      success: true,
+      transaction: transaction[0] as CreditTransaction,
+    }
+  }
+
+  const currentBalance = await getCreditBalance(userId)
   if (currentBalance < amount) {
     return {
       success: false,
       error: `Insufficient credits. Required: ${amount}, Available: ${currentBalance}`,
     }
   }
-  
-  const newBalance = currentBalance - amount
-  
-  // Update balance
-  await sql`
-    UPDATE user_credits
-    SET 
-      current_balance = ${newBalance},
-      total_used = total_used + ${amount}
-    WHERE user_id = ${userId}
-  `
-  
-  // Record transaction
-  const transaction = await sql`
-    INSERT INTO credit_transactions (
-      user_id, amount, transaction_type, reason, metadata, balance_after
-    )
-    VALUES (
-      ${userId}, ${-amount}, ${type}, ${`${type} deduction`}, ${JSON.stringify(metadata)}::jsonb, ${newBalance}
-    )
-    RETURNING *
-  `
-  
-  return {
-    success: true,
-    transaction: transaction[0] as CreditTransaction,
-  }
+
+  return { success: false, error: 'Failed to deduct credits' }
 }
 
 // Refund credits
@@ -230,29 +328,57 @@ export async function refundCredits(
   metadata: CreditMetadata = {}
 ): Promise<CreditTransaction> {
   const sql = getDb()
-  
-  // Get or create user credits
-  const userCredits = await getOrCreateUserCredits(userId)
-  const newBalance = userCredits.current_balance + amount
-  
-  // Update balance
-  await sql`
-    UPDATE user_credits
-    SET current_balance = ${newBalance}
-    WHERE user_id = ${userId}
-  `
-  
-  // Record transaction
+  const idempotencyKey = getIdempotencyKey(metadata)
+
+  if (idempotencyKey) {
+    const existing = await sql`
+      SELECT * FROM credit_transactions
+      WHERE idempotency_key = ${idempotencyKey}
+      LIMIT 1
+    `
+    if (existing[0]) return existing[0] as CreditTransaction
+  }
+
+  await getOrCreateUserCredits(userId)
+
   const transaction = await sql`
-    INSERT INTO credit_transactions (
-      user_id, amount, transaction_type, reason, metadata, balance_after
+    WITH inserted AS (
+      INSERT INTO credit_transactions (
+        user_id, amount, transaction_type, reason, metadata, balance_after, idempotency_key
+      )
+      VALUES (
+        ${userId}, ${amount}, 'refund', ${reason}, ${JSON.stringify(metadata)}::jsonb, 0, ${idempotencyKey}
+      )
+      ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+      RETURNING id
+    ),
+    updated AS (
+      UPDATE user_credits
+      SET current_balance = current_balance + ${amount}
+      WHERE user_id = ${userId}
+        AND EXISTS (SELECT 1 FROM inserted)
+      RETURNING current_balance
     )
-    VALUES (
-      ${userId}, ${amount}, 'refund', ${reason}, ${JSON.stringify(metadata)}::jsonb, ${newBalance}
-    )
-    RETURNING *
+    UPDATE credit_transactions ct
+    SET balance_after = updated.current_balance
+    FROM updated
+    WHERE ct.id IN (SELECT id FROM inserted)
+    RETURNING ct.*
   `
-  
+
+  if (!transaction[0] && idempotencyKey) {
+    const existing = await sql`
+      SELECT * FROM credit_transactions
+      WHERE idempotency_key = ${idempotencyKey}
+      LIMIT 1
+    `
+    if (existing[0]) return existing[0] as CreditTransaction
+  }
+
+  if (!transaction[0]) {
+    throw new Error('Failed to refund credits')
+  }
+
   return transaction[0] as CreditTransaction
 }
 

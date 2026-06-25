@@ -11,7 +11,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const [project, milestones] = await Promise.all([
       getProjectById(id, user.id),
-      getMilestonesByProject(id),
+      getMilestonesByProject(id, user.id),
     ])
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     return NextResponse.json({ project, milestones })

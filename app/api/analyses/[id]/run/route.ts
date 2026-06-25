@@ -13,7 +13,7 @@ import {
   updateAnalysisStatus,
   createRepoFile,
   createBlueprint,
-  deleteBlueprintsByAnalysis,
+  deleteBlueprintsByIds,
   getBlueprintsByAnalysis,
   getSubscriptionByGithubId,
   upsertSubscription,
@@ -23,6 +23,7 @@ import { getAnthropicModel } from '@/lib/anthropic-model'
 import { isOnFreeTier } from '@/lib/pro-access'
 import { PLANS } from '@/lib/stripe'
 import { generateGapsFromBlueprint, generateTemplatesFromBlueprints } from '@/lib/gap-generation'
+import { CREDITS, deductCredits, refundCredits } from '@/lib/credits'
 
 // Schema for AI-generated app blueprints
 const complexityEnum = z.preprocess((val) => {
@@ -141,8 +142,23 @@ export async function POST(
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
     async start(controller) {
+      let chargedUserId: string | null = null
+      let ownerUserId: string | null = null
+      let oldBlueprintsDeleted = false
+      const createdBlueprintIds: string[] = []
       const send = (data: object) => {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+      }
+      const refundAnalysisCharge = async (reason: string) => {
+        if (!chargedUserId) return
+        const userId = chargedUserId
+        chargedUserId = null
+        await refundCredits(userId, CREDITS.ANALYSIS_COST, 'Analysis run failed', {
+          analysisId: id,
+          failure: reason,
+        }).catch((refundError) => {
+          console.error('[analysis] Failed to refund credits:', refundError)
+        })
       }
 
       try {
@@ -164,6 +180,7 @@ export async function POST(
           controller.close()
           return
         }
+        ownerUserId = user.id
 
         let sub = await getSubscriptionByGithubId(user.github_id).catch(() => null)
         if (!sub) {
@@ -198,9 +215,21 @@ export async function POST(
           return
         }
 
+        const creditResult = await deductCredits(user.id, CREDITS.ANALYSIS_COST, 'analysis', { analysisId: id })
+        if (!creditResult.success) {
+          send({
+            status: 'failed',
+            error: creditResult.error ?? `Analysis requires ${CREDITS.ANALYSIS_COST} credits.`,
+          })
+          controller.close()
+          return
+        }
+        chargedUserId = user.id
+
+        const existingBlueprintIds = (await getBlueprintsByAnalysis(id, user.id)).map((bp) => bp.id)
+
         // Update status to scanning
         await updateAnalysisStatus(id, 'scanning')
-        await deleteBlueprintsByAnalysis(id)
         send({ status: 'scanning', progress: 10 })
 
         // Fetch file trees from GitHub for each repository
@@ -263,6 +292,7 @@ export async function POST(
           const msg = `No source files found to analyze. ${details} Add repos with application code or check your GitHub access token.`
           send({ status: 'failed', error: msg })
           await updateAnalysisStatus(id, 'failed', { error_message: msg })
+          await refundAnalysisCharge(msg)
           controller.close()
           return
         }
@@ -420,6 +450,7 @@ For each app blueprint:
           console.error('[analysis] No valid blueprints.', { stop_reason: aiResponse.stop_reason, rawInput: JSON.stringify(rawInput).slice(0, 500) })
           send({ status: 'failed', error: msg })
           await updateAnalysisStatus(id, 'failed', { error_message: msg })
+          await refundAnalysisCharge(msg)
           controller.close()
           return
         }
@@ -430,22 +461,31 @@ For each app blueprint:
             .map((bp) => normalizeBlueprint(bp))
             .sort((a, b) => getOpportunityScore(b) - getOpportunityScore(a))
 
-          for (const bp of rankedBlueprints) {
-            await createBlueprint({
-              analysis_id: id,
-              user_id: user.id,
-              name: bp.name.slice(0, 255),
-              description: bp.description,
-              app_type: bp.app_type?.slice(0, 100) ?? null,
-              complexity: bp.complexity,
-              reuse_percentage: bp.reuse_percentage,
-              existing_files: bp.existing_files,
-              missing_files: bp.missing_files,
-              estimated_effort: getEffortEstimate(bp.complexity, bp.missing_files.length),
-              technologies: bp.technologies,
-              ai_explanation: bp.explanation,
-            })
+          try {
+            for (const bp of rankedBlueprints) {
+              const created = await createBlueprint({
+                analysis_id: id,
+                user_id: user.id,
+                name: bp.name.slice(0, 255),
+                description: bp.description,
+                app_type: bp.app_type?.slice(0, 100) ?? null,
+                complexity: bp.complexity,
+                reuse_percentage: bp.reuse_percentage,
+                existing_files: bp.existing_files,
+                missing_files: bp.missing_files,
+                estimated_effort: getEffortEstimate(bp.complexity, bp.missing_files.length),
+                technologies: bp.technologies,
+                ai_explanation: bp.explanation,
+              })
+              createdBlueprintIds.push(created.id)
+            }
+          } catch (error) {
+            await deleteBlueprintsByIds(createdBlueprintIds, user.id)
+            throw error
           }
+
+          await deleteBlueprintsByIds(existingBlueprintIds, user.id)
+          oldBlueprintsDeleted = true
         }
 
         // Update to complete
@@ -462,12 +502,19 @@ For each app blueprint:
         }
         await generateTemplatesFromBlueprints(finalBlueprints)
 
+        chargedUserId = null
         send({ status: 'complete', progress: 100, blueprints: finalBlueprints })
         controller.close()
 
       } catch (error) {
         console.error('Analysis error:', error)
         const errorDetail = error instanceof Error ? error.message : 'Unknown error'
+        if (ownerUserId && !oldBlueprintsDeleted) {
+          await deleteBlueprintsByIds(createdBlueprintIds, ownerUserId).catch((cleanupError) => {
+            console.error('Failed to clean up partial blueprints:', cleanupError)
+          })
+        }
+        await refundAnalysisCharge(errorDetail)
         try {
           await updateAnalysisStatus(id, 'failed', { error_message: errorDetail })
         } catch (dbErr) {
