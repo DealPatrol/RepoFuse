@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateText } from 'ai'
-import { getCreditBalance, deductCredits, CREDITS } from '@/lib/credits'
+import { deductCredits, refundCredits, CREDITS } from '@/lib/credits'
+import { getCurrentUser } from '@/lib/auth'
+import { getAnalysisById } from '@/lib/queries'
 
 const model = 'openai/gpt-4-turbo'
 
@@ -19,43 +21,57 @@ interface AppSuggestion {
   is_complete?: boolean
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
-    const { analysisId, selectedRepos, userId } = (await request.json()) as {
-      analysisId: string
+    const { id } = await params
+    const user = await getCurrentUser()
+    if (!user?.id) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    const { selectedRepos } = (await request.json()) as {
       selectedRepos: SelectedRepository[]
-      userId: string
     }
 
-    // Check credit balance before proceeding
-    if (!userId) {
-      return NextResponse.json({ error: 'User ID required' }, { status: 401 })
+    if (!Array.isArray(selectedRepos) || selectedRepos.length === 0) {
+      return NextResponse.json({ error: 'At least one repository is required' }, { status: 400 })
     }
 
-    const currentBalance = await getCreditBalance(userId)
-    if (currentBalance < CREDITS.ANALYSIS_COST) {
+    const analysis = await getAnalysisById(id, user.id)
+    if (!analysis) {
+      return NextResponse.json({ error: 'Analysis not found' }, { status: 404 })
+    }
+
+    const deductResult = await deductCredits(user.id, CREDITS.ANALYSIS_COST, 'analysis', {
+      analysisId: id,
+      selectedRepos: selectedRepos.map((r) => r.name),
+    })
+    if (!deductResult.success) {
       return NextResponse.json(
         {
           error: 'Insufficient credits',
           required: CREDITS.ANALYSIS_COST,
-          available: currentBalance,
-          message: 'Upgrade to Pro to get unlimited analyses with 3,000 monthly credits.',
+          message: deductResult.error || 'Upgrade to Pro to get unlimited analyses with 3,000 monthly credits.',
         },
         { status: 402 }
       )
     }
 
-    // Get all repo files from database
-    const filesByRepo: Record<string, RepositoryTreeFile[]> = {}
-    
-    for (const repo of selectedRepos) {
-      // Fetch repo structure from GitHub API
-      const files = await fetchRepoStructure(repo)
-      filesByRepo[repo.name] = files
-    }
+    try {
+      // Get all repo files from database
+      const filesByRepo: Record<string, RepositoryTreeFile[]> = {}
 
-    // Use AI to analyze cross-repo patterns
-    const prompt = `You are an expert software architect analyzing code across multiple repositories.
+      for (const repo of selectedRepos) {
+        // Fetch repo structure from GitHub API
+        const files = await fetchRepoStructure(repo)
+        filesByRepo[repo.name] = files
+      }
+
+      // Use AI to analyze cross-repo patterns
+      const prompt = `You are an expert software architect analyzing code across multiple repositories.
 
 Given these repositories with their file structures:
 ${Object.entries(filesByRepo).map(([name, files]) => 
@@ -76,48 +92,42 @@ Your task is to discover what applications could be built by combining files fro
 
 Return as JSON array of app suggestions. Focus on practical, buildable applications.`
 
-    const result = await generateText({
-      model,
-      prompt,
-      temperature: 0.7,
-      maxOutputTokens: 2000,
-    })
+      const result = await generateText({
+        model,
+        prompt,
+        temperature: 0.7,
+        maxOutputTokens: 2000,
+      })
 
-    // Parse AI response and save suggestions
-    let suggestions: AppSuggestion[] = []
-    try {
-      const jsonMatch = result.text.match(/\[[\s\S]*\]/)
-      if (jsonMatch) {
-        suggestions = JSON.parse(jsonMatch[0])
+      // Parse AI response and save suggestions
+      let suggestions: AppSuggestion[] = []
+      try {
+        const jsonMatch = result.text.match(/\[[\s\S]*\]/)
+        if (jsonMatch) {
+          suggestions = JSON.parse(jsonMatch[0])
+        }
+      } catch (e) {
+        console.error('Failed to parse AI response:', e)
       }
+
+      const newBalance = deductResult.transaction?.balance_after || 0
+
+      return NextResponse.json({
+        analysisId: id,
+        suggestions,
+        totalSuggestions: suggestions.length,
+        completeSuggestions: suggestions.filter((suggestion) => suggestion.is_complete).length,
+        creditsUsed: CREDITS.ANALYSIS_COST,
+        creditsRemaining: newBalance,
+      })
     } catch (e) {
-      console.error('Failed to parse AI response:', e)
+      await refundCredits(user.id, CREDITS.ANALYSIS_COST, 'Legacy analysis failed', {
+        analysisId: id,
+      }).catch((refundError) => {
+        console.error('Failed to refund analysis credits:', refundError)
+      })
+      throw e
     }
-
-    // Deduct credits for successful analysis
-    const deductResult = await deductCredits(userId, CREDITS.ANALYSIS_COST, 'analysis', {
-      analysisId,
-      selectedRepos: selectedRepos.map((r) => r.name),
-    })
-
-    if (!deductResult.success) {
-      console.error('Failed to deduct credits:', deductResult.error)
-      return NextResponse.json(
-        { error: 'Failed to process analysis' },
-        { status: 500 }
-      )
-    }
-
-    const newBalance = deductResult.transaction?.balance_after || 0
-
-    return NextResponse.json({
-      analysisId,
-      suggestions,
-      totalSuggestions: suggestions.length,
-      completeSuggestions: suggestions.filter((suggestion) => suggestion.is_complete).length,
-      creditsUsed: CREDITS.ANALYSIS_COST,
-      creditsRemaining: newBalance,
-    })
   } catch (error) {
     console.error('Analysis error:', error)
     return NextResponse.json({ error: 'Failed to analyze repositories' }, { status: 500 })
