@@ -144,30 +144,21 @@ export async function upsertSubscription(data: {
     return result[0] as Subscription
   } catch (error) {
     console.error('[v0] Error upserting subscription:', error)
-    // Return a default subscription object if the operation fails
-    return {
-      id: '',
-      github_id: data.github_id,
-      stripe_customer_id: data.stripe_customer_id ?? null,
-      stripe_subscription_id: data.stripe_subscription_id ?? null,
-      plan: data.plan ?? 'free',
-      status: data.status ?? 'active',
-      current_period_end: data.current_period_end ?? null,
-      analyses_used_this_month: 0,
-      billing_cycle_anchor: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    } as Subscription
+    throw error
   }
 }
 
 export async function incrementAnalysisUsage(githubId: number): Promise<void> {
   const sql = getDb()
-  await sql`
+  const result = await sql`
     UPDATE subscriptions
     SET analyses_used_this_month = analyses_used_this_month + 1, updated_at = CURRENT_TIMESTAMP
     WHERE github_id = ${githubId}
+    RETURNING id
   `
+  if (result.length === 0) {
+    throw new Error(`No subscription row found for GitHub user ${githubId}`)
+  }
 }
 
 export async function resetMonthlyUsage(githubId: number): Promise<void> {
@@ -378,6 +369,25 @@ export async function getBlueprintsByAnalysis(analysisId: string, userId?: strin
 export async function deleteBlueprintsByAnalysis(analysisId: string): Promise<void> {
   const sql = getDb()
   await sql`DELETE FROM app_blueprints WHERE analysis_id = ${analysisId}`
+}
+
+export async function deleteBlueprintsByAnalysisExcept(analysisId: string, keepIds: string[]): Promise<void> {
+  const sql = getDb()
+  if (keepIds.length === 0) {
+    await deleteBlueprintsByAnalysis(analysisId)
+    return
+  }
+  await sql`
+    DELETE FROM app_blueprints
+    WHERE analysis_id = ${analysisId}
+      AND NOT (id = ANY(${keepIds}::uuid[]))
+  `
+}
+
+export async function deleteBlueprintsByIds(ids: string[]): Promise<void> {
+  if (ids.length === 0) return
+  const sql = getDb()
+  await sql`DELETE FROM app_blueprints WHERE id = ANY(${ids}::uuid[])`
 }
 
 export async function updateUserBilling(userId: string, data: UserBillingUpdate): Promise<void> {
@@ -1044,27 +1054,49 @@ export async function createMilestone(data: {
   return result[0] as ProjectMilestone
 }
 
-export async function toggleMilestone(id: string, completed: boolean): Promise<ProjectMilestone | null> {
+export async function toggleMilestone(
+  id: string,
+  projectId: string,
+  userId: string,
+  completed: boolean,
+): Promise<ProjectMilestone | null> {
   const sql = getDb()
   const result = completed
     ? await sql`
-        UPDATE project_milestones
+        UPDATE project_milestones AS m
         SET completed = true, completed_at = NOW()
-        WHERE id = ${id}
-        RETURNING *
+        FROM projects AS p
+        WHERE m.id = ${id}
+          AND m.project_id = ${projectId}
+          AND p.id = m.project_id
+          AND p.user_id = ${userId}
+        RETURNING m.*
       `
     : await sql`
-        UPDATE project_milestones
+        UPDATE project_milestones AS m
         SET completed = false, completed_at = NULL
-        WHERE id = ${id}
-        RETURNING *
+        FROM projects AS p
+        WHERE m.id = ${id}
+          AND m.project_id = ${projectId}
+          AND p.id = m.project_id
+          AND p.user_id = ${userId}
+        RETURNING m.*
       `
   return (result[0] as ProjectMilestone) || null
 }
 
-export async function deleteMilestone(id: string): Promise<void> {
+export async function deleteMilestone(id: string, projectId: string, userId: string): Promise<boolean> {
   const sql = getDb()
-  await sql`DELETE FROM project_milestones WHERE id = ${id}`
+  const result = await sql`
+    DELETE FROM project_milestones AS m
+    USING projects AS p
+    WHERE m.id = ${id}
+      AND m.project_id = ${projectId}
+      AND p.id = m.project_id
+      AND p.user_id = ${userId}
+    RETURNING m.id
+  `
+  return result.length > 0
 }
 
 export async function seedDefaultMilestones(projectId: string): Promise<void> {
