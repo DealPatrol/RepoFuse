@@ -388,7 +388,9 @@ For each app blueprint:
 
         send({ status: 'analyzing', progress: 80 })
 
-        if (aiResponse.stop_reason === 'max_tokens') {
+        const stopReason = (aiResponse as { stop_reason?: string | null }).stop_reason ?? null
+        const wasMaxTokens = stopReason === 'max_tokens'
+        if (wasMaxTokens) {
           const msg = 'AI response was cut short (output too large). Try running with fewer repositories selected.'
           console.error('[analysis] AI response truncated (max_tokens). Refusing to replace existing blueprints.')
           send({ status: 'failed', error: msg })
@@ -412,13 +414,12 @@ For each app blueprint:
         const blueprintsFromAI = parseBlueprints(rawInput)
 
         if (blueprintsFromAI.length === 0) {
-          const wasMaxTokens = aiResponse.stop_reason === 'max_tokens'
           const msg = wasMaxTokens
             ? 'AI response was cut short (output too large). Try running with fewer repositories selected.'
             : rawInput
               ? 'AI returned empty results. Try running the analysis again — this can happen intermittently.'
               : 'Model did not return usable blueprints (missing tool output). Check ANTHROPIC_API_KEY and model availability.'
-          console.error('[analysis] No valid blueprints.', { stop_reason: aiResponse.stop_reason, rawInput: JSON.stringify(rawInput).slice(0, 500) })
+          console.error('[analysis] No valid blueprints.', { stop_reason: stopReason, rawInput: JSON.stringify(rawInput).slice(0, 500) })
           send({ status: 'failed', error: msg })
           await updateAnalysisStatus(id, 'failed', { error_message: msg })
           controller.close()
