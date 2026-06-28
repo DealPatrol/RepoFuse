@@ -8,7 +8,7 @@ import {
 } from '@/lib/queries'
 import { getAnthropicModel } from '@/lib/anthropic-model'
 import { getCurrentUser } from '@/lib/auth'
-import { deductCredits, CREDITS } from '@/lib/credits'
+import { deductCredits, refundCredits, CREDITS } from '@/lib/credits'
 
 let __anthropicClient: Anthropic | null = null
 function getAnthropic(): Anthropic {
@@ -42,6 +42,8 @@ export interface PatternAnalyzerResult {
 }
 
 export async function POST(request: NextRequest) {
+  let chargedUserId: string | null = null
+  let chargedAnalysisId: string | null = null
   try {
     const user = await getCurrentUser()
     if (!user) {
@@ -61,11 +63,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const creditResult = await deductCredits(user.id, CREDITS.PATTERN_ANALYZER_COST, 'pattern_analyzer', { analysisId })
-    if (!creditResult.success) {
-      return NextResponse.json({ error: creditResult.error || 'Insufficient credits' }, { status: 402 })
-    }
-
     const analysis = await getAnalysisById(analysisId, user.id)
     if (!analysis) {
       return NextResponse.json({ error: 'Analysis not found' }, { status: 404 })
@@ -76,6 +73,13 @@ export async function POST(request: NextRequest) {
         { status: 422 },
       )
     }
+
+    const creditResult = await deductCredits(user.id, CREDITS.PATTERN_ANALYZER_COST, 'pattern_analyzer', { analysisId })
+    if (!creditResult.success) {
+      return NextResponse.json({ error: creditResult.error || 'Insufficient credits' }, { status: 402 })
+    }
+    chargedUserId = user.id
+    chargedAnalysisId = analysisId
 
     // Gather repo files and blueprints
     const [repositories, blueprints] = await Promise.all([
@@ -185,7 +189,7 @@ Respond ONLY with a valid JSON object (no markdown fences) matching this exact s
     try {
       parsed = JSON.parse(jsonText)
     } catch {
-      return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 })
+      throw new Error('Failed to parse AI response')
     }
 
     const result: PatternAnalyzerResult = {
@@ -198,6 +202,12 @@ Respond ONLY with a valid JSON object (no markdown fences) matching this exact s
     return NextResponse.json(result)
   } catch (error) {
     console.error('[pattern-analyzer] error:', error)
+    if (chargedUserId) {
+      await refundCredits(chargedUserId, CREDITS.PATTERN_ANALYZER_COST, 'Pattern Analyzer failed', {
+        idempotency_key: `pattern-analyzer-refund:${chargedUserId}:${chargedAnalysisId ?? 'unknown'}:${Date.now()}`,
+        analysisId: chargedAnalysisId,
+      }).catch((refundError) => console.error('[pattern-analyzer] Failed to refund credits:', refundError))
+    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

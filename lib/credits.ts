@@ -55,6 +55,25 @@ function toCount(value: string | number | null | undefined): number {
   return Number.parseInt(value ?? '0', 10)
 }
 
+async function getExistingIdempotentTransaction(
+  userId: string,
+  metadata: CreditMetadata,
+): Promise<CreditTransaction | null> {
+  const idempotencyKey = metadata.idempotency_key
+  if (typeof idempotencyKey !== 'string' || !idempotencyKey) {
+    return null
+  }
+
+  const sql = getDb()
+  const rows = await sql`
+    SELECT * FROM credit_transactions
+    WHERE user_id = ${userId}
+      AND metadata->>'idempotency_key' = ${idempotencyKey}
+    LIMIT 1
+  `
+  return (rows[0] as CreditTransaction) || null
+}
+
 // Initialize or get user credits
 export async function getOrCreateUserCredits(userId: string): Promise<UserCredit> {
   const sql = getDb()
@@ -100,29 +119,28 @@ export async function grantCredits(
   metadata: CreditMetadata = {}
 ): Promise<CreditTransaction> {
   const sql = getDb()
-  
-  // Get or create user credits
-  const userCredits = await getOrCreateUserCredits(userId)
-  const newBalance = userCredits.current_balance + amount
-  
-  // Update balance
-  await sql`
-    UPDATE user_credits
-    SET 
-      current_balance = ${newBalance},
-      total_granted = total_granted + ${amount},
-      last_renewal_date = CURRENT_TIMESTAMP
-    WHERE user_id = ${userId}
-  `
-  
-  // Record transaction
+
+  const existingTransaction = await getExistingIdempotentTransaction(userId, metadata)
+  if (existingTransaction) return existingTransaction
+
+  await getOrCreateUserCredits(userId)
+
   const transaction = await sql`
+    WITH updated AS (
+      UPDATE user_credits
+      SET
+        current_balance = current_balance + ${amount},
+        total_granted = total_granted + ${amount},
+        last_renewal_date = CURRENT_TIMESTAMP
+      WHERE user_id = ${userId}
+      RETURNING current_balance
+    )
     INSERT INTO credit_transactions (
       user_id, amount, transaction_type, reason, metadata, balance_after
     )
-    VALUES (
-      ${userId}, ${amount}, 'grant', ${reason}, ${JSON.stringify(metadata)}::jsonb, ${newBalance}
-    )
+    SELECT
+      ${userId}, ${amount}, 'grant', ${reason}, ${JSON.stringify(metadata)}::jsonb, current_balance
+    FROM updated
     RETURNING *
   `
   
@@ -137,40 +155,39 @@ export async function renewMonthlyCredits(
   metadata: CreditMetadata = {}
 ): Promise<CreditTransaction | null> {
   const sql = getDb()
-  const userCredits = await getOrCreateUserCredits(userId)
-  const topUpAmount = Math.max(0, monthlyAllowance - userCredits.current_balance)
 
-  if (topUpAmount === 0) {
-    await sql`
-      UPDATE user_credits
-      SET last_renewal_date = CURRENT_TIMESTAMP
-      WHERE user_id = ${userId}
-    `
-    return null
-  }
+  const existingTransaction = await getExistingIdempotentTransaction(userId, metadata)
+  if (existingTransaction) return existingTransaction
 
-  const newBalance = userCredits.current_balance + topUpAmount
-
-  await sql`
-    UPDATE user_credits
-    SET
-      current_balance = ${newBalance},
-      total_granted = total_granted + ${topUpAmount},
-      last_renewal_date = CURRENT_TIMESTAMP
-    WHERE user_id = ${userId}
-  `
+  await getOrCreateUserCredits(userId)
 
   const transaction = await sql`
+    WITH current_credits AS (
+      SELECT current_balance, GREATEST(${monthlyAllowance} - current_balance, 0) AS top_up_amount
+      FROM user_credits
+      WHERE user_id = ${userId}
+    ),
+    updated AS (
+      UPDATE user_credits uc
+      SET
+        current_balance = uc.current_balance + current_credits.top_up_amount,
+        total_granted = total_granted + current_credits.top_up_amount,
+        last_renewal_date = CURRENT_TIMESTAMP
+      FROM current_credits
+      WHERE uc.user_id = ${userId}
+      RETURNING uc.current_balance, current_credits.top_up_amount
+    )
     INSERT INTO credit_transactions (
       user_id, amount, transaction_type, reason, metadata, balance_after
     )
-    VALUES (
-      ${userId}, ${topUpAmount}, 'renewal', ${reason}, ${JSON.stringify(metadata)}::jsonb, ${newBalance}
-    )
+    SELECT
+      ${userId}, top_up_amount, 'renewal', ${reason}, ${JSON.stringify(metadata)}::jsonb, current_balance
+    FROM updated
+    WHERE top_up_amount > 0
     RETURNING *
   `
 
-  return transaction[0] as CreditTransaction
+  return (transaction[0] as CreditTransaction) || null
 }
 
 // Deduct credits (for analysis, scaffold, build_app, or pattern_analyzer)
@@ -181,40 +198,40 @@ export async function deductCredits(
   metadata: CreditMetadata = {}
 ): Promise<{ success: boolean; transaction?: CreditTransaction; error?: string }> {
   const sql = getDb()
-  
-  // Get current balance
-  const userCredits = await getOrCreateUserCredits(userId)
-  const currentBalance = userCredits.current_balance
-  
-  // Check if sufficient balance
-  if (currentBalance < amount) {
+
+  const existingTransaction = await getExistingIdempotentTransaction(userId, metadata)
+  if (existingTransaction) {
+    return { success: true, transaction: existingTransaction }
+  }
+
+  await getOrCreateUserCredits(userId)
+
+  const transaction = await sql`
+    WITH updated AS (
+      UPDATE user_credits
+      SET
+        current_balance = current_balance - ${amount},
+        total_used = total_used + ${amount}
+      WHERE user_id = ${userId}
+        AND current_balance >= ${amount}
+      RETURNING current_balance
+    )
+    INSERT INTO credit_transactions (
+      user_id, amount, transaction_type, reason, metadata, balance_after
+    )
+    SELECT
+      ${userId}, ${-amount}, ${type}, ${`${type} deduction`}, ${JSON.stringify(metadata)}::jsonb, current_balance
+    FROM updated
+    RETURNING *
+  `
+
+  if (transaction.length === 0) {
+    const currentBalance = await getCreditBalance(userId)
     return {
       success: false,
       error: `Insufficient credits. Required: ${amount}, Available: ${currentBalance}`,
     }
   }
-  
-  const newBalance = currentBalance - amount
-  
-  // Update balance
-  await sql`
-    UPDATE user_credits
-    SET 
-      current_balance = ${newBalance},
-      total_used = total_used + ${amount}
-    WHERE user_id = ${userId}
-  `
-  
-  // Record transaction
-  const transaction = await sql`
-    INSERT INTO credit_transactions (
-      user_id, amount, transaction_type, reason, metadata, balance_after
-    )
-    VALUES (
-      ${userId}, ${-amount}, ${type}, ${`${type} deduction`}, ${JSON.stringify(metadata)}::jsonb, ${newBalance}
-    )
-    RETURNING *
-  `
   
   return {
     success: true,
@@ -230,26 +247,25 @@ export async function refundCredits(
   metadata: CreditMetadata = {}
 ): Promise<CreditTransaction> {
   const sql = getDb()
-  
-  // Get or create user credits
-  const userCredits = await getOrCreateUserCredits(userId)
-  const newBalance = userCredits.current_balance + amount
-  
-  // Update balance
-  await sql`
-    UPDATE user_credits
-    SET current_balance = ${newBalance}
-    WHERE user_id = ${userId}
-  `
-  
-  // Record transaction
+
+  const existingTransaction = await getExistingIdempotentTransaction(userId, metadata)
+  if (existingTransaction) return existingTransaction
+
+  await getOrCreateUserCredits(userId)
+
   const transaction = await sql`
+    WITH updated AS (
+      UPDATE user_credits
+      SET current_balance = current_balance + ${amount}
+      WHERE user_id = ${userId}
+      RETURNING current_balance
+    )
     INSERT INTO credit_transactions (
       user_id, amount, transaction_type, reason, metadata, balance_after
     )
-    VALUES (
-      ${userId}, ${amount}, 'refund', ${reason}, ${JSON.stringify(metadata)}::jsonb, ${newBalance}
-    )
+    SELECT
+      ${userId}, ${amount}, 'refund', ${reason}, ${JSON.stringify(metadata)}::jsonb, current_balance
+    FROM updated
     RETURNING *
   `
   
