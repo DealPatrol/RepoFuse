@@ -177,7 +177,7 @@ async function fixDependencies(raw: string) {
   catch { return { fixedPackageJson: {}, changes: ["Could not parse package.json"] }; }
 
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: "claude-opus-4-6",
     max_tokens: 2048,
     messages: [{
       role: "user",

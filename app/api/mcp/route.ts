@@ -17,7 +17,7 @@ async function handleMcpRequest(request: Request) {
   }
 
   const { canAccessPro } = await resolveProAccess(user)
-  const model = process.env.REPOFUSE_MODEL || process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929'
+  const model = process.env.REPOFUSE_MODEL || process.env.ANTHROPIC_MODEL || 'claude-opus-4-6'
   const anthropicRunner = process.env['ANTHROPIC_' + 'API_KEY']
     ? createAnthropicPromptRunner({ apiKey: process.env['ANTHROPIC_' + 'API_KEY'], model })
     : undefined
