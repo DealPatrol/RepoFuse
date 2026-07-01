@@ -6,7 +6,7 @@ import { createRepoFuseMcpServer } from '../lib/repofuse-mcp.js'
 
 const githubToken = requireEnv('GITHUB_TOKEN')
 const anthropicApiKey = requireEnv('ANTHROPIC_API_KEY')
-const model = process.env.REPOFUSE_MODEL || process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022'
+const model = process.env.REPOFUSE_MODEL || process.env.ANTHROPIC_MODEL || 'claude-opus-4-6'
 const maxFilesPerRepo = numberFromEnv('REPOFUSE_MAX_FILES_PER_REPO', 120)
 const maxBlueprints = numberFromEnv('REPOFUSE_MAX_BLUEPRINTS', 5)
 

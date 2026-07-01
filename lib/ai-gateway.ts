@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { generateText, type ModelMessage } from 'ai'
 
 /** Default gateway model (provider/model). See https://ai-gateway.vercel.sh/v1/models */
-export const DEFAULT_GATEWAY_MODEL = 'anthropic/claude-sonnet-4.6'
+export const DEFAULT_GATEWAY_MODEL = 'anthropic/claude-opus-4.6'
 
 export type AiGatewayFeature =
   | 'analysis-run'
@@ -49,7 +49,7 @@ export function getAnthropicMessagesModel(): string {
     }
     return configured
   }
-  return usesGatewayAuth() ? DEFAULT_GATEWAY_MODEL : 'claude-sonnet-4-5-20250929'
+  return usesGatewayAuth() ? DEFAULT_GATEWAY_MODEL : 'claude-opus-4-6'
 }
 
 export function gatewayProviderOptions(userId?: string, feature?: AiGatewayFeature) {
@@ -99,7 +99,7 @@ export async function generateWithGateway(params: {
   // to avoid routing through Vercel AI Gateway which requires paid gateway credits.
   if (!usesGatewayAuth() && directAnthropicKey()) {
     const client = getAnthropicClient()
-    const directModel = process.env.ANTHROPIC_ANALYSIS_MODEL?.trim() || 'claude-sonnet-4-5-20250929'
+    const directModel = process.env.ANTHROPIC_ANALYSIS_MODEL?.trim() || 'claude-opus-4-6'
     const response = await client.messages.create({
       model: directModel,
       max_tokens: params.maxOutputTokens ?? 4096,
