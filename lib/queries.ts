@@ -1044,27 +1044,49 @@ export async function createMilestone(data: {
   return result[0] as ProjectMilestone
 }
 
-export async function toggleMilestone(id: string, completed: boolean): Promise<ProjectMilestone | null> {
+export async function toggleMilestone(
+  id: string,
+  projectId: string,
+  userId: string,
+  completed: boolean,
+): Promise<ProjectMilestone | null> {
   const sql = getDb()
   const result = completed
     ? await sql`
-        UPDATE project_milestones
+        UPDATE project_milestones pm
         SET completed = true, completed_at = NOW()
-        WHERE id = ${id}
-        RETURNING *
+        FROM projects p
+        WHERE pm.id = ${id}
+          AND pm.project_id = ${projectId}
+          AND p.id = pm.project_id
+          AND p.user_id = ${userId}
+        RETURNING pm.*
       `
     : await sql`
-        UPDATE project_milestones
+        UPDATE project_milestones pm
         SET completed = false, completed_at = NULL
-        WHERE id = ${id}
-        RETURNING *
+        FROM projects p
+        WHERE pm.id = ${id}
+          AND pm.project_id = ${projectId}
+          AND p.id = pm.project_id
+          AND p.user_id = ${userId}
+        RETURNING pm.*
       `
   return (result[0] as ProjectMilestone) || null
 }
 
-export async function deleteMilestone(id: string): Promise<void> {
+export async function deleteMilestone(id: string, projectId: string, userId: string): Promise<boolean> {
   const sql = getDb()
-  await sql`DELETE FROM project_milestones WHERE id = ${id}`
+  const result = await sql`
+    DELETE FROM project_milestones pm
+    USING projects p
+    WHERE pm.id = ${id}
+      AND pm.project_id = ${projectId}
+      AND p.id = pm.project_id
+      AND p.user_id = ${userId}
+    RETURNING pm.id
+  `
+  return result.length > 0
 }
 
 export async function seedDefaultMilestones(projectId: string): Promise<void> {
