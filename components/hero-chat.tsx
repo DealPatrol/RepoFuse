@@ -41,6 +41,7 @@ export function HeroChat() {
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
+  const [isPublic, setIsPublic] = useState(true)
 
   async function handleSubmit() {
     const idea = message.trim()
@@ -49,20 +50,21 @@ export function HeroChat() {
     setSubmitted(true)
     setError(null)
 
-    const returnTo = `/dashboard?idea=${ideaParam(idea)}`
+    const ideaQuery = `idea=${ideaParam(idea)}&public=${String(isPublic)}`
+    const returnTo = `/dashboard?${ideaQuery}`
 
     try {
       const response = await fetch('/api/auth/me', { cache: 'no-store' })
 
       if (!response.ok) {
-        window.location.href = `/sign-in?returnTo=${encodeURIComponent(returnTo)}&idea=${ideaParam(idea)}`
+        window.location.href = `/sign-in?returnTo=${encodeURIComponent(returnTo)}&${ideaQuery}`
         return
       }
 
       const auth = (await response.json()) as AuthResponse
 
       if (!auth.authenticated) {
-        window.location.href = `/sign-in?returnTo=${encodeURIComponent(returnTo)}&idea=${ideaParam(idea)}`
+        window.location.href = `/sign-in?returnTo=${encodeURIComponent(returnTo)}&${ideaQuery}`
         return
       }
 
@@ -71,7 +73,7 @@ export function HeroChat() {
         return
       }
 
-      window.location.href = `/pricing?idea=${ideaParam(idea)}`
+      window.location.href = `/pricing?${ideaQuery}`
     } catch {
       setSubmitted(false)
       setError('Could not check your session. Try again or sign in below.')
@@ -138,10 +140,21 @@ export function HeroChat() {
             <Sparkles className="h-3.5 w-3.5 text-[#F59E0B]" />
             <span className="font-mono text-xs text-[#8B949E]">Claude 4.7 Opus</span>
           </div>
-          <div className="flex items-center gap-1.5 rounded-lg border border-[#30363D] bg-[#0B0F14] px-3 py-1.5">
-            <Globe className="h-3.5 w-3.5 text-[#8B949E]" />
-            <span className="font-mono text-xs text-[#8B949E]">Public</span>
-          </div>
+          <button
+            type="button"
+            onClick={() => setIsPublic((current) => !current)}
+            aria-pressed={isPublic}
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 transition-colors ${
+              isPublic
+                ? 'border-[#10B981]/40 bg-[#10B981]/10 text-[#10B981]'
+                : 'border-[#30363D] bg-[#0B0F14] text-[#8B949E]'
+            }`}
+          >
+            <Globe className={`h-3.5 w-3.5 ${isPublic ? 'text-[#10B981]' : 'text-[#8B949E]'}`} />
+            <span className={`font-mono text-xs ${isPublic ? 'text-[#10B981]' : 'text-[#8B949E]'}`}>
+              {isPublic ? 'Public' : 'Private'}
+            </span>
+          </button>
           <button
             type="button"
             onClick={() => void handleSubmit()}
