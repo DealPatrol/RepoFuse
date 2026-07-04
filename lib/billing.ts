@@ -118,6 +118,16 @@ export async function requirePro() {
     getBillingState(user),
     getSubscriptionByGithubId(user.github_id).catch(() => null),
   ])
+
+  // TEMPORARY: Allow all authenticated users access during testing/launch (disable limits)
+  // TODO: Re-enable paid subscription check after launch
+  return {
+    ok: true as const,
+    user,
+    billing,
+  }
+
+  /* Original subscription check - uncomment after launch
   const canAccessPro =
     billing.canAccessPro || hasActivePaidSubscription(subscription) || hasActivePaidUser(user)
 
@@ -140,4 +150,5 @@ export async function requirePro() {
     user,
     billing,
   }
+  */
 }

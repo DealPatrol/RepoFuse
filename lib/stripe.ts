@@ -49,11 +49,17 @@ export function getStripeWebhookSecret(): string {
 export const PLANS = {
   free: {
     name: 'Free',
-    analyses_per_month: 1,
-    blueprints_viewable: 1,
-    repos_limit: 1,
+    // TEMPORARY: Unlimited access for testing/launch
+    // TODO: Revert to original limits after launch:
+    // analyses_per_month: 1,
+    // blueprints_viewable: 1,
+    // repos_limit: 1,
+    // credits_per_month: 200,
+    analyses_per_month: -1,
+    blueprints_viewable: -1,
+    repos_limit: -1,
     price_monthly: 0,
-    credits_per_month: 200,
+    credits_per_month: 50000,
     ai_provider: 'builtin' as const,
     description: 'Explore the basics, no card needed',
   },
