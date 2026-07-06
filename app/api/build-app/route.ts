@@ -3,6 +3,7 @@ import { generateWithGateway } from '@/lib/ai-gateway'
 import { getCurrentUser } from '@/lib/auth'
 import { getSubscriptionByGithubId, upsertSubscription, type AppBlueprint } from '@/lib/queries'
 import { hasProAccess } from '@/lib/pro-access'
+import { CREDITS, deductCredits, refundCredits } from '@/lib/credits'
 
 type Platform = 'github' | 'gitlab'
 
@@ -69,7 +70,14 @@ function getFilesToGenerate(blueprint: BuildAppRequest['blueprint']): Array<{ pa
   files.push({ path: '.env.example', purpose: 'All required environment variables with placeholder values' })
   files.push({ path: '.gitignore', purpose: 'Gitignore file appropriate for this stack' })
 
-  return files
+  const seen = new Set<string>()
+  return files.filter((file) => {
+    const normalizedPath = file.path.trim()
+    if (!normalizedPath || seen.has(normalizedPath)) return false
+    seen.add(normalizedPath)
+    file.path = normalizedPath
+    return true
+  })
 }
 
 async function createGitHubRepo(
@@ -88,7 +96,7 @@ async function createGitHubRepo(
     body: JSON.stringify({
       name: repoName,
       description,
-      private: false,
+      private: true,
       auto_init: false,
     }),
   })
@@ -128,7 +136,7 @@ async function pushFileToGitHub(
 
   if (!res.ok) {
     const err = (await res.json()) as { message?: string }
-    console.warn(`[build-app] Failed to push ${path}: ${err.message}`)
+    throw new Error(`Failed to push ${path}: ${err.message ?? res.statusText}`)
   }
 }
 
@@ -190,7 +198,7 @@ async function pushFileToGitLab(
 
   if (!res.ok) {
     const err = (await res.json()) as { message?: string }
-    console.warn(`[build-app] Failed to push ${path} to GitLab: ${err.message}`)
+    throw new Error(`Failed to push ${path} to GitLab: ${err.message ?? res.statusText}`)
   }
 }
 
@@ -202,11 +210,13 @@ export async function POST(request: NextRequest) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
       }
 
+      let chargedUserId: string | null = null
+      let refundMetadata: Record<string, unknown> = {}
+
       try {
         const user = await getCurrentUser()
         if (!user) {
           send({ step: 'error', message: 'Sign in before building an app.' })
-          controller.close()
           return
         }
 
@@ -216,20 +226,37 @@ export async function POST(request: NextRequest) {
         }
         if (!hasProAccess(user, sub)) {
           send({ step: 'error', message: 'Build This App is available on paid plans. Upgrade to create and push a generated repo.' })
-          controller.close()
           return
         }
 
         const body = (await request.json()) as BuildAppRequest
         const { platform, repoName, blueprint } = body
 
+        if (platform !== 'github' && platform !== 'gitlab') {
+          send({ step: 'error', message: 'Choose GitHub or GitLab before building an app.' })
+          return
+        }
         if (!repoName?.trim()) {
           send({ step: 'error', message: 'Repository name is required.' })
-          controller.close()
+          return
+        }
+        if (!blueprint?.name || !Array.isArray(blueprint.existing_files) || !Array.isArray(blueprint.missing_files)) {
+          send({ step: 'error', message: 'Blueprint details are required.' })
           return
         }
 
         const cleanRepoName = repoName.trim().replace(/\s+/g, '-').toLowerCase()
+        refundMetadata = { platform, repoName: cleanRepoName, blueprintName: blueprint.name }
+
+        const chargeResult = await deductCredits(user.id, CREDITS.BUILD_APP_COST, 'build_app', refundMetadata)
+        if (!chargeResult.success) {
+          send({
+            step: 'error',
+            message: chargeResult.error ?? `Build This App requires ${CREDITS.BUILD_APP_COST} credits.`,
+          })
+          return
+        }
+        chargedUserId = user.id
 
         // Step 1 — determine files to generate
         const filesToGenerate = getFilesToGenerate(blueprint)
@@ -264,12 +291,7 @@ export async function POST(request: NextRequest) {
             gitlabBranch = project.default_branch || 'main'
           }
         } catch (e) {
-          send({
-            step: 'error',
-            message: `Could not create repository: ${e instanceof Error ? e.message : String(e)}. Make sure you are connected to ${platform === 'github' ? 'GitHub' : 'GitLab'}.`,
-          })
-          controller.close()
-          return
+          throw new Error(`Could not create repository: ${e instanceof Error ? e.message : String(e)}. Make sure you are connected to ${platform === 'github' ? 'GitHub' : 'GitLab'}.`)
         }
 
         send({ step: 'repo_created', message: 'Repository created. Generating and pushing files…', repoUrl })
@@ -279,13 +301,9 @@ export async function POST(request: NextRequest) {
         const total = filesToGenerate.length
 
         for (const { path, purpose } of filesToGenerate) {
-          // Generate this file
-          let content: string
-          try {
-            content = await generateSingleFile(blueprint, path, purpose, user.id)
-          } catch (e) {
-            console.warn(`[build-app] Failed to generate ${path}:`, e)
-            content = `# Error generating ${path}\n# ${e instanceof Error ? e.message : String(e)}\n`
+          const content = await generateSingleFile(blueprint, path, purpose, user.id)
+          if (!content.trim()) {
+            throw new Error(`Generated empty content for ${path}`)
           }
 
           // Push to platform
@@ -312,13 +330,18 @@ export async function POST(request: NextRequest) {
           repoUrl,
           filesCreated: pushed,
         })
+        chargedUserId = null
       } catch (e) {
         console.error('[build-app] unhandled error:', e)
-        controller.enqueue(
-          encoder.encode(
-            `data: ${JSON.stringify({ step: 'error', message: 'An unexpected error occurred.' })}\n\n`,
-          ),
-        )
+        if (chargedUserId) {
+          await refundCredits(chargedUserId, CREDITS.BUILD_APP_COST, 'build app failed', refundMetadata).catch((refundError) =>
+            console.error('[build-app] Failed to refund credits:', refundError),
+          )
+        }
+        send({
+          step: 'error',
+          message: e instanceof Error ? e.message : 'An unexpected error occurred.',
+        })
       } finally {
         controller.close()
       }
