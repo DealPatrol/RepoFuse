@@ -12,8 +12,7 @@ import {
   getRepositoriesForAnalysis,
   updateAnalysisStatus,
   createRepoFile,
-  createBlueprint,
-  deleteBlueprintsByAnalysis,
+  replaceBlueprintsForAnalysis,
   getBlueprintsByAnalysis,
   getSubscriptionByGithubId,
   upsertSubscription,
@@ -200,7 +199,6 @@ export async function POST(
 
         // Update status to scanning
         await updateAnalysisStatus(id, 'scanning')
-        await deleteBlueprintsByAnalysis(id)
         send({ status: 'scanning', progress: 10 })
 
         // Fetch file trees from GitHub for each repository
@@ -430,10 +428,10 @@ For each app blueprint:
             .map((bp) => normalizeBlueprint(bp))
             .sort((a, b) => getOpportunityScore(b) - getOpportunityScore(a))
 
-          for (const bp of rankedBlueprints) {
-            await createBlueprint({
-              analysis_id: id,
-              user_id: user.id,
+          await replaceBlueprintsForAnalysis(
+            id,
+            user.id,
+            rankedBlueprints.map((bp) => ({
               name: bp.name.slice(0, 255),
               description: bp.description,
               app_type: bp.app_type?.slice(0, 100) ?? null,
@@ -444,8 +442,8 @@ For each app blueprint:
               estimated_effort: getEffortEstimate(bp.complexity, bp.missing_files.length),
               technologies: bp.technologies,
               ai_explanation: bp.explanation,
-            })
-          }
+            })),
+          )
         }
 
         // Update to complete
