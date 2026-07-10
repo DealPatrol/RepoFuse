@@ -6,7 +6,7 @@ import {
   getFilesByRepository,
 } from '@/lib/queries'
 import { getCurrentUser } from '@/lib/auth'
-import { deductCredits, CREDITS } from '@/lib/credits'
+import { deductCredits, refundCredits, CREDITS } from '@/lib/credits'
 import type { AppIdeaChatResponse, ChatMessage } from '@/lib/app-idea-chat-types'
 import { aiConfigErrorMessage, generateWithGateway, isAiConfigured } from '@/lib/ai-gateway'
 
@@ -80,57 +80,48 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 })
     }
 
-    if (!process.env.ANTHROPIC_API_KEY) {
-      return NextResponse.json(
-        { error: 'App Idea Chat is not configured. Missing ANTHROPIC_API_KEY.' },
-        { status: 503 },
-      )
-    }
-
-    const creditResult = await deductCredits(
-      user.id,
-      CREDITS.PATTERN_ANALYZER_COST,
-      'pattern_analyzer',
-      { analysisId },
-    )
-    if (!creditResult.success) {
-      return NextResponse.json({ error: creditResult.error || 'Insufficient credits' }, { status: 402 })
-    }
-
     let codebaseContext = ''
     if (analysisId) {
-      try {
-        const analysis = await getAnalysisById(analysisId, user.id)
-        if (analysis && analysis.status === 'complete') {
-          const [repositories, blueprints] = await Promise.all([
-            getRepositoriesForAnalysis(analysisId, user.id),
-            getBlueprintsByAnalysis(analysisId, user.id),
-          ])
+      const analysis = await getAnalysisById(analysisId, user.id)
+      if (!analysis) {
+        return NextResponse.json({ error: 'Analysis not found' }, { status: 404 })
+      }
+      if (analysis.status !== 'complete') {
+        return NextResponse.json(
+          { error: 'Analysis must be complete before app idea chat can use it.' },
+          { status: 422 },
+        )
+      }
 
-          const allFiles = (
-            await Promise.all(repositories.map((r) => getFilesByRepository(r.id)))
-          ).flat()
+      const [repositories, blueprints] = await Promise.all([
+        getRepositoriesForAnalysis(analysisId, user.id),
+        getBlueprintsByAnalysis(analysisId, user.id),
+      ])
 
-          const techCount: Record<string, number> = {}
-          for (const file of allFiles) {
-            for (const tech of file.technologies) {
-              techCount[tech] = (techCount[tech] || 0) + 1
-            }
-          }
-          const topTech = Object.entries(techCount)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 10)
-            .map(([t]) => t)
-          const reusableFiles = allFiles
-            .sort((a, b) => b.reusability_score - a.reusability_score)
-            .slice(0, 16)
-            .map((file) => {
-              const repo = repositories.find((r) => r.id === file.repository_id)
-              const purpose = file.purpose?.trim()
-              return `${repo?.full_name ?? 'repo'}/${file.path}${purpose ? ` - ${purpose}` : ''}`
-            })
+      const allFiles = (
+        await Promise.all(repositories.map((r) => getFilesByRepository(r.id)))
+      ).flat()
 
-          codebaseContext = `
+      const techCount: Record<string, number> = {}
+      for (const file of allFiles) {
+        for (const tech of file.technologies) {
+          techCount[tech] = (techCount[tech] || 0) + 1
+        }
+      }
+      const topTech = Object.entries(techCount)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([t]) => t)
+      const reusableFiles = allFiles
+        .sort((a, b) => b.reusability_score - a.reusability_score)
+        .slice(0, 16)
+        .map((file) => {
+          const repo = repositories.find((r) => r.id === file.repository_id)
+          const purpose = file.purpose?.trim()
+          return `${repo?.full_name ?? 'repo'}/${file.path}${purpose ? ` - ${purpose}` : ''}`
+        })
+
+      codebaseContext = `
 ## Developer's codebase context
 Repositories: ${repositories.map((r) => r.name).join(', ')}
 Top technologies: ${topTech.join(', ')}
@@ -139,10 +130,17 @@ Existing blueprints: ${blueprints.slice(0, 5).map((b) => b.name).join(', ') || '
 Reusable source files:
 ${reusableFiles.length > 0 ? reusableFiles.map((file) => `- ${file}`).join('\n') : '- No analyzed file summaries yet'}
 `
-        }
-      } catch {
-        // Codebase context optional — continue without it
-      }
+    }
+
+    const creditMetadata = { analysisId }
+    const creditResult = await deductCredits(
+      user.id,
+      CREDITS.PATTERN_ANALYZER_COST,
+      'pattern_analyzer',
+      creditMetadata,
+    )
+    if (!creditResult.success) {
+      return NextResponse.json({ error: creditResult.error || 'Insufficient credits' }, { status: 402 })
     }
 
     const conversationHistory = normalizeConversationHistory(history).slice(-6)
@@ -186,30 +184,42 @@ Always respond with valid JSON only (no markdown fences):
       { role: 'user', content: message.trim() },
     ])
 
-    const raw = await generateWithGateway({
-      system: systemPrompt,
-      messages,
-      maxOutputTokens: 2048,
-      userId: user.id,
-      feature: 'app-idea-chat',
-    })
-
-    let parsed: AppIdeaChatResponse
     try {
-      parsed = parseAppIdeaChatResponse(raw)
-    } catch {
-      return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 })
-    }
+      const raw = await generateWithGateway({
+        system: systemPrompt,
+        messages,
+        maxOutputTokens: 2048,
+        userId: user.id,
+        feature: 'app-idea-chat',
+      })
 
-    if (!parsed.reply?.trim()) {
-      return NextResponse.json({ error: 'Empty AI response' }, { status: 500 })
-    }
+      let parsed: AppIdeaChatResponse
+      try {
+        parsed = parseAppIdeaChatResponse(raw)
+      } catch {
+        throw new Error('Failed to parse AI response')
+      }
 
-    return NextResponse.json({
-      reply: parsed.reply,
-      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
-      followUpQuestions: Array.isArray(parsed.followUpQuestions) ? parsed.followUpQuestions : [],
-    })
+      if (!parsed.reply?.trim()) {
+        throw new Error('Empty AI response')
+      }
+
+      return NextResponse.json({
+        reply: parsed.reply,
+        suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
+        followUpQuestions: Array.isArray(parsed.followUpQuestions) ? parsed.followUpQuestions : [],
+      })
+    } catch (error) {
+      await refundCredits(
+        user.id,
+        CREDITS.PATTERN_ANALYZER_COST,
+        'app idea chat failed',
+        creditMetadata,
+      ).catch((refundError) => {
+        console.error('[v0] app-idea-chat refund failed:', refundError)
+      })
+      throw error
+    }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
     console.error('[v0] app-idea-chat error:', errorMsg)

@@ -8,7 +8,7 @@ import {
 } from '@/lib/queries'
 import { getAnthropicModel } from '@/lib/anthropic-model'
 import { getCurrentUser } from '@/lib/auth'
-import { deductCredits, CREDITS } from '@/lib/credits'
+import { deductCredits, refundCredits, CREDITS } from '@/lib/credits'
 
 let __anthropicClient: Anthropic | null = null
 function getAnthropic(): Anthropic {
@@ -59,11 +59,6 @@ export async function POST(request: NextRequest) {
         { error: 'Pattern Analyzer is not configured. Missing ANTHROPIC_API_KEY.' },
         { status: 503 },
       )
-    }
-
-    const creditResult = await deductCredits(user.id, CREDITS.PATTERN_ANALYZER_COST, 'pattern_analyzer', { analysisId })
-    if (!creditResult.success) {
-      return NextResponse.json({ error: creditResult.error || 'Insufficient credits' }, { status: 402 })
     }
 
     const analysis = await getAnalysisById(analysisId, user.id)
@@ -170,32 +165,50 @@ Respond ONLY with a valid JSON object (no markdown fences) matching this exact s
   ]
 }`
 
-    const response = await getAnthropic().messages.create({
-      model: getAnthropicModel(),
-      max_tokens: 4096,
-      messages: [{ role: 'user', content: prompt }],
-    })
+    const creditMetadata = { analysisId }
+    const creditResult = await deductCredits(user.id, CREDITS.PATTERN_ANALYZER_COST, 'pattern_analyzer', creditMetadata)
+    if (!creditResult.success) {
+      return NextResponse.json({ error: creditResult.error || 'Insufficient credits' }, { status: 402 })
+    }
 
-    const raw = response.content[0].type === 'text' ? response.content[0].text.trim() : ''
-
-    // Strip accidental markdown fences
-    const jsonText = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
-
-    let parsed: { patterns: string[]; suggestions: ProjectSuggestion[] }
     try {
-      parsed = JSON.parse(jsonText)
-    } catch {
-      return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 })
-    }
+      const response = await getAnthropic().messages.create({
+        model: getAnthropicModel(),
+        max_tokens: 4096,
+        messages: [{ role: 'user', content: prompt }],
+      })
 
-    const result: PatternAnalyzerResult = {
-      patterns: parsed.patterns || [],
-      suggestions: parsed.suggestions || [],
-      topTechnologies,
-      analysisId,
-    }
+      const raw = response.content[0].type === 'text' ? response.content[0].text.trim() : ''
 
-    return NextResponse.json(result)
+      // Strip accidental markdown fences
+      const jsonText = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
+
+      let parsed: { patterns: string[]; suggestions: ProjectSuggestion[] }
+      try {
+        parsed = JSON.parse(jsonText)
+      } catch {
+        throw new Error('Failed to parse AI response')
+      }
+
+      const result: PatternAnalyzerResult = {
+        patterns: parsed.patterns || [],
+        suggestions: parsed.suggestions || [],
+        topTechnologies,
+        analysisId,
+      }
+
+      return NextResponse.json(result)
+    } catch (error) {
+      await refundCredits(
+        user.id,
+        CREDITS.PATTERN_ANALYZER_COST,
+        'pattern analyzer failed',
+        creditMetadata,
+      ).catch((refundError) => {
+        console.error('[pattern-analyzer] refund failed:', refundError)
+      })
+      throw error
+    }
   } catch (error) {
     console.error('[pattern-analyzer] error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
