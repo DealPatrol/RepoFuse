@@ -12,8 +12,7 @@ import {
   getRepositoriesForAnalysis,
   updateAnalysisStatus,
   createRepoFile,
-  createBlueprint,
-  deleteBlueprintsByAnalysis,
+  replaceBlueprintsForAnalysis,
   getBlueprintsByAnalysis,
   getSubscriptionByGithubId,
   upsertSubscription,
@@ -169,7 +168,12 @@ export async function POST(
         if (!sub) {
           sub = await upsertSubscription({ github_id: user.github_id }).catch(() => null)
         }
-        if (isOnFreeTier(user, sub) && sub) {
+        if (isOnFreeTier(user, sub)) {
+          if (!sub) {
+            send({ error: 'Could not verify your free plan usage. Please try again later.', status: 'failed' })
+            controller.close()
+            return
+          }
           const limit = PLANS.free.analyses_per_month
           if (sub.analyses_used_this_month >= limit) {
             send({ error: `You've reached your free plan limit of ${limit} analyses per month. Upgrade to Pro for unlimited analyses.`, status: 'failed' })
@@ -198,9 +202,8 @@ export async function POST(
           return
         }
 
-        // Update status to scanning
+        // Update status to scanning. Keep existing blueprints visible until replacements are ready.
         await updateAnalysisStatus(id, 'scanning')
-        await deleteBlueprintsByAnalysis(id)
         send({ status: 'scanning', progress: 10 })
 
         // Fetch file trees from GitHub for each repository
@@ -424,36 +427,33 @@ For each app blueprint:
           return
         }
 
-        // Save blueprints to database
-        {
-          const rankedBlueprints = blueprintsFromAI
-            .map((bp) => normalizeBlueprint(bp))
-            .sort((a, b) => getOpportunityScore(b) - getOpportunityScore(a))
+        const rankedBlueprints = blueprintsFromAI
+          .map((bp) => normalizeBlueprint(bp))
+          .sort((a, b) => getOpportunityScore(b) - getOpportunityScore(a))
 
-          for (const bp of rankedBlueprints) {
-            await createBlueprint({
-              analysis_id: id,
-              user_id: user.id,
-              name: bp.name.slice(0, 255),
-              description: bp.description,
-              app_type: bp.app_type?.slice(0, 100) ?? null,
-              complexity: bp.complexity,
-              reuse_percentage: bp.reuse_percentage,
-              existing_files: bp.existing_files,
-              missing_files: bp.missing_files,
-              estimated_effort: getEffortEstimate(bp.complexity, bp.missing_files.length),
-              technologies: bp.technologies,
-              ai_explanation: bp.explanation,
-            })
-          }
-        }
+        await replaceBlueprintsForAnalysis(
+          id,
+          user.id,
+          rankedBlueprints.map((bp) => ({
+            name: bp.name.slice(0, 255),
+            description: bp.description,
+            app_type: bp.app_type?.slice(0, 100) ?? null,
+            complexity: bp.complexity,
+            reuse_percentage: bp.reuse_percentage,
+            existing_files: bp.existing_files,
+            missing_files: bp.missing_files,
+            estimated_effort: getEffortEstimate(bp.complexity, bp.missing_files.length),
+            technologies: bp.technologies,
+            ai_explanation: bp.explanation,
+          })),
+        )
 
         // Update to complete
         await updateAnalysisStatus(id, 'complete', { analyzed_files: allFiles.length })
 
-        await incrementAnalysisUsage(user.github_id).catch((e) =>
-          console.error('[analysis] Failed to increment usage:', e)
-        )
+        if (isOnFreeTier(user, sub)) {
+          await incrementAnalysisUsage(user.github_id)
+        }
 
         // Get final blueprints and hydrate recurring-value surfaces from them.
         const finalBlueprints = await getBlueprintsByAnalysis(id, user.id)

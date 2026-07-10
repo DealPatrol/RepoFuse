@@ -11,8 +11,9 @@ export async function PATCH(
 
   const { milestoneId } = await params
   try {
+    const { id } = await params
     const { completed } = await request.json()
-    const milestone = await toggleMilestone(milestoneId, Boolean(completed))
+    const milestone = await toggleMilestone(milestoneId, id, user.id, Boolean(completed))
     if (!milestone) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     return NextResponse.json({ milestone })
   } catch (err) {
@@ -28,9 +29,10 @@ export async function DELETE(
   const user = await getCurrentUser()
   if (!user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { milestoneId } = await params
+  const { id, milestoneId } = await params
   try {
-    await deleteMilestone(milestoneId)
+    const deleted = await deleteMilestone(milestoneId, id, user.id)
+    if (!deleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('[milestones/id] DELETE error:', err)

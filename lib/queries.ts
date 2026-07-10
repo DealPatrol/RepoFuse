@@ -380,6 +380,70 @@ export async function deleteBlueprintsByAnalysis(analysisId: string): Promise<vo
   await sql`DELETE FROM app_blueprints WHERE analysis_id = ${analysisId}`
 }
 
+export type BlueprintReplacementInput = {
+  name: string
+  description: string | null
+  app_type: string | null
+  complexity: 'simple' | 'moderate' | 'complex'
+  reuse_percentage: number
+  existing_files: { path: string; purpose: string }[]
+  missing_files: { name: string; purpose: string }[]
+  estimated_effort: string | null
+  technologies: string[]
+  ai_explanation: string | null
+}
+
+export async function replaceBlueprintsForAnalysis(
+  analysisId: string,
+  userId: string,
+  blueprints: BlueprintReplacementInput[],
+): Promise<AppBlueprint[]> {
+  if (blueprints.length === 0) return []
+
+  const sql = getDb()
+  const rows = JSON.stringify(blueprints)
+  const [, inserted] = await sql.transaction([
+    sql`
+      DELETE FROM app_blueprints
+      WHERE analysis_id = ${analysisId} AND user_id = ${userId}
+    `,
+    sql`
+      INSERT INTO app_blueprints (
+        analysis_id, user_id, name, description, app_type, complexity, reuse_percentage,
+        existing_files, missing_files, estimated_effort, technologies, ai_explanation
+      )
+      SELECT
+        ${analysisId},
+        ${userId},
+        replacement.name,
+        replacement.description,
+        replacement.app_type,
+        replacement.complexity,
+        replacement.reuse_percentage,
+        replacement.existing_files,
+        replacement.missing_files,
+        replacement.estimated_effort,
+        replacement.technologies,
+        replacement.ai_explanation
+      FROM jsonb_to_recordset(${rows}::jsonb) AS replacement(
+        name text,
+        description text,
+        app_type text,
+        complexity text,
+        reuse_percentage integer,
+        existing_files jsonb,
+        missing_files jsonb,
+        estimated_effort text,
+        technologies jsonb,
+        ai_explanation text
+      )
+      RETURNING *
+    `,
+  ])
+
+  return inserted as AppBlueprint[]
+}
+
 export async function updateUserBilling(userId: string, data: UserBillingUpdate): Promise<void> {
   const sql = getDb()
   await sql`
@@ -1044,27 +1108,55 @@ export async function createMilestone(data: {
   return result[0] as ProjectMilestone
 }
 
-export async function toggleMilestone(id: string, completed: boolean): Promise<ProjectMilestone | null> {
+export async function toggleMilestone(
+  id: string,
+  projectId: string,
+  userId: string,
+  completed: boolean,
+): Promise<ProjectMilestone | null> {
   const sql = getDb()
   const result = completed
     ? await sql`
         UPDATE project_milestones
         SET completed = true, completed_at = NOW()
         WHERE id = ${id}
+          AND project_id = ${projectId}
+          AND EXISTS (
+            SELECT 1 FROM projects
+            WHERE projects.id = project_milestones.project_id
+              AND projects.user_id = ${userId}
+          )
         RETURNING *
       `
     : await sql`
         UPDATE project_milestones
         SET completed = false, completed_at = NULL
         WHERE id = ${id}
+          AND project_id = ${projectId}
+          AND EXISTS (
+            SELECT 1 FROM projects
+            WHERE projects.id = project_milestones.project_id
+              AND projects.user_id = ${userId}
+          )
         RETURNING *
       `
   return (result[0] as ProjectMilestone) || null
 }
 
-export async function deleteMilestone(id: string): Promise<void> {
+export async function deleteMilestone(id: string, projectId: string, userId: string): Promise<boolean> {
   const sql = getDb()
-  await sql`DELETE FROM project_milestones WHERE id = ${id}`
+  const result = await sql`
+    DELETE FROM project_milestones
+    WHERE id = ${id}
+      AND project_id = ${projectId}
+      AND EXISTS (
+        SELECT 1 FROM projects
+        WHERE projects.id = project_milestones.project_id
+          AND projects.user_id = ${userId}
+      )
+    RETURNING id
+  `
+  return result.length > 0
 }
 
 export async function seedDefaultMilestones(projectId: string): Promise<void> {
