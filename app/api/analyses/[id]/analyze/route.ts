@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     try {
       // Get all repo files from database
       const filesByRepo: Record<string, RepositoryTreeFile[]> = {}
-      
+
       for (const repo of selectedRepos) {
         // Fetch repo structure from GitHub API
         const files = await fetchRepoStructure(repo)
