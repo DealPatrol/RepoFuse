@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS credit_transactions (
   reason TEXT,
   metadata JSONB DEFAULT '{}',
   balance_after BIGINT NOT NULL,
+  idempotency_key TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -28,6 +29,9 @@ CREATE INDEX IF NOT EXISTS idx_user_credits_user_id ON user_credits(user_id);
 CREATE INDEX IF NOT EXISTS idx_credit_transactions_user_id ON credit_transactions(user_id);
 CREATE INDEX IF NOT EXISTS idx_credit_transactions_type ON credit_transactions(transaction_type);
 CREATE INDEX IF NOT EXISTS idx_credit_transactions_created ON credit_transactions(created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_transactions_idempotency_key
+  ON credit_transactions(idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
 
 -- Add trigger to update updated_at on user_credits
 CREATE OR REPLACE FUNCTION update_user_credits_timestamp()
