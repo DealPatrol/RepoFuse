@@ -13,11 +13,13 @@ import {
   updateAnalysisStatus,
   createRepoFile,
   createBlueprint,
-  deleteBlueprintsByAnalysis,
+  deleteBlueprintsByAnalysisExcept,
+  deleteBlueprintsByIds,
   getBlueprintsByAnalysis,
   getSubscriptionByGithubId,
   upsertSubscription,
-  incrementAnalysisUsage,
+  reserveAnalysisUsage,
+  releaseAnalysisUsage,
 } from '@/lib/queries'
 import { getAnthropicModel } from '@/lib/anthropic-model'
 import { isOnFreeTier } from '@/lib/pro-access'
@@ -144,6 +146,7 @@ export async function POST(
       const send = (data: object) => {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
       }
+      let reservedUsageGithubId: number | null = null
 
       try {
         const accessToken = await getCurrentAccessToken()
@@ -159,7 +162,7 @@ export async function POST(
         }
 
         const user = await getCurrentUser()
-        if (!user) {
+        if (!user?.id) {
           send({ error: 'Sign in with GitHub before running an analysis.' })
           controller.close()
           return
@@ -200,7 +203,6 @@ export async function POST(
 
         // Update status to scanning
         await updateAnalysisStatus(id, 'scanning')
-        await deleteBlueprintsByAnalysis(id)
         send({ status: 'scanning', progress: 10 })
 
         // Fetch file trees from GitHub for each repository
@@ -268,6 +270,19 @@ export async function POST(
         }
 
         send({ status: 'scanning', progress: 40 })
+
+        if (isOnFreeTier(user, sub) && sub) {
+          const limit = PLANS.free.analyses_per_month
+          const reserved = await reserveAnalysisUsage(user.github_id, limit)
+          if (!reserved) {
+            const msg = `You've reached your free plan limit of ${limit} analyses per month. Upgrade to Pro for unlimited analyses.`
+            send({ error: msg, status: 'failed' })
+            await updateAnalysisStatus(id, 'failed', { error_message: msg })
+            controller.close()
+            return
+          }
+          reservedUsageGithubId = user.github_id
+        }
 
         // Update to analyzing
         await updateAnalysisStatus(id, 'analyzing', { total_files: allFiles.length })
@@ -420,18 +435,23 @@ For each app blueprint:
           console.error('[analysis] No valid blueprints.', { stop_reason: aiResponse.stop_reason, rawInput: JSON.stringify(rawInput).slice(0, 500) })
           send({ status: 'failed', error: msg })
           await updateAnalysisStatus(id, 'failed', { error_message: msg })
+          if (reservedUsageGithubId !== null) {
+            await releaseAnalysisUsage(reservedUsageGithubId)
+            reservedUsageGithubId = null
+          }
           controller.close()
           return
         }
 
-        // Save blueprints to database
-        {
-          const rankedBlueprints = blueprintsFromAI
-            .map((bp) => normalizeBlueprint(bp))
-            .sort((a, b) => getOpportunityScore(b) - getOpportunityScore(a))
+        // Insert replacements before deleting old blueprints so failures never wipe prior results.
+        const rankedBlueprints = blueprintsFromAI
+          .map((bp) => normalizeBlueprint(bp))
+          .sort((a, b) => getOpportunityScore(b) - getOpportunityScore(a))
+        const createdBlueprintIds: string[] = []
 
+        try {
           for (const bp of rankedBlueprints) {
-            await createBlueprint({
+            const created = await createBlueprint({
               analysis_id: id,
               user_id: user.id,
               name: bp.name.slice(0, 255),
@@ -445,15 +465,19 @@ For each app blueprint:
               technologies: bp.technologies,
               ai_explanation: bp.explanation,
             })
+            createdBlueprintIds.push(created.id)
           }
+        } catch (insertError) {
+          await deleteBlueprintsByIds(id, user.id, createdBlueprintIds).catch((cleanupError) =>
+            console.error('[analysis] Failed to clean up partial replacement blueprints:', cleanupError),
+          )
+          throw insertError
         }
+        await deleteBlueprintsByAnalysisExcept(id, user.id, createdBlueprintIds)
 
         // Update to complete
         await updateAnalysisStatus(id, 'complete', { analyzed_files: allFiles.length })
-
-        await incrementAnalysisUsage(user.github_id).catch((e) =>
-          console.error('[analysis] Failed to increment usage:', e)
-        )
+        reservedUsageGithubId = null
 
         // Get final blueprints and hydrate recurring-value surfaces from them.
         const finalBlueprints = await getBlueprintsByAnalysis(id, user.id)
@@ -468,6 +492,14 @@ For each app blueprint:
       } catch (error) {
         console.error('Analysis error:', error)
         const errorDetail = error instanceof Error ? error.message : 'Unknown error'
+        try {
+          const githubId = (typeof reservedUsageGithubId === 'number') ? reservedUsageGithubId : null
+          if (githubId !== null) {
+            await releaseAnalysisUsage(githubId)
+          }
+        } catch (usageErr) {
+          console.error('Failed to release analysis usage after error:', usageErr)
+        }
         try {
           await updateAnalysisStatus(id, 'failed', { error_message: errorDetail })
         } catch (dbErr) {

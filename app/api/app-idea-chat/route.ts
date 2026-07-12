@@ -6,7 +6,7 @@ import {
   getFilesByRepository,
 } from '@/lib/queries'
 import { getCurrentUser } from '@/lib/auth'
-import { deductCredits, CREDITS } from '@/lib/credits'
+import { deductCredits, refundCredits, CREDITS } from '@/lib/credits'
 import type { AppIdeaChatResponse, ChatMessage } from '@/lib/app-idea-chat-types'
 import { aiConfigErrorMessage, generateWithGateway, isAiConfigured } from '@/lib/ai-gateway'
 
@@ -59,13 +59,16 @@ function parseAppIdeaChatResponse(raw: string): AppIdeaChatResponse {
 }
 
 export async function POST(request: NextRequest) {
+  let chargedUserId: string | null = null
+  let analysisIdForRefund: string | undefined
+
   try {
     if (!isAiConfigured()) {
       return NextResponse.json({ error: aiConfigErrorMessage() }, { status: 503 })
     }
 
     const user = await getCurrentUser()
-    if (!user) {
+    if (!user?.id) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
@@ -75,6 +78,7 @@ export async function POST(request: NextRequest) {
       history?: ChatMessage[]
     }
     const analysisId = normalizeAnalysisId(rawAnalysisId)
+    analysisIdForRefund = analysisId
 
     if (!message?.trim()) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 })
@@ -85,16 +89,6 @@ export async function POST(request: NextRequest) {
         { error: 'App Idea Chat is not configured. Missing ANTHROPIC_API_KEY.' },
         { status: 503 },
       )
-    }
-
-    const creditResult = await deductCredits(
-      user.id,
-      CREDITS.PATTERN_ANALYZER_COST,
-      'pattern_analyzer',
-      { analysisId },
-    )
-    if (!creditResult.success) {
-      return NextResponse.json({ error: creditResult.error || 'Insufficient credits' }, { status: 402 })
     }
 
     let codebaseContext = ''
@@ -144,6 +138,17 @@ ${reusableFiles.length > 0 ? reusableFiles.map((file) => `- ${file}`).join('\n')
         // Codebase context optional — continue without it
       }
     }
+
+    const creditResult = await deductCredits(
+      user.id,
+      CREDITS.PATTERN_ANALYZER_COST,
+      'pattern_analyzer',
+      { analysisId },
+    )
+    if (!creditResult.success) {
+      return NextResponse.json({ error: creditResult.error || 'Insufficient credits' }, { status: 402 })
+    }
+    chargedUserId = user.id
 
     const conversationHistory = normalizeConversationHistory(history).slice(-6)
 
@@ -198,11 +203,11 @@ Always respond with valid JSON only (no markdown fences):
     try {
       parsed = parseAppIdeaChatResponse(raw)
     } catch {
-      return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 })
+      throw new Error('Failed to parse AI response')
     }
 
     if (!parsed.reply?.trim()) {
-      return NextResponse.json({ error: 'Empty AI response' }, { status: 500 })
+      throw new Error('Empty AI response')
     }
 
     return NextResponse.json({
@@ -215,6 +220,11 @@ Always respond with valid JSON only (no markdown fences):
     console.error('[v0] app-idea-chat error:', errorMsg)
     if (error instanceof Error) {
       console.error('[v0] Stack:', error.stack)
+    }
+    if (chargedUserId) {
+      await refundCredits(chargedUserId, CREDITS.PATTERN_ANALYZER_COST, 'App Idea Chat failed', {
+        analysisId: analysisIdForRefund,
+      }).catch((refundError) => console.error('[v0] Failed to refund app idea chat credits:', refundError))
     }
     return NextResponse.json({ error: errorMsg }, { status: 500 })
   }
