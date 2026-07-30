@@ -32,7 +32,16 @@ export async function scanCrossPlatformCode(): Promise<ScannedFile[]> {
     throw new Error('No connected platforms')
   }
 
-  const platforms = JSON.parse(platformsData)
+  let platforms: Record<string, unknown>
+  try {
+    const parsed = JSON.parse(platformsData)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('Connected platforms cookie must be an object')
+    }
+    platforms = parsed as Record<string, unknown>
+  } catch {
+    throw new Error('Connected platforms data is invalid. Reconnect your code platforms and try again.')
+  }
   const allFiles: ScannedFile[] = []
 
   // Fetch files from each connected platform
@@ -105,12 +114,22 @@ async function fetchPlatformFiles(platformId: string, platformData: any): Promis
 }
 
 async function fetchGitHubFiles(token: string): Promise<ScannedFile[]> {
-  const repos = await fetch('https://api.github.com/user/repos?per_page=50', {
+  const repoResponse = await fetch('https://api.github.com/user/repos?per_page=50', {
     headers: {
       'Authorization': `Bearer ${token}`,
       'Accept': 'application/vnd.github+json',
     },
-  }).then(r => r.json())
+  })
+  const repos = await repoResponse.json()
+
+  if (!repoResponse.ok) {
+    const message = typeof repos?.message === 'string' ? repos.message : 'GitHub repositories could not be loaded'
+    throw new Error(`GitHub scan failed: ${message}`)
+  }
+
+  if (!Array.isArray(repos)) {
+    throw new Error('GitHub scan failed: repositories response was not a list')
+  }
 
   const files: ScannedFile[] = []
 
