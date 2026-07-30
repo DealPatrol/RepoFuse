@@ -13,7 +13,8 @@ import {
   updateAnalysisStatus,
   createRepoFile,
   createBlueprint,
-  deleteBlueprintsByAnalysis,
+  deleteBlueprintsByAnalysisExcept,
+  deleteBlueprintsByIds,
   getBlueprintsByAnalysis,
   getSubscriptionByGithubId,
   upsertSubscription,
@@ -144,6 +145,7 @@ export async function POST(
       const send = (data: object) => {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
       }
+      const replacementBlueprintIds: string[] = []
 
       try {
         const accessToken = await getCurrentAccessToken()
@@ -169,7 +171,12 @@ export async function POST(
         if (!sub) {
           sub = await upsertSubscription({ github_id: user.github_id }).catch(() => null)
         }
-        if (isOnFreeTier(user, sub) && sub) {
+        if (!sub) {
+          send({ error: 'Unable to initialize billing usage. Please try again.', status: 'failed' })
+          controller.close()
+          return
+        }
+        if (isOnFreeTier(user, sub)) {
           const limit = PLANS.free.analyses_per_month
           if (sub.analyses_used_this_month >= limit) {
             send({ error: `You've reached your free plan limit of ${limit} analyses per month. Upgrade to Pro for unlimited analyses.`, status: 'failed' })
@@ -200,7 +207,6 @@ export async function POST(
 
         // Update status to scanning
         await updateAnalysisStatus(id, 'scanning')
-        await deleteBlueprintsByAnalysis(id)
         send({ status: 'scanning', progress: 10 })
 
         // Fetch file trees from GitHub for each repository
@@ -393,7 +399,12 @@ For each app blueprint:
 
         // Check if response was truncated (hit max_tokens)
         if (aiResponse.stop_reason === 'max_tokens') {
+          const msg = 'AI response was cut short (output too large). Try running with fewer repositories selected.'
           console.warn('[analysis] AI response truncated (max_tokens). Tool output may be incomplete.')
+          send({ status: 'failed', error: msg })
+          await updateAnalysisStatus(id, 'failed', { error_message: msg })
+          controller.close()
+          return
         }
 
         // Extract structured output from tool use response
@@ -411,12 +422,9 @@ For each app blueprint:
         const blueprintsFromAI = parseBlueprints(rawInput)
 
         if (blueprintsFromAI.length === 0) {
-          const wasMaxTokens = aiResponse.stop_reason === 'max_tokens'
-          const msg = wasMaxTokens
-            ? 'AI response was cut short (output too large). Try running with fewer repositories selected.'
-            : rawInput
-              ? 'AI returned empty results. Try running the analysis again — this can happen intermittently.'
-              : 'Model did not return usable blueprints (missing tool output). Check ANTHROPIC_API_KEY and model availability.'
+          const msg = rawInput
+            ? 'AI returned empty results. Try running the analysis again — this can happen intermittently.'
+            : 'Model did not return usable blueprints (missing tool output). Check ANTHROPIC_API_KEY and model availability.'
           console.error('[analysis] No valid blueprints.', { stop_reason: aiResponse.stop_reason, rawInput: JSON.stringify(rawInput).slice(0, 500) })
           send({ status: 'failed', error: msg })
           await updateAnalysisStatus(id, 'failed', { error_message: msg })
@@ -431,7 +439,7 @@ For each app blueprint:
             .sort((a, b) => getOpportunityScore(b) - getOpportunityScore(a))
 
           for (const bp of rankedBlueprints) {
-            await createBlueprint({
+            const created = await createBlueprint({
               analysis_id: id,
               user_id: user.id,
               name: bp.name.slice(0, 255),
@@ -445,15 +453,15 @@ For each app blueprint:
               technologies: bp.technologies,
               ai_explanation: bp.explanation,
             })
+            replacementBlueprintIds.push(created.id)
           }
         }
 
+        await incrementAnalysisUsage(user.github_id)
+        await deleteBlueprintsByAnalysisExcept(id, replacementBlueprintIds)
+
         // Update to complete
         await updateAnalysisStatus(id, 'complete', { analyzed_files: allFiles.length })
-
-        await incrementAnalysisUsage(user.github_id).catch((e) =>
-          console.error('[analysis] Failed to increment usage:', e)
-        )
 
         // Get final blueprints and hydrate recurring-value surfaces from them.
         const finalBlueprints = await getBlueprintsByAnalysis(id, user.id)
@@ -468,6 +476,11 @@ For each app blueprint:
       } catch (error) {
         console.error('Analysis error:', error)
         const errorDetail = error instanceof Error ? error.message : 'Unknown error'
+        try {
+          await deleteBlueprintsByIds(replacementBlueprintIds)
+        } catch (dbErr) {
+          console.error('Failed to clean up partial replacement blueprints:', dbErr)
+        }
         try {
           await updateAnalysisStatus(id, 'failed', { error_message: errorDetail })
         } catch (dbErr) {
