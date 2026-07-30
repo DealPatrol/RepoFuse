@@ -68,6 +68,20 @@ export function gatewayProviderOptions(userId?: string, feature?: AiGatewayFeatu
   } as const
 }
 
+export interface GenerateWithGatewayParams {
+  system?: string
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>
+  maxOutputTokens?: number
+  temperature?: number
+  userId?: string
+  feature: AiGatewayFeature
+}
+
+export interface GenerateWithGatewayResult {
+  text: string
+  finishReason?: string | null
+}
+
 export function getAnthropicClient(): Anthropic {
   const gatewayKey = process.env.AI_GATEWAY_API_KEY?.trim()
   const oidc = process.env.VERCEL_OIDC_TOKEN?.trim()
@@ -87,14 +101,9 @@ export function getAnthropicClient(): Anthropic {
   return new Anthropic({ apiKey: directKey })
 }
 
-export async function generateWithGateway(params: {
-  system?: string
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>
-  maxOutputTokens?: number
-  temperature?: number
-  userId?: string
-  feature: AiGatewayFeature
-}): Promise<string> {
+export async function generateWithGatewayDetailed(
+  params: GenerateWithGatewayParams,
+): Promise<GenerateWithGatewayResult> {
   // When we have a direct Anthropic key (no gateway auth), use the SDK client directly
   // to avoid routing through Vercel AI Gateway which requires paid gateway credits.
   if (!usesGatewayAuth() && directAnthropicKey()) {
@@ -107,7 +116,10 @@ export async function generateWithGateway(params: {
       messages: params.messages,
     })
     const block = response.content[0]
-    return block.type === 'text' ? block.text : ''
+    return {
+      text: block.type === 'text' ? block.text : '',
+      finishReason: response.stop_reason,
+    }
   }
 
   // Otherwise route through Vercel AI Gateway
@@ -125,6 +137,14 @@ export async function generateWithGateway(params: {
     ...gatewayProviderOptions(params.userId, params.feature),
   })
 
+  return {
+    text: result.text,
+    finishReason: result.finishReason,
+  }
+}
+
+export async function generateWithGateway(params: GenerateWithGatewayParams): Promise<string> {
+  const result = await generateWithGatewayDetailed(params)
   return result.text
 }
 

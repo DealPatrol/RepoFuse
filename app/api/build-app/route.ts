@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { generateWithGateway } from '@/lib/ai-gateway'
+import { generateWithGatewayDetailed } from '@/lib/ai-gateway'
 import { getCurrentUser } from '@/lib/auth'
 import { getSubscriptionByGithubId, upsertSubscription, type AppBlueprint } from '@/lib/queries'
 import { hasProAccess } from '@/lib/pro-access'
@@ -13,6 +13,10 @@ interface BuildAppRequest {
     AppBlueprint,
     'name' | 'description' | 'app_type' | 'technologies' | 'existing_files' | 'missing_files' | 'complexity' | 'estimated_effort' | 'ai_explanation'
   >
+}
+
+function isTruncatedFinishReason(finishReason: string | null | undefined): boolean {
+  return finishReason === 'length' || finishReason === 'max_tokens'
 }
 
 /** Generate a single file's content using Claude */
@@ -46,12 +50,22 @@ Write the FULL, working implementation for this file.
 Return ONLY the raw file content — no markdown fences, no explanation, no preamble.
 Just the file content itself, ready to save.`
 
-  return generateWithGateway({
+  const result = await generateWithGatewayDetailed({
     feature: 'build-app',
     userId,
     maxOutputTokens: 4096,
     messages: [{ role: 'user', content: prompt }],
   })
+
+  if (isTruncatedFinishReason(result.finishReason)) {
+    throw new Error(`AI output was truncated while generating ${filePath}`)
+  }
+
+  if (!result.text.trim()) {
+    throw new Error(`AI returned empty content for ${filePath}`)
+  }
+
+  return result.text
 }
 
 /** Build the list of all files to generate */
@@ -127,8 +141,8 @@ async function pushFileToGitHub(
   )
 
   if (!res.ok) {
-    const err = (await res.json()) as { message?: string }
-    console.warn(`[build-app] Failed to push ${path}: ${err.message}`)
+    const err = (await res.json().catch(() => ({}))) as { message?: string }
+    throw new Error(err.message ?? `Failed to push ${path} to GitHub`)
   }
 }
 
@@ -189,8 +203,8 @@ async function pushFileToGitLab(
   )
 
   if (!res.ok) {
-    const err = (await res.json()) as { message?: string }
-    console.warn(`[build-app] Failed to push ${path} to GitLab: ${err.message}`)
+    const err = (await res.json().catch(() => ({}))) as { message?: string }
+    throw new Error(err.message ?? `Failed to push ${path} to GitLab`)
   }
 }
 
@@ -285,20 +299,34 @@ export async function POST(request: NextRequest) {
             content = await generateSingleFile(blueprint, path, purpose, user.id)
           } catch (e) {
             console.warn(`[build-app] Failed to generate ${path}:`, e)
-            content = `# Error generating ${path}\n# ${e instanceof Error ? e.message : String(e)}\n`
+            send({
+              step: 'error',
+              message: `Could not generate ${path}: ${e instanceof Error ? e.message : String(e)}`,
+            })
+            return
           }
 
           // Push to platform
-          if (platform === 'github') {
-            await pushFileToGitHub(accessToken, user.github_username, cleanRepoName, path, content)
-          } else if (gitlabProjectId !== null) {
-            await pushFileToGitLab(accessToken, gitlabProjectId, gitlabBranch, path, content)
+          try {
+            if (platform === 'github') {
+              await pushFileToGitHub(accessToken, user.github_username, cleanRepoName, path, content)
+            } else if (gitlabProjectId !== null) {
+              await pushFileToGitLab(accessToken, gitlabProjectId, gitlabBranch, path, content)
+            }
+          } catch (e) {
+            console.warn(`[build-app] Failed to push ${path}:`, e)
+            send({
+              step: 'error',
+              message: `Could not push ${path}: ${e instanceof Error ? e.message : String(e)}`,
+            })
+            return
           }
 
           pushed++
           send({
             step: 'pushing',
             message: `Pushed ${pushed}/${total} files`,
+            repoUrl,
             current: pushed,
             total,
             path,
