@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateText } from 'ai'
-import { getCreditBalance, deductCredits, CREDITS } from '@/lib/credits'
+import { deductCredits, refundCredits, CREDITS } from '@/lib/credits'
+import { getCurrentUser } from '@/lib/auth'
+import { getAnalysisById } from '@/lib/queries'
 
 const model = 'openai/gpt-4-turbo'
 
@@ -20,30 +22,45 @@ interface AppSuggestion {
 }
 
 export async function POST(request: NextRequest) {
+  let chargedUserId: string | null = null
+  let chargedAnalysisId: string | null = null
   try {
-    const { analysisId, selectedRepos, userId } = (await request.json()) as {
+    const user = await getCurrentUser()
+    if (!user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { analysisId, selectedRepos } = (await request.json()) as {
       analysisId: string
       selectedRepos: SelectedRepository[]
-      userId: string
+    }
+    if (!Array.isArray(selectedRepos) || selectedRepos.length === 0) {
+      return NextResponse.json({ error: 'At least one repository is required' }, { status: 400 })
     }
 
-    // Check credit balance before proceeding
-    if (!userId) {
-      return NextResponse.json({ error: 'User ID required' }, { status: 401 })
+    if (analysisId) {
+      const analysis = await getAnalysisById(analysisId, user.id)
+      if (!analysis) {
+        return NextResponse.json({ error: 'Analysis not found' }, { status: 404 })
+      }
     }
 
-    const currentBalance = await getCreditBalance(userId)
-    if (currentBalance < CREDITS.ANALYSIS_COST) {
+    const creditResult = await deductCredits(user.id, CREDITS.ANALYSIS_COST, 'analysis', {
+      analysisId,
+      selectedRepos: selectedRepos.map((r) => r.name),
+    })
+    if (!creditResult.success) {
       return NextResponse.json(
         {
           error: 'Insufficient credits',
           required: CREDITS.ANALYSIS_COST,
-          available: currentBalance,
-          message: 'Upgrade to Pro to get unlimited analyses with 3,000 monthly credits.',
+          message: creditResult.error || 'Upgrade to Pro to get unlimited analyses with 3,000 monthly credits.',
         },
         { status: 402 }
       )
     }
+    chargedUserId = user.id
+    chargedAnalysisId = analysisId
 
     // Get all repo files from database
     const filesByRepo: Record<string, RepositoryTreeFile[]> = {}
@@ -93,22 +110,11 @@ Return as JSON array of app suggestions. Focus on practical, buildable applicati
     } catch (e) {
       console.error('Failed to parse AI response:', e)
     }
-
-    // Deduct credits for successful analysis
-    const deductResult = await deductCredits(userId, CREDITS.ANALYSIS_COST, 'analysis', {
-      analysisId,
-      selectedRepos: selectedRepos.map((r) => r.name),
-    })
-
-    if (!deductResult.success) {
-      console.error('Failed to deduct credits:', deductResult.error)
-      return NextResponse.json(
-        { error: 'Failed to process analysis' },
-        { status: 500 }
-      )
+    if (suggestions.length === 0) {
+      throw new Error('Failed to parse AI analysis response')
     }
 
-    const newBalance = deductResult.transaction?.balance_after || 0
+    const newBalance = creditResult.transaction?.balance_after || 0
 
     return NextResponse.json({
       analysisId,
@@ -120,6 +126,12 @@ Return as JSON array of app suggestions. Focus on practical, buildable applicati
     })
   } catch (error) {
     console.error('Analysis error:', error)
+    if (chargedUserId) {
+      await refundCredits(chargedUserId, CREDITS.ANALYSIS_COST, 'Legacy analysis failed', {
+        idempotency_key: `legacy-analysis-refund:${chargedUserId}:${chargedAnalysisId ?? 'none'}:${Date.now()}`,
+        analysisId: chargedAnalysisId,
+      }).catch((refundError) => console.error('Failed to refund analysis credits:', refundError))
+    }
     return NextResponse.json({ error: 'Failed to analyze repositories' }, { status: 500 })
   }
 }

@@ -188,6 +188,8 @@ export async function POST(request: NextRequest) {
         if (user) {
           const amount = getCreditGrantForPrice(priceId, CREDITS.INITIAL_GRANT)
           await grantCredits(user.id, amount, 'Subscription signup credit grant', {
+            idempotency_key: `stripe:${event.id}:initial-credit`,
+            stripe_event_id: event.id,
             stripe_customer_id: customerId,
             stripe_subscription_id: subscription.id,
           })
@@ -303,6 +305,8 @@ export async function POST(request: NextRequest) {
             if (user && billingReason !== 'subscription_create') {
               const amount = getCreditGrantForPrice(priceId, CREDITS.MONTHLY_GRANT)
               await renewMonthlyCredits(user.id, amount, 'Monthly subscription renewal', {
+                idempotency_key: `stripe:${invoice.id}:renewal-credit`,
+                stripe_event_id: event.id,
                 invoice_id: invoice.id,
                 stripe_customer_id: customerId,
                 stripe_subscription_id: subscription.id,

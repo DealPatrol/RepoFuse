@@ -6,7 +6,7 @@ import {
   getFilesByRepository,
 } from '@/lib/queries'
 import { getCurrentUser } from '@/lib/auth'
-import { deductCredits, CREDITS } from '@/lib/credits'
+import { deductCredits, refundCredits, CREDITS } from '@/lib/credits'
 import type { AppIdeaChatResponse, ChatMessage } from '@/lib/app-idea-chat-types'
 import { aiConfigErrorMessage, generateWithGateway, isAiConfigured } from '@/lib/ai-gateway'
 
@@ -59,6 +59,8 @@ function parseAppIdeaChatResponse(raw: string): AppIdeaChatResponse {
 }
 
 export async function POST(request: NextRequest) {
+  let chargedUserId: string | null = null
+  let chargedAnalysisId: string | undefined
   try {
     if (!isAiConfigured()) {
       return NextResponse.json({ error: aiConfigErrorMessage() }, { status: 503 })
@@ -96,6 +98,8 @@ export async function POST(request: NextRequest) {
     if (!creditResult.success) {
       return NextResponse.json({ error: creditResult.error || 'Insufficient credits' }, { status: 402 })
     }
+    chargedUserId = user.id
+    chargedAnalysisId = analysisId
 
     let codebaseContext = ''
     if (analysisId) {
@@ -198,11 +202,11 @@ Always respond with valid JSON only (no markdown fences):
     try {
       parsed = parseAppIdeaChatResponse(raw)
     } catch {
-      return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 })
+      throw new Error('Failed to parse AI response')
     }
 
     if (!parsed.reply?.trim()) {
-      return NextResponse.json({ error: 'Empty AI response' }, { status: 500 })
+      throw new Error('Empty AI response')
     }
 
     return NextResponse.json({
@@ -215,6 +219,12 @@ Always respond with valid JSON only (no markdown fences):
     console.error('[v0] app-idea-chat error:', errorMsg)
     if (error instanceof Error) {
       console.error('[v0] Stack:', error.stack)
+    }
+    if (chargedUserId) {
+      await refundCredits(chargedUserId, CREDITS.PATTERN_ANALYZER_COST, 'App Idea Chat failed', {
+        idempotency_key: `app-idea-chat-refund:${chargedUserId}:${chargedAnalysisId ?? 'none'}:${Date.now()}`,
+        analysisId: chargedAnalysisId,
+      }).catch((refundError) => console.error('[v0] app-idea-chat refund error:', refundError))
     }
     return NextResponse.json({ error: errorMsg }, { status: 500 })
   }

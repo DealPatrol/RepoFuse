@@ -380,6 +380,67 @@ export async function deleteBlueprintsByAnalysis(analysisId: string): Promise<vo
   await sql`DELETE FROM app_blueprints WHERE analysis_id = ${analysisId}`
 }
 
+export async function replaceBlueprintsForAnalysis(
+  analysisId: string,
+  userId: string,
+  blueprints: Array<{
+    name: string
+    description: string | null
+    app_type: string | null
+    complexity: 'simple' | 'moderate' | 'complex'
+    reuse_percentage: number
+    existing_files: { path: string; purpose: string }[]
+    missing_files: { name: string; purpose: string }[]
+    estimated_effort: string | null
+    technologies: string[]
+    ai_explanation: string | null
+  }>,
+): Promise<AppBlueprint[]> {
+  if (blueprints.length === 0) return []
+
+  const sql = getDb()
+  const rows = await sql`
+    WITH deleted AS (
+      DELETE FROM app_blueprints
+      WHERE analysis_id = ${analysisId} AND user_id = ${userId}
+    ),
+    inserted AS (
+      INSERT INTO app_blueprints (
+        analysis_id, user_id, name, description, app_type, complexity, reuse_percentage,
+        existing_files, missing_files, estimated_effort, technologies, ai_explanation
+      )
+      SELECT
+        ${analysisId},
+        ${userId},
+        bp.name,
+        bp.description,
+        bp.app_type,
+        bp.complexity,
+        bp.reuse_percentage,
+        bp.existing_files,
+        bp.missing_files,
+        bp.estimated_effort,
+        bp.technologies,
+        bp.ai_explanation
+      FROM jsonb_to_recordset(${JSON.stringify(blueprints)}::jsonb) AS bp(
+        name text,
+        description text,
+        app_type text,
+        complexity text,
+        reuse_percentage numeric,
+        existing_files jsonb,
+        missing_files jsonb,
+        estimated_effort text,
+        technologies jsonb,
+        ai_explanation text
+      )
+      RETURNING *
+    )
+    SELECT * FROM inserted
+  `
+  return rows as AppBlueprint[]
+}
+
 export async function updateUserBilling(userId: string, data: UserBillingUpdate): Promise<void> {
   const sql = getDb()
   await sql`
@@ -1044,27 +1105,49 @@ export async function createMilestone(data: {
   return result[0] as ProjectMilestone
 }
 
-export async function toggleMilestone(id: string, completed: boolean): Promise<ProjectMilestone | null> {
+export async function toggleMilestone(
+  id: string,
+  projectId: string,
+  userId: string,
+  completed: boolean,
+): Promise<ProjectMilestone | null> {
   const sql = getDb()
   const result = completed
     ? await sql`
-        UPDATE project_milestones
+        UPDATE project_milestones m
         SET completed = true, completed_at = NOW()
-        WHERE id = ${id}
-        RETURNING *
+        FROM projects p
+        WHERE m.id = ${id}
+          AND m.project_id = ${projectId}
+          AND p.id = m.project_id
+          AND p.user_id = ${userId}
+        RETURNING m.*
       `
     : await sql`
-        UPDATE project_milestones
+        UPDATE project_milestones m
         SET completed = false, completed_at = NULL
-        WHERE id = ${id}
-        RETURNING *
+        FROM projects p
+        WHERE m.id = ${id}
+          AND m.project_id = ${projectId}
+          AND p.id = m.project_id
+          AND p.user_id = ${userId}
+        RETURNING m.*
       `
   return (result[0] as ProjectMilestone) || null
 }
 
-export async function deleteMilestone(id: string): Promise<void> {
+export async function deleteMilestone(id: string, projectId: string, userId: string): Promise<boolean> {
   const sql = getDb()
-  await sql`DELETE FROM project_milestones WHERE id = ${id}`
+  const result = await sql`
+    DELETE FROM project_milestones m
+    USING projects p
+    WHERE m.id = ${id}
+      AND m.project_id = ${projectId}
+      AND p.id = m.project_id
+      AND p.user_id = ${userId}
+    RETURNING m.id
+  `
+  return result.length > 0
 }
 
 export async function seedDefaultMilestones(projectId: string): Promise<void> {
