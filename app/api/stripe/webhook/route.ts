@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type Stripe from 'stripe'
-import { grantCredits, renewMonthlyCredits, CREDITS } from '@/lib/credits'
+import {
+  CREDITS,
+  grantCredits,
+  hasCreditTransactionWithMetadata,
+  renewMonthlyCredits,
+} from '@/lib/credits'
 import {
   getSubscriptionByStripeCustomerId,
   getUserByGithubId,
@@ -186,8 +191,16 @@ export async function POST(request: NextRequest) {
 
         const { user, priceId } = await persistSubscriptionState({ githubId, customerId, subscription })
         if (user) {
+          const alreadyGranted = await hasCreditTransactionWithMetadata(user.id, 'grant', {
+            stripe_checkout_session_id: session.id,
+          })
+          if (alreadyGranted) {
+            break
+          }
+
           const amount = getCreditGrantForPrice(priceId, CREDITS.INITIAL_GRANT)
           await grantCredits(user.id, amount, 'Subscription signup credit grant', {
+            stripe_checkout_session_id: session.id,
             stripe_customer_id: customerId,
             stripe_subscription_id: subscription.id,
           })
@@ -301,6 +314,13 @@ export async function POST(request: NextRequest) {
             const billingReason = (invoice as unknown as { billing_reason?: string | null }).billing_reason
 
             if (user && billingReason !== 'subscription_create') {
+              const alreadyRenewed = await hasCreditTransactionWithMetadata(user.id, 'renewal', {
+                invoice_id: invoice.id,
+              })
+              if (alreadyRenewed) {
+                break
+              }
+
               const amount = getCreditGrantForPrice(priceId, CREDITS.MONTHLY_GRANT)
               await renewMonthlyCredits(user.id, amount, 'Monthly subscription renewal', {
                 invoice_id: invoice.id,

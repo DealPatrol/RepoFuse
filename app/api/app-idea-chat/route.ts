@@ -6,7 +6,7 @@ import {
   getFilesByRepository,
 } from '@/lib/queries'
 import { getCurrentUser } from '@/lib/auth'
-import { deductCredits, CREDITS } from '@/lib/credits'
+import { CREDITS, deductCredits, refundCredits } from '@/lib/credits'
 import type { AppIdeaChatResponse, ChatMessage } from '@/lib/app-idea-chat-types'
 import { aiConfigErrorMessage, generateWithGateway, isAiConfigured } from '@/lib/ai-gateway'
 
@@ -59,6 +59,23 @@ function parseAppIdeaChatResponse(raw: string): AppIdeaChatResponse {
 }
 
 export async function POST(request: NextRequest) {
+  let chargedUserId: string | null = null
+  let chargedAnalysisId: string | undefined
+
+  async function refundCharge(reason: string, metadata: Record<string, unknown> = {}) {
+    if (!chargedUserId) return
+    const userId = chargedUserId
+    chargedUserId = null
+    try {
+      await refundCredits(userId, CREDITS.PATTERN_ANALYZER_COST, reason, {
+        analysisId: chargedAnalysisId,
+        ...metadata,
+      })
+    } catch (refundError) {
+      console.error('[v0] app-idea-chat refund failed:', refundError)
+    }
+  }
+
   try {
     if (!isAiConfigured()) {
       return NextResponse.json({ error: aiConfigErrorMessage() }, { status: 503 })
@@ -96,6 +113,8 @@ export async function POST(request: NextRequest) {
     if (!creditResult.success) {
       return NextResponse.json({ error: creditResult.error || 'Insufficient credits' }, { status: 402 })
     }
+    chargedUserId = user.id
+    chargedAnalysisId = analysisId
 
     let codebaseContext = ''
     if (analysisId) {
@@ -197,11 +216,15 @@ Always respond with valid JSON only (no markdown fences):
     let parsed: AppIdeaChatResponse
     try {
       parsed = parseAppIdeaChatResponse(raw)
-    } catch {
+    } catch (parseError) {
+      await refundCharge('App Idea Chat response parse failed', {
+        error: parseError instanceof Error ? parseError.message : String(parseError),
+      })
       return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 })
     }
 
     if (!parsed.reply?.trim()) {
+      await refundCharge('App Idea Chat returned an empty response')
       return NextResponse.json({ error: 'Empty AI response' }, { status: 500 })
     }
 
@@ -212,6 +235,7 @@ Always respond with valid JSON only (no markdown fences):
     })
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
+    await refundCharge('App Idea Chat failed', { error: errorMsg })
     console.error('[v0] app-idea-chat error:', errorMsg)
     if (error instanceof Error) {
       console.error('[v0] Stack:', error.stack)
