@@ -57,19 +57,44 @@ Just the file content itself, ready to save.`
 /** Build the list of all files to generate */
 function getFilesToGenerate(blueprint: BuildAppRequest['blueprint']): Array<{ path: string; purpose: string }> {
   const files: Array<{ path: string; purpose: string }> = []
+  const seen = new Set<string>()
+
+  const addFile = (path: string, purpose: string) => {
+    const normalizedPath = path.trim()
+    if (!normalizedPath) return
+    if (seen.has(normalizedPath)) return
+    seen.add(normalizedPath)
+    files.push({ path: normalizedPath, purpose })
+  }
 
   // Missing files from the blueprint
   for (const f of blueprint.missing_files) {
-    files.push({ path: f.name, purpose: f.purpose })
+    addFile(f.name, f.purpose)
   }
 
   // Standard project files
-  files.push({ path: 'README.md', purpose: 'Comprehensive setup, usage, and API documentation' })
-  files.push({ path: 'package.json', purpose: 'Project dependencies and scripts for the tech stack' })
-  files.push({ path: '.env.example', purpose: 'All required environment variables with placeholder values' })
-  files.push({ path: '.gitignore', purpose: 'Gitignore file appropriate for this stack' })
+  addFile('README.md', 'Comprehensive setup, usage, and API documentation')
+  addFile('package.json', 'Project dependencies and scripts for the tech stack')
+  addFile('.env.example', 'All required environment variables with placeholder values')
+  addFile('.gitignore', 'Gitignore file appropriate for this stack')
 
   return files
+}
+
+async function responseErrorMessage(res: Response, fallback: string): Promise<string> {
+  const text = await res.text().catch(() => '')
+  if (!text) return fallback
+
+  try {
+    const parsed = JSON.parse(text) as { message?: unknown; error?: unknown }
+    const message = parsed.message ?? parsed.error
+    if (typeof message === 'string' && message.trim()) return message
+    if (message && typeof message === 'object') return JSON.stringify(message)
+  } catch {
+    // Fall through to the plain response body below.
+  }
+
+  return text
 }
 
 async function createGitHubRepo(
@@ -127,8 +152,7 @@ async function pushFileToGitHub(
   )
 
   if (!res.ok) {
-    const err = (await res.json()) as { message?: string }
-    console.warn(`[build-app] Failed to push ${path}: ${err.message}`)
+    throw new Error(await responseErrorMessage(res, `Failed to push ${path}`))
   }
 }
 
@@ -189,8 +213,7 @@ async function pushFileToGitLab(
   )
 
   if (!res.ok) {
-    const err = (await res.json()) as { message?: string }
-    console.warn(`[build-app] Failed to push ${path} to GitLab: ${err.message}`)
+    throw new Error(await responseErrorMessage(res, `Failed to push ${path} to GitLab`))
   }
 }
 
@@ -285,14 +308,29 @@ export async function POST(request: NextRequest) {
             content = await generateSingleFile(blueprint, path, purpose, user.id)
           } catch (e) {
             console.warn(`[build-app] Failed to generate ${path}:`, e)
-            content = `# Error generating ${path}\n# ${e instanceof Error ? e.message : String(e)}\n`
+            send({
+              step: 'error',
+              message: `Failed to generate ${path}: ${e instanceof Error ? e.message : String(e)}`,
+              repoUrl,
+            })
+            return
           }
 
           // Push to platform
-          if (platform === 'github') {
-            await pushFileToGitHub(accessToken, user.github_username, cleanRepoName, path, content)
-          } else if (gitlabProjectId !== null) {
-            await pushFileToGitLab(accessToken, gitlabProjectId, gitlabBranch, path, content)
+          try {
+            if (platform === 'github') {
+              await pushFileToGitHub(accessToken, user.github_username, cleanRepoName, path, content)
+            } else if (gitlabProjectId !== null) {
+              await pushFileToGitLab(accessToken, gitlabProjectId, gitlabBranch, path, content)
+            }
+          } catch (e) {
+            console.warn(`[build-app] Failed to push ${path}:`, e)
+            send({
+              step: 'error',
+              message: `Failed to push ${path}: ${e instanceof Error ? e.message : String(e)}`,
+              repoUrl,
+            })
+            return
           }
 
           pushed++
