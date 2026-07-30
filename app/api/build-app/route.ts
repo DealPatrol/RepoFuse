@@ -3,11 +3,16 @@ import { generateWithGateway } from '@/lib/ai-gateway'
 import { getCurrentUser } from '@/lib/auth'
 import { getSubscriptionByGithubId, upsertSubscription, type AppBlueprint } from '@/lib/queries'
 import { hasProAccess } from '@/lib/pro-access'
-
-type Platform = 'github' | 'gitlab'
+import {
+  createGitHubRepo,
+  createGitLabProject,
+  pushFileToGitHub,
+  pushFileToGitLab,
+  type BuildPlatform,
+} from '@/lib/build-app-platforms'
 
 interface BuildAppRequest {
-  platform: Platform
+  platform: BuildPlatform
   repoName: string
   blueprint: Pick<
     AppBlueprint,
@@ -72,128 +77,6 @@ function getFilesToGenerate(blueprint: BuildAppRequest['blueprint']): Array<{ pa
   return files
 }
 
-async function createGitHubRepo(
-  accessToken: string,
-  username: string,
-  repoName: string,
-  description: string,
-): Promise<string> {
-  const res = await fetch('https://api.github.com/user/repos', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: 'application/vnd.github+json',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      name: repoName,
-      description,
-      private: false,
-      auto_init: false,
-    }),
-  })
-
-  if (!res.ok) {
-    const err = (await res.json()) as { message?: string }
-    throw new Error(err.message ?? 'Failed to create GitHub repository')
-  }
-
-  const repo = (await res.json()) as { html_url: string }
-  return repo.html_url
-}
-
-async function pushFileToGitHub(
-  accessToken: string,
-  username: string,
-  repoName: string,
-  path: string,
-  content: string,
-): Promise<void> {
-  const encoded = Buffer.from(content).toString('base64')
-  const res = await fetch(
-    `https://api.github.com/repos/${username}/${repoName}/contents/${path}`,
-    {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: 'application/vnd.github+json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        message: `Add ${path}`,
-        content: encoded,
-      }),
-    },
-  )
-
-  if (!res.ok) {
-    const err = (await res.json()) as { message?: string }
-    console.warn(`[build-app] Failed to push ${path}: ${err.message}`)
-  }
-}
-
-async function createGitLabProject(
-  accessToken: string,
-  repoName: string,
-  description: string,
-): Promise<{ id: number; web_url: string; default_branch: string }> {
-  const res = await fetch('https://gitlab.com/api/v4/projects', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      name: repoName,
-      description,
-      visibility: 'private',
-      initialize_with_readme: false,
-    }),
-  })
-
-  if (!res.ok) {
-    const err = (await res.json()) as { message?: string | Record<string, string[]> }
-    const msg =
-      typeof err.message === 'string'
-        ? err.message
-        : JSON.stringify(err.message)
-    throw new Error(msg ?? 'Failed to create GitLab project')
-  }
-
-  return res.json() as Promise<{ id: number; web_url: string; default_branch: string }>
-}
-
-async function pushFileToGitLab(
-  accessToken: string,
-  projectId: number,
-  branch: string,
-  path: string,
-  content: string,
-): Promise<void> {
-  const encodedPath = encodeURIComponent(path)
-  const res = await fetch(
-    `https://gitlab.com/api/v4/projects/${projectId}/repository/files/${encodedPath}`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        branch,
-        content,
-        commit_message: `Add ${path}`,
-        encoding: 'text',
-      }),
-    },
-  )
-
-  if (!res.ok) {
-    const err = (await res.json()) as { message?: string }
-    console.warn(`[build-app] Failed to push ${path} to GitLab: ${err.message}`)
-  }
-}
-
 export async function POST(request: NextRequest) {
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
@@ -206,7 +89,6 @@ export async function POST(request: NextRequest) {
         const user = await getCurrentUser()
         if (!user) {
           send({ step: 'error', message: 'Sign in before building an app.' })
-          controller.close()
           return
         }
 
@@ -216,16 +98,19 @@ export async function POST(request: NextRequest) {
         }
         if (!hasProAccess(user, sub)) {
           send({ step: 'error', message: 'Build This App is available on paid plans. Upgrade to create and push a generated repo.' })
-          controller.close()
           return
         }
 
         const body = (await request.json()) as BuildAppRequest
         const { platform, repoName, blueprint } = body
 
+        if (platform !== 'github' && platform !== 'gitlab') {
+          send({ step: 'error', message: 'Choose GitHub or GitLab before building.' })
+          return
+        }
+
         if (!repoName?.trim()) {
           send({ step: 'error', message: 'Repository name is required.' })
-          controller.close()
           return
         }
 
@@ -268,7 +153,6 @@ export async function POST(request: NextRequest) {
             step: 'error',
             message: `Could not create repository: ${e instanceof Error ? e.message : String(e)}. Make sure you are connected to ${platform === 'github' ? 'GitHub' : 'GitLab'}.`,
           })
-          controller.close()
           return
         }
 
@@ -284,15 +168,28 @@ export async function POST(request: NextRequest) {
           try {
             content = await generateSingleFile(blueprint, path, purpose, user.id)
           } catch (e) {
-            console.warn(`[build-app] Failed to generate ${path}:`, e)
-            content = `# Error generating ${path}\n# ${e instanceof Error ? e.message : String(e)}\n`
+            console.error(`[build-app] Failed to generate ${path}:`, e)
+            send({
+              step: 'error',
+              message: `Could not generate ${path}: ${e instanceof Error ? e.message : String(e)}`,
+            })
+            return
           }
 
           // Push to platform
-          if (platform === 'github') {
-            await pushFileToGitHub(accessToken, user.github_username, cleanRepoName, path, content)
-          } else if (gitlabProjectId !== null) {
-            await pushFileToGitLab(accessToken, gitlabProjectId, gitlabBranch, path, content)
+          try {
+            if (platform === 'github') {
+              await pushFileToGitHub(accessToken, user.github_username, cleanRepoName, path, content)
+            } else if (gitlabProjectId !== null) {
+              await pushFileToGitLab(accessToken, gitlabProjectId, gitlabBranch, path, content)
+            }
+          } catch (e) {
+            console.error(`[build-app] Failed to push ${path}:`, e)
+            send({
+              step: 'error',
+              message: e instanceof Error ? e.message : `Could not push ${path}`,
+            })
+            return
           }
 
           pushed++
