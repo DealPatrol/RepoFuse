@@ -3,6 +3,7 @@ import { generateWithGateway } from '@/lib/ai-gateway'
 import { getCurrentUser } from '@/lib/auth'
 import { getSubscriptionByGithubId, upsertSubscription, type AppBlueprint } from '@/lib/queries'
 import { hasProAccess } from '@/lib/pro-access'
+import { CREDITS, deductCredits, refundCredits } from '@/lib/credits'
 
 type Platform = 'github' | 'gitlab'
 
@@ -56,20 +57,26 @@ Just the file content itself, ready to save.`
 
 /** Build the list of all files to generate */
 function getFilesToGenerate(blueprint: BuildAppRequest['blueprint']): Array<{ path: string; purpose: string }> {
-  const files: Array<{ path: string; purpose: string }> = []
+  const files = new Map<string, { path: string; purpose: string }>()
+  const addFile = (path: string, purpose: string) => {
+    const cleanPath = path.trim().replace(/^\/+/, '')
+    if (cleanPath && !files.has(cleanPath)) {
+      files.set(cleanPath, { path: cleanPath, purpose })
+    }
+  }
 
   // Missing files from the blueprint
   for (const f of blueprint.missing_files) {
-    files.push({ path: f.name, purpose: f.purpose })
+    addFile(f.name, f.purpose)
   }
 
   // Standard project files
-  files.push({ path: 'README.md', purpose: 'Comprehensive setup, usage, and API documentation' })
-  files.push({ path: 'package.json', purpose: 'Project dependencies and scripts for the tech stack' })
-  files.push({ path: '.env.example', purpose: 'All required environment variables with placeholder values' })
-  files.push({ path: '.gitignore', purpose: 'Gitignore file appropriate for this stack' })
+  addFile('README.md', 'Comprehensive setup, usage, and API documentation')
+  addFile('package.json', 'Project dependencies and scripts for the tech stack')
+  addFile('.env.example', 'All required environment variables with placeholder values')
+  addFile('.gitignore', 'Gitignore file appropriate for this stack')
 
-  return files
+  return Array.from(files.values())
 }
 
 async function createGitHubRepo(
@@ -88,7 +95,7 @@ async function createGitHubRepo(
     body: JSON.stringify({
       name: repoName,
       description,
-      private: false,
+      private: true,
       auto_init: false,
     }),
   })
@@ -110,8 +117,9 @@ async function pushFileToGitHub(
   content: string,
 ): Promise<void> {
   const encoded = Buffer.from(content).toString('base64')
+  const encodedPath = path.split('/').map(encodeURIComponent).join('/')
   const res = await fetch(
-    `https://api.github.com/repos/${username}/${repoName}/contents/${path}`,
+    `https://api.github.com/repos/${username}/${repoName}/contents/${encodedPath}`,
     {
       method: 'PUT',
       headers: {
@@ -128,7 +136,7 @@ async function pushFileToGitHub(
 
   if (!res.ok) {
     const err = (await res.json()) as { message?: string }
-    console.warn(`[build-app] Failed to push ${path}: ${err.message}`)
+    throw new Error(`Failed to push ${path}: ${err.message ?? res.statusText}`)
   }
 }
 
@@ -190,7 +198,7 @@ async function pushFileToGitLab(
 
   if (!res.ok) {
     const err = (await res.json()) as { message?: string }
-    console.warn(`[build-app] Failed to push ${path} to GitLab: ${err.message}`)
+    throw new Error(`Failed to push ${path} to GitLab: ${err.message ?? res.statusText}`)
   }
 }
 
@@ -198,15 +206,35 @@ export async function POST(request: NextRequest) {
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
     async start(controller) {
+      let closed = false
+      let chargedUserId: string | null = null
+      let chargedMetadata: Record<string, unknown> = {}
       const send = (data: object) => {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+      }
+      const close = () => {
+        if (!closed) {
+          closed = true
+          controller.close()
+        }
+      }
+      const refundBuildCredits = async (reason: string, error: unknown) => {
+        if (!chargedUserId) return
+        const userId = chargedUserId
+        chargedUserId = null
+        await refundCredits(userId, CREDITS.BUILD_APP_COST, reason, {
+          ...chargedMetadata,
+          error: error instanceof Error ? error.message : String(error),
+        }).catch((refundError) => {
+          console.error('[build-app] Failed to refund credits after build failure:', refundError)
+        })
       }
 
       try {
         const user = await getCurrentUser()
         if (!user) {
           send({ step: 'error', message: 'Sign in before building an app.' })
-          controller.close()
+          close()
           return
         }
 
@@ -216,23 +244,42 @@ export async function POST(request: NextRequest) {
         }
         if (!hasProAccess(user, sub)) {
           send({ step: 'error', message: 'Build This App is available on paid plans. Upgrade to create and push a generated repo.' })
-          controller.close()
+          close()
           return
         }
 
         const body = (await request.json()) as BuildAppRequest
         const { platform, repoName, blueprint } = body
 
+        if (platform !== 'github' && platform !== 'gitlab') {
+          send({ step: 'error', message: 'Choose GitHub or GitLab before building an app.' })
+          close()
+          return
+        }
+
         if (!repoName?.trim()) {
           send({ step: 'error', message: 'Repository name is required.' })
-          controller.close()
+          close()
           return
         }
 
         const cleanRepoName = repoName.trim().replace(/\s+/g, '-').toLowerCase()
+        chargedMetadata = {
+          platform,
+          repoName: cleanRepoName,
+          blueprintName: blueprint.name,
+        }
 
         // Step 1 — determine files to generate
         const filesToGenerate = getFilesToGenerate(blueprint)
+        const creditResult = await deductCredits(user.id, CREDITS.BUILD_APP_COST, 'build_app', chargedMetadata)
+        if (!creditResult.success) {
+          send({ step: 'error', message: creditResult.error ?? 'Insufficient credits to build this app.' })
+          close()
+          return
+        }
+        chargedUserId = user.id
+
         send({
           step: 'generating',
           message: `Generating ${filesToGenerate.length} files with Claude…`,
@@ -264,11 +311,12 @@ export async function POST(request: NextRequest) {
             gitlabBranch = project.default_branch || 'main'
           }
         } catch (e) {
+          await refundBuildCredits('Build app repository creation failed', e)
           send({
             step: 'error',
             message: `Could not create repository: ${e instanceof Error ? e.message : String(e)}. Make sure you are connected to ${platform === 'github' ? 'GitHub' : 'GitLab'}.`,
           })
-          controller.close()
+          close()
           return
         }
 
@@ -284,15 +332,34 @@ export async function POST(request: NextRequest) {
           try {
             content = await generateSingleFile(blueprint, path, purpose, user.id)
           } catch (e) {
-            console.warn(`[build-app] Failed to generate ${path}:`, e)
-            content = `# Error generating ${path}\n# ${e instanceof Error ? e.message : String(e)}\n`
+            console.error(`[build-app] Failed to generate ${path}:`, e)
+            await refundBuildCredits('Build app file generation failed', e)
+            send({
+              step: 'error',
+              message: `Failed to generate ${path}: ${e instanceof Error ? e.message : String(e)}`,
+              repoUrl,
+            })
+            close()
+            return
           }
 
           // Push to platform
-          if (platform === 'github') {
-            await pushFileToGitHub(accessToken, user.github_username, cleanRepoName, path, content)
-          } else if (gitlabProjectId !== null) {
-            await pushFileToGitLab(accessToken, gitlabProjectId, gitlabBranch, path, content)
+          try {
+            if (platform === 'github') {
+              await pushFileToGitHub(accessToken, user.github_username, cleanRepoName, path, content)
+            } else if (gitlabProjectId !== null) {
+              await pushFileToGitLab(accessToken, gitlabProjectId, gitlabBranch, path, content)
+            }
+          } catch (e) {
+            console.error(`[build-app] Failed to push ${path}:`, e)
+            await refundBuildCredits('Build app file push failed', e)
+            send({
+              step: 'error',
+              message: e instanceof Error ? e.message : `Failed to push ${path}`,
+              repoUrl,
+            })
+            close()
+            return
           }
 
           pushed++
@@ -312,15 +379,17 @@ export async function POST(request: NextRequest) {
           repoUrl,
           filesCreated: pushed,
         })
+        chargedUserId = null
       } catch (e) {
         console.error('[build-app] unhandled error:', e)
+        await refundBuildCredits('Build app unexpected failure', e)
         controller.enqueue(
           encoder.encode(
             `data: ${JSON.stringify({ step: 'error', message: 'An unexpected error occurred.' })}\n\n`,
           ),
         )
       } finally {
-        controller.close()
+        close()
       }
     },
   })

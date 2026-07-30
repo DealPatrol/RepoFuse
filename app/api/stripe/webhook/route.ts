@@ -6,6 +6,8 @@ import {
   getUserByGithubId,
   updateUserBilling,
   upsertSubscription,
+  claimStripeWebhookEvent,
+  releaseStripeWebhookEvent,
 } from '@/lib/queries'
 import { getStripe, getWebhookSecret, getPriceIdForPlan } from '@/lib/stripe'
 
@@ -164,7 +166,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true, ignored: event.type })
   }
 
+  let claimedEvent = false
   try {
+    claimedEvent = await claimStripeWebhookEvent(event.id, event.type)
+    if (!claimedEvent) {
+      return NextResponse.json({ received: true, duplicate: event.id })
+    }
+
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session
@@ -181,7 +189,7 @@ export async function POST(request: NextRequest) {
           console.error('[stripe/webhook] Could not map checkout session to a GitHub user', {
             sessionId: session.id,
           })
-          break
+          throw new Error(`Could not map checkout session ${session.id} to a GitHub user`)
         }
 
         const { user, priceId } = await persistSubscriptionState({ githubId, customerId, subscription })
@@ -204,7 +212,7 @@ export async function POST(request: NextRequest) {
           console.error('[stripe/webhook] Could not map subscription to a GitHub user', {
             subscriptionId: subscription.id,
           })
-          break
+          throw new Error(`Could not map subscription ${subscription.id} to a GitHub user`)
         }
 
         await persistSubscriptionState({ githubId, customerId, subscription })
@@ -220,7 +228,7 @@ export async function POST(request: NextRequest) {
           console.error('[stripe/webhook] Could not map deleted subscription to a GitHub user', {
             subscriptionId: subscription.id,
           })
-          break
+          throw new Error(`Could not map deleted subscription ${subscription.id} to a GitHub user`)
         }
 
         const savedSubscription = await upsertSubscription({
@@ -296,18 +304,20 @@ export async function POST(request: NextRequest) {
 
         if (subscription) {
           const githubId = await resolveGithubId(stripe, subscription, customerId)
-          if (githubId) {
-            const { user, priceId } = await persistSubscriptionState({ githubId, customerId, subscription })
-            const billingReason = (invoice as unknown as { billing_reason?: string | null }).billing_reason
+          if (!githubId) {
+            throw new Error(`Could not map invoice ${invoice.id} subscription ${subscription.id} to a GitHub user`)
+          }
 
-            if (user && billingReason !== 'subscription_create') {
-              const amount = getCreditGrantForPrice(priceId, CREDITS.MONTHLY_GRANT)
-              await renewMonthlyCredits(user.id, amount, 'Monthly subscription renewal', {
-                invoice_id: invoice.id,
-                stripe_customer_id: customerId,
-                stripe_subscription_id: subscription.id,
-              })
-            }
+          const { user, priceId } = await persistSubscriptionState({ githubId, customerId, subscription })
+          const billingReason = (invoice as unknown as { billing_reason?: string | null }).billing_reason
+
+          if (user && billingReason !== 'subscription_create') {
+            const amount = getCreditGrantForPrice(priceId, CREDITS.MONTHLY_GRANT)
+            await renewMonthlyCredits(user.id, amount, 'Monthly subscription renewal', {
+              invoice_id: invoice.id,
+              stripe_customer_id: customerId,
+              stripe_subscription_id: subscription.id,
+            })
           }
         }
         break
@@ -315,6 +325,11 @@ export async function POST(request: NextRequest) {
     }
   } catch (err) {
     console.error('[stripe/webhook] Handler error:', { eventId: event.id, type: event.type, err })
+    if (claimedEvent) {
+      await releaseStripeWebhookEvent(event.id).catch((releaseError) => {
+        console.error('[stripe/webhook] Failed to release failed event claim:', releaseError)
+      })
+    }
     return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 })
   }
 
