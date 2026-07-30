@@ -8,7 +8,7 @@ import {
 } from '@/lib/queries'
 import { getAnthropicModel } from '@/lib/anthropic-model'
 import { getCurrentUser } from '@/lib/auth'
-import { deductCredits, CREDITS } from '@/lib/credits'
+import { deductCredits, refundCredits, CREDITS } from '@/lib/credits'
 
 let __anthropicClient: Anthropic | null = null
 function getAnthropic(): Anthropic {
@@ -61,11 +61,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const creditResult = await deductCredits(user.id, CREDITS.PATTERN_ANALYZER_COST, 'pattern_analyzer', { analysisId })
-    if (!creditResult.success) {
-      return NextResponse.json({ error: creditResult.error || 'Insufficient credits' }, { status: 402 })
-    }
-
     const analysis = await getAnalysisById(analysisId, user.id)
     if (!analysis) {
       return NextResponse.json({ error: 'Analysis not found' }, { status: 404 })
@@ -77,57 +72,63 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Gather repo files and blueprints
-    const [repositories, blueprints] = await Promise.all([
-      getRepositoriesForAnalysis(analysisId, user.id),
-      getBlueprintsByAnalysis(analysisId, user.id),
-    ])
-
-    const allFiles = (
-      await Promise.all(repositories.map((r) => getFilesByRepository(r.id)))
-    ).flat()
-
-    // Collect technology signals
-    const techCount: Record<string, number> = {}
-    const purposesByCategory: Record<string, string[]> = {}
-
-    for (const file of allFiles) {
-      for (const tech of file.technologies) {
-        techCount[tech] = (techCount[tech] || 0) + 1
-      }
-      if (file.file_type && file.purpose) {
-        if (!purposesByCategory[file.file_type]) {
-          purposesByCategory[file.file_type] = []
-        }
-        purposesByCategory[file.file_type].push(file.purpose)
-      }
+    const creditResult = await deductCredits(user.id, CREDITS.PATTERN_ANALYZER_COST, 'pattern_analyzer', { analysisId })
+    if (!creditResult.success) {
+      return NextResponse.json({ error: creditResult.error || 'Insufficient credits' }, { status: 402 })
     }
 
-    const topTechnologies = Object.entries(techCount)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 15)
-      .map(([tech]) => tech)
+    try {
+      // Gather repo files and blueprints
+      const [repositories, blueprints] = await Promise.all([
+        getRepositoriesForAnalysis(analysisId, user.id),
+        getBlueprintsByAnalysis(analysisId, user.id),
+      ])
 
-    const filesSummary = allFiles
-      .slice(0, 120)
-      .map(
-        (f) =>
-          `${f.path} [${f.file_type || 'unknown'}] score=${f.reusability_score} tech=[${f.technologies.join(', ')}] purpose="${f.purpose || ''}"`,
-      )
-      .join('\n')
+      const allFiles = (
+        await Promise.all(repositories.map((r) => getFilesByRepository(r.id)))
+      ).flat()
 
-    const blueprintsSummary =
-      blueprints.length > 0
-        ? blueprints
-            .slice(0, 10)
-            .map(
-              (b) =>
-                `• ${b.name} (${b.app_type}, reuse ${b.reuse_percentage}%, ${b.complexity}) — ${b.description || ''}`,
-            )
-            .join('\n')
-        : 'No blueprints generated yet.'
+      // Collect technology signals
+      const techCount: Record<string, number> = {}
+      const purposesByCategory: Record<string, string[]> = {}
 
-    const prompt = `You are a senior product strategist and software architect. You have just scanned a developer's codebase and must suggest 5 original NEW project ideas — products or tools they could build — that are grounded in patterns you observe in their code.
+      for (const file of allFiles) {
+        for (const tech of file.technologies) {
+          techCount[tech] = (techCount[tech] || 0) + 1
+        }
+        if (file.file_type && file.purpose) {
+          if (!purposesByCategory[file.file_type]) {
+            purposesByCategory[file.file_type] = []
+          }
+          purposesByCategory[file.file_type].push(file.purpose)
+        }
+      }
+
+      const topTechnologies = Object.entries(techCount)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 15)
+        .map(([tech]) => tech)
+
+      const filesSummary = allFiles
+        .slice(0, 120)
+        .map(
+          (f) =>
+            `${f.path} [${f.file_type || 'unknown'}] score=${f.reusability_score} tech=[${f.technologies.join(', ')}] purpose="${f.purpose || ''}"`,
+        )
+        .join('\n')
+
+      const blueprintsSummary =
+        blueprints.length > 0
+          ? blueprints
+              .slice(0, 10)
+              .map(
+                (b) =>
+                  `• ${b.name} (${b.app_type}, reuse ${b.reuse_percentage}%, ${b.complexity}) — ${b.description || ''}`,
+              )
+              .join('\n')
+          : 'No blueprints generated yet.'
+
+      const prompt = `You are a senior product strategist and software architect. You have just scanned a developer's codebase and must suggest 5 original NEW project ideas — products or tools they could build — that are grounded in patterns you observe in their code.
 
 ## Codebase summary
 
@@ -170,32 +171,40 @@ Respond ONLY with a valid JSON object (no markdown fences) matching this exact s
   ]
 }`
 
-    const response = await getAnthropic().messages.create({
-      model: getAnthropicModel(),
-      max_tokens: 4096,
-      messages: [{ role: 'user', content: prompt }],
-    })
+      const response = await getAnthropic().messages.create({
+        model: getAnthropicModel(),
+        max_tokens: 4096,
+        messages: [{ role: 'user', content: prompt }],
+      })
 
-    const raw = response.content[0].type === 'text' ? response.content[0].text.trim() : ''
+      const raw = response.content[0].type === 'text' ? response.content[0].text.trim() : ''
 
-    // Strip accidental markdown fences
-    const jsonText = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
+      // Strip accidental markdown fences
+      const jsonText = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
 
-    let parsed: { patterns: string[]; suggestions: ProjectSuggestion[] }
-    try {
-      parsed = JSON.parse(jsonText)
-    } catch {
-      return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 })
+      let parsed: { patterns: string[]; suggestions: ProjectSuggestion[] }
+      try {
+        parsed = JSON.parse(jsonText)
+      } catch {
+        throw new Error('Failed to parse AI response')
+      }
+
+      const result: PatternAnalyzerResult = {
+        patterns: parsed.patterns || [],
+        suggestions: parsed.suggestions || [],
+        topTechnologies,
+        analysisId,
+      }
+
+      return NextResponse.json(result)
+    } catch (error) {
+      await refundCredits(user.id, CREDITS.PATTERN_ANALYZER_COST, 'Pattern Analyzer failed', {
+        analysisId,
+      }).catch((refundError) => {
+        console.error('[pattern-analyzer] Failed to refund credits:', refundError)
+      })
+      throw error
     }
-
-    const result: PatternAnalyzerResult = {
-      patterns: parsed.patterns || [],
-      suggestions: parsed.suggestions || [],
-      topTechnologies,
-      analysisId,
-    }
-
-    return NextResponse.json(result)
   } catch (error) {
     console.error('[pattern-analyzer] error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

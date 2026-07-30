@@ -6,7 +6,7 @@ import {
   getFilesByRepository,
 } from '@/lib/queries'
 import { getCurrentUser } from '@/lib/auth'
-import { deductCredits, CREDITS } from '@/lib/credits'
+import { deductCredits, refundCredits, CREDITS } from '@/lib/credits'
 import type { AppIdeaChatResponse, ChatMessage } from '@/lib/app-idea-chat-types'
 import { aiConfigErrorMessage, generateWithGateway, isAiConfigured } from '@/lib/ai-gateway'
 
@@ -186,30 +186,39 @@ Always respond with valid JSON only (no markdown fences):
       { role: 'user', content: message.trim() },
     ])
 
-    const raw = await generateWithGateway({
-      system: systemPrompt,
-      messages,
-      maxOutputTokens: 2048,
-      userId: user.id,
-      feature: 'app-idea-chat',
-    })
-
-    let parsed: AppIdeaChatResponse
     try {
-      parsed = parseAppIdeaChatResponse(raw)
-    } catch {
-      return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 })
-    }
+      const raw = await generateWithGateway({
+        system: systemPrompt,
+        messages,
+        maxOutputTokens: 2048,
+        userId: user.id,
+        feature: 'app-idea-chat',
+      })
 
-    if (!parsed.reply?.trim()) {
-      return NextResponse.json({ error: 'Empty AI response' }, { status: 500 })
-    }
+      let parsed: AppIdeaChatResponse
+      try {
+        parsed = parseAppIdeaChatResponse(raw)
+      } catch {
+        throw new Error('Failed to parse AI response')
+      }
 
-    return NextResponse.json({
-      reply: parsed.reply,
-      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
-      followUpQuestions: Array.isArray(parsed.followUpQuestions) ? parsed.followUpQuestions : [],
-    })
+      if (!parsed.reply?.trim()) {
+        throw new Error('Empty AI response')
+      }
+
+      return NextResponse.json({
+        reply: parsed.reply,
+        suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
+        followUpQuestions: Array.isArray(parsed.followUpQuestions) ? parsed.followUpQuestions : [],
+      })
+    } catch (error) {
+      await refundCredits(user.id, CREDITS.PATTERN_ANALYZER_COST, 'App Idea Chat failed', {
+        analysisId,
+      }).catch((refundError) => {
+        console.error('[v0] Failed to refund app idea chat credits:', refundError)
+      })
+      throw error
+    }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
     console.error('[v0] app-idea-chat error:', errorMsg)
