@@ -8,7 +8,7 @@ import {
 } from '@/lib/queries'
 import { getAnthropicModel } from '@/lib/anthropic-model'
 import { getCurrentUser } from '@/lib/auth'
-import { deductCredits, CREDITS } from '@/lib/credits'
+import { deductCredits, refundCredits, CREDITS } from '@/lib/credits'
 
 let __anthropicClient: Anthropic | null = null
 function getAnthropic(): Anthropic {
@@ -42,9 +42,13 @@ export interface PatternAnalyzerResult {
 }
 
 export async function POST(request: NextRequest) {
+  let chargedUserId: string | undefined
+  let chargedTransactionId: string | undefined
+  let chargedAnalysisId: string | undefined
+
   try {
     const user = await getCurrentUser()
-    if (!user) {
+    if (!user?.id) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
@@ -59,11 +63,6 @@ export async function POST(request: NextRequest) {
         { error: 'Pattern Analyzer is not configured. Missing ANTHROPIC_API_KEY.' },
         { status: 503 },
       )
-    }
-
-    const creditResult = await deductCredits(user.id, CREDITS.PATTERN_ANALYZER_COST, 'pattern_analyzer', { analysisId })
-    if (!creditResult.success) {
-      return NextResponse.json({ error: creditResult.error || 'Insufficient credits' }, { status: 402 })
     }
 
     const analysis = await getAnalysisById(analysisId, user.id)
@@ -127,6 +126,14 @@ export async function POST(request: NextRequest) {
             .join('\n')
         : 'No blueprints generated yet.'
 
+    const creditResult = await deductCredits(user.id, CREDITS.PATTERN_ANALYZER_COST, 'pattern_analyzer', { analysisId })
+    if (!creditResult.success) {
+      return NextResponse.json({ error: creditResult.error || 'Insufficient credits' }, { status: 402 })
+    }
+    chargedUserId = user.id
+    chargedTransactionId = creditResult.transaction?.id
+    chargedAnalysisId = analysisId
+
     const prompt = `You are a senior product strategist and software architect. You have just scanned a developer's codebase and must suggest 5 original NEW project ideas — products or tools they could build — that are grounded in patterns you observe in their code.
 
 ## Codebase summary
@@ -185,7 +192,7 @@ Respond ONLY with a valid JSON object (no markdown fences) matching this exact s
     try {
       parsed = JSON.parse(jsonText)
     } catch {
-      return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 })
+      throw new Error('Failed to parse AI response')
     }
 
     const result: PatternAnalyzerResult = {
@@ -195,9 +202,18 @@ Respond ONLY with a valid JSON object (no markdown fences) matching this exact s
       analysisId,
     }
 
+    chargedUserId = undefined
     return NextResponse.json(result)
   } catch (error) {
     console.error('[pattern-analyzer] error:', error)
+    if (chargedUserId) {
+      await refundCredits(chargedUserId, CREDITS.PATTERN_ANALYZER_COST, 'Pattern Analyzer failed', {
+        analysisId: chargedAnalysisId,
+        originalTransactionId: chargedTransactionId,
+      }).catch((refundError) => {
+        console.error('[pattern-analyzer] Failed to refund credits:', refundError)
+      })
+    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

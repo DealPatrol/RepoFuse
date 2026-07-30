@@ -5,6 +5,7 @@ import {
   batchGenerateCompletions,
 } from '@/lib/code-completion'
 import { getDb } from '@/lib/db'
+import { getCurrentUser } from '@/lib/auth'
 
 const LANG_EXTENSIONS: Record<string, string[]> = {
   python: ['.py'],
@@ -24,18 +25,20 @@ const LANG_EXTENSIONS: Record<string, string[]> = {
   shell: ['.sh', '.bash'],
 }
 
-async function fetchSnippetsFromDb(language: string): Promise<CodeSnippet[]> {
+async function fetchSnippetsFromDb(language: string, userId: string): Promise<CodeSnippet[]> {
   try {
     const sql = getDb()
     const extensions = LANG_EXTENSIONS[language.toLowerCase()] ?? []
     if (extensions.length === 0) return []
 
     const rows = await sql`
-      SELECT id, path, name, extension, ai_summary, reusability_score, exports, imports
-      FROM repo_files
-      WHERE extension = ANY(${extensions}::text[])
-        AND ai_summary IS NOT NULL
-      ORDER BY reusability_score DESC
+      SELECT rf.id, rf.path, rf.name, rf.extension, rf.ai_summary, rf.reusability_score, rf.exports, rf.imports
+      FROM repo_files rf
+      INNER JOIN repositories r ON r.id = rf.repository_id
+      WHERE r.user_id = ${userId}
+        AND rf.extension = ANY(${extensions}::text[])
+        AND rf.ai_summary IS NOT NULL
+      ORDER BY rf.reusability_score DESC
       LIMIT 20
     `
 
@@ -63,6 +66,11 @@ async function fetchSnippetsFromDb(language: string): Promise<CodeSnippet[]> {
 
 export async function POST(request: NextRequest) {
   try {
+    const user = await getCurrentUser()
+    if (!user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const body = await request.json()
     const { incompleteCode, codebaseSnippets = [], language = 'python' } = body
 
@@ -75,7 +83,7 @@ export async function POST(request: NextRequest) {
 
     const snippets: CodeSnippet[] = codebaseSnippets.length > 0
       ? codebaseSnippets
-      : await fetchSnippetsFromDb(language)
+      : await fetchSnippetsFromDb(language, user.id)
 
     const result = await generateRelevanceGuidedCompletion(
       incompleteCode,
@@ -120,6 +128,11 @@ export async function POST(request: NextRequest) {
  */
 export async function PUT(request: NextRequest) {
   try {
+    const user = await getCurrentUser()
+    if (!user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const body = await request.json()
     const { codeSnippets = [], codebaseSnippets = [], language = 'python' } = body
 
@@ -132,7 +145,7 @@ export async function PUT(request: NextRequest) {
 
     const snippets: CodeSnippet[] = codebaseSnippets.length > 0
       ? codebaseSnippets
-      : await fetchSnippetsFromDb(language)
+      : await fetchSnippetsFromDb(language, user.id)
 
     const results = await batchGenerateCompletions(
       codeSnippets,
