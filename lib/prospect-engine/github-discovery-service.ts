@@ -155,40 +155,74 @@ export async function discoverGithubProspects(input: GithubDiscoveryInput): Prom
   }
 
   try {
-    const perPage = Math.min(Math.max(input.limit ?? 10, 1), 20)
-    const search = await githubFetch<GitHubSearchResponse>(
-      `/search/users?q=${encodeURIComponent(query)}&per_page=${perPage}`,
-      token,
-    )
-
+    const limit = Math.min(Math.max(Math.floor(input.limit ?? 10), 1), 20)
+    const perPage = 100
     const keywords = normalizeKeywords(input.keywords.length > 0 ? input.keywords : DEFAULT_PROSPECT_KEYWORDS)
     const prospects: Prospect[] = []
-    let rateLimitRemaining = search.rateLimitRemaining
+    let rateLimitRemaining: string | null = null
+    let page = 1
+    let hadErrors = false
 
-    for (const item of search.data.items) {
-      const profileResult = await githubFetch<GitHubProfile>(`/users/${encodeURIComponent(item.login)}`, token)
-      const profile = profileResult.data
-      rateLimitRemaining = profileResult.rateLimitRemaining ?? rateLimitRemaining
-
-      if (profile.public_repos < input.minimumRepos) {
-        continue
+    while (prospects.length < limit) {
+      let search
+      try {
+        search = await githubFetch<GitHubSearchResponse>(
+          `/search/users?q=${encodeURIComponent(query)}&per_page=${perPage}&page=${page}`,
+          token,
+        )
+        rateLimitRemaining = search.rateLimitRemaining ?? rateLimitRemaining
+      } catch (error) {
+        if (page === 1) {
+          throw error
+        }
+        console.error('[Prospect Engine] GitHub discovery page failed:', error)
+        hadErrors = true
+        break
       }
-      if (input.minimumFollowers && profile.followers < input.minimumFollowers) {
-        continue
+
+      for (const item of search.data.items) {
+        try {
+          const profileResult = await githubFetch<GitHubProfile>(`/users/${encodeURIComponent(item.login)}`, token)
+          const profile = profileResult.data
+          rateLimitRemaining = profileResult.rateLimitRemaining ?? rateLimitRemaining
+
+          if (profile.public_repos < input.minimumRepos) {
+            continue
+          }
+          if (input.minimumFollowers && profile.followers < input.minimumFollowers) {
+            continue
+          }
+
+          const repoResult = await githubFetch<GitHubRepo[]>(
+            `/users/${encodeURIComponent(item.login)}/repos?sort=pushed&per_page=12`,
+            token,
+          )
+          rateLimitRemaining = repoResult.rateLimitRemaining ?? rateLimitRemaining
+          prospects.push(mapProfile(profile, repoResult.data, keywords))
+        } catch (error) {
+          console.error(`[Prospect Engine] GitHub discovery failed for ${item.login}:`, error)
+          hadErrors = true
+        }
+
+        if (prospects.length >= limit) {
+          break
+        }
       }
 
-      const repoResult = await githubFetch<GitHubRepo[]>(
-        `/users/${encodeURIComponent(item.login)}/repos?sort=pushed&per_page=12`,
-        token,
-      )
-      rateLimitRemaining = repoResult.rateLimitRemaining ?? rateLimitRemaining
-      prospects.push(mapProfile(profile, repoResult.data, keywords))
+      if (search.data.items.length < perPage) {
+        break
+      }
+      page += 1
     }
 
     return {
       prospects: prospects.sort((a, b) => b.totalScore - a.totalScore),
       mode: 'live',
-      message: prospects.length === 0 ? 'Live GitHub discovery completed, but no prospects matched the filters.' : 'Live GitHub discovery completed.',
+      message: hadErrors
+        ? 'Live GitHub discovery completed with partial results because some GitHub requests failed.'
+        : prospects.length === 0
+          ? 'Live GitHub discovery completed, but no prospects matched the filters.'
+          : 'Live GitHub discovery completed.',
       query,
       rateLimitRemaining,
     }

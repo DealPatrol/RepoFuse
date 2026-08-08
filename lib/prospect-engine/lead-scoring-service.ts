@@ -47,7 +47,10 @@ export function normalizeKeywords(keywords: string[]) {
 export function findMatchedKeywords(repo: Pick<ProspectRepo, 'name' | 'description' | 'language'>, keywords: string[]) {
   const haystack = [repo.name, repo.description, repo.language].filter(Boolean).join(' ').toLowerCase()
 
-  return keywords.filter((keyword) => haystack.includes(keyword.toLowerCase()))
+  return keywords.filter((keyword) => {
+    const escapedKeyword = keyword.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return new RegExp(`(^|[^a-z0-9])${escapedKeyword}(?=$|[^a-z0-9])`).test(haystack)
+  })
 }
 
 function clampScore(score: number, max: number) {
