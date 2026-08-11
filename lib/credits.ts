@@ -32,6 +32,7 @@ export interface CreditTransaction {
   reason: string | null
   metadata: CreditMetadata
   balance_after: number
+  idempotency_key: string | null
   created_at: string
 }
 
@@ -53,6 +54,11 @@ interface MonthlyTokenUsageRow {
 function toCount(value: string | number | null | undefined): number {
   if (typeof value === 'number') return value
   return Number.parseInt(value ?? '0', 10)
+}
+
+function getIdempotencyKey(metadata: CreditMetadata): string | null {
+  const value = metadata.idempotency_key
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
 }
 
 // Initialize or get user credits
@@ -100,30 +106,39 @@ export async function grantCredits(
   metadata: CreditMetadata = {}
 ): Promise<CreditTransaction> {
   const sql = getDb()
-  
-  // Get or create user credits
-  const userCredits = await getOrCreateUserCredits(userId)
-  const newBalance = userCredits.current_balance + amount
-  
-  // Update balance
-  await sql`
-    UPDATE user_credits
-    SET 
-      current_balance = ${newBalance},
-      total_granted = total_granted + ${amount},
-      last_renewal_date = CURRENT_TIMESTAMP
-    WHERE user_id = ${userId}
-  `
-  
-  // Record transaction
+  const idempotencyKey = getIdempotencyKey(metadata)
+
+  await getOrCreateUserCredits(userId)
+
   const transaction = await sql`
-    INSERT INTO credit_transactions (
-      user_id, amount, transaction_type, reason, metadata, balance_after
+    WITH existing AS (
+      SELECT *
+      FROM credit_transactions
+      WHERE idempotency_key = ${idempotencyKey}
+        AND ${idempotencyKey} IS NOT NULL
+      LIMIT 1
+    ),
+    updated AS (
+      UPDATE user_credits
+      SET
+        current_balance = current_balance + ${amount},
+        total_granted = total_granted + ${amount},
+        last_renewal_date = CURRENT_TIMESTAMP
+      WHERE user_id = ${userId}
+        AND NOT EXISTS (SELECT 1 FROM existing)
+      RETURNING current_balance
+    ),
+    inserted AS (
+      INSERT INTO credit_transactions (
+        user_id, amount, transaction_type, reason, metadata, balance_after, idempotency_key
+      )
+      SELECT ${userId}, ${amount}, 'grant', ${reason}, ${JSON.stringify(metadata)}::jsonb, current_balance, ${idempotencyKey}
+      FROM updated
+      RETURNING *
     )
-    VALUES (
-      ${userId}, ${amount}, 'grant', ${reason}, ${JSON.stringify(metadata)}::jsonb, ${newBalance}
-    )
-    RETURNING *
+    SELECT * FROM inserted
+    UNION ALL
+    SELECT * FROM existing
   `
   
   return transaction[0] as CreditTransaction
@@ -137,40 +152,48 @@ export async function renewMonthlyCredits(
   metadata: CreditMetadata = {}
 ): Promise<CreditTransaction | null> {
   const sql = getDb()
-  const userCredits = await getOrCreateUserCredits(userId)
-  const topUpAmount = Math.max(0, monthlyAllowance - userCredits.current_balance)
-
-  if (topUpAmount === 0) {
-    await sql`
-      UPDATE user_credits
-      SET last_renewal_date = CURRENT_TIMESTAMP
-      WHERE user_id = ${userId}
-    `
-    return null
-  }
-
-  const newBalance = userCredits.current_balance + topUpAmount
-
-  await sql`
-    UPDATE user_credits
-    SET
-      current_balance = ${newBalance},
-      total_granted = total_granted + ${topUpAmount},
-      last_renewal_date = CURRENT_TIMESTAMP
-    WHERE user_id = ${userId}
-  `
+  const idempotencyKey = getIdempotencyKey(metadata)
+  await getOrCreateUserCredits(userId)
 
   const transaction = await sql`
-    INSERT INTO credit_transactions (
-      user_id, amount, transaction_type, reason, metadata, balance_after
+    WITH existing AS (
+      SELECT *
+      FROM credit_transactions
+      WHERE idempotency_key = ${idempotencyKey}
+        AND ${idempotencyKey} IS NOT NULL
+      LIMIT 1
+    ),
+    current_credits AS (
+      SELECT current_balance, GREATEST(${monthlyAllowance} - current_balance, 0) AS top_up_amount
+      FROM user_credits
+      WHERE user_id = ${userId}
+        AND NOT EXISTS (SELECT 1 FROM existing)
+    ),
+    updated AS (
+      UPDATE user_credits
+      SET
+        current_balance = user_credits.current_balance + current_credits.top_up_amount,
+        total_granted = total_granted + current_credits.top_up_amount,
+        last_renewal_date = CURRENT_TIMESTAMP
+      FROM current_credits
+      WHERE user_credits.user_id = ${userId}
+      RETURNING user_credits.current_balance, current_credits.top_up_amount
+    ),
+    inserted AS (
+      INSERT INTO credit_transactions (
+        user_id, amount, transaction_type, reason, metadata, balance_after, idempotency_key
+      )
+      SELECT ${userId}, top_up_amount, 'renewal', ${reason}, ${JSON.stringify(metadata)}::jsonb, current_balance, ${idempotencyKey}
+      FROM updated
+      WHERE top_up_amount > 0
+      RETURNING *
     )
-    VALUES (
-      ${userId}, ${topUpAmount}, 'renewal', ${reason}, ${JSON.stringify(metadata)}::jsonb, ${newBalance}
-    )
-    RETURNING *
+    SELECT * FROM inserted
+    UNION ALL
+    SELECT * FROM existing
   `
 
-  return transaction[0] as CreditTransaction
+  return (transaction[0] as CreditTransaction | undefined) ?? null
 }
 
 // Deduct credits (for analysis, scaffold, build_app, or pattern_analyzer)
@@ -181,40 +204,33 @@ export async function deductCredits(
   metadata: CreditMetadata = {}
 ): Promise<{ success: boolean; transaction?: CreditTransaction; error?: string }> {
   const sql = getDb()
-  
-  // Get current balance
-  const userCredits = await getOrCreateUserCredits(userId)
-  const currentBalance = userCredits.current_balance
-  
-  // Check if sufficient balance
-  if (currentBalance < amount) {
+  await getOrCreateUserCredits(userId)
+
+  const transaction = await sql`
+    WITH updated AS (
+      UPDATE user_credits
+      SET
+        current_balance = current_balance - ${amount},
+        total_used = total_used + ${amount}
+      WHERE user_id = ${userId}
+        AND current_balance >= ${amount}
+      RETURNING current_balance
+    )
+    INSERT INTO credit_transactions (
+      user_id, amount, transaction_type, reason, metadata, balance_after
+    )
+    SELECT ${userId}, ${-amount}, ${type}, ${`${type} deduction`}, ${JSON.stringify(metadata)}::jsonb, current_balance
+    FROM updated
+    RETURNING *
+  `
+
+  if (transaction.length === 0) {
+    const currentBalance = await getCreditBalance(userId)
     return {
       success: false,
       error: `Insufficient credits. Required: ${amount}, Available: ${currentBalance}`,
     }
   }
-  
-  const newBalance = currentBalance - amount
-  
-  // Update balance
-  await sql`
-    UPDATE user_credits
-    SET 
-      current_balance = ${newBalance},
-      total_used = total_used + ${amount}
-    WHERE user_id = ${userId}
-  `
-  
-  // Record transaction
-  const transaction = await sql`
-    INSERT INTO credit_transactions (
-      user_id, amount, transaction_type, reason, metadata, balance_after
-    )
-    VALUES (
-      ${userId}, ${-amount}, ${type}, ${`${type} deduction`}, ${JSON.stringify(metadata)}::jsonb, ${newBalance}
-    )
-    RETURNING *
-  `
   
   return {
     success: true,
@@ -230,26 +246,20 @@ export async function refundCredits(
   metadata: CreditMetadata = {}
 ): Promise<CreditTransaction> {
   const sql = getDb()
-  
-  // Get or create user credits
-  const userCredits = await getOrCreateUserCredits(userId)
-  const newBalance = userCredits.current_balance + amount
-  
-  // Update balance
-  await sql`
-    UPDATE user_credits
-    SET current_balance = ${newBalance}
-    WHERE user_id = ${userId}
-  `
-  
-  // Record transaction
+  await getOrCreateUserCredits(userId)
+
   const transaction = await sql`
+    WITH updated AS (
+      UPDATE user_credits
+      SET current_balance = current_balance + ${amount}
+      WHERE user_id = ${userId}
+      RETURNING current_balance
+    )
     INSERT INTO credit_transactions (
       user_id, amount, transaction_type, reason, metadata, balance_after
     )
-    VALUES (
-      ${userId}, ${amount}, 'refund', ${reason}, ${JSON.stringify(metadata)}::jsonb, ${newBalance}
-    )
+    SELECT ${userId}, ${amount}, 'refund', ${reason}, ${JSON.stringify(metadata)}::jsonb, current_balance
+    FROM updated
     RETURNING *
   `
   
