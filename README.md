@@ -12,6 +12,10 @@ An AI-powered code intelligence platform that scans your GitHub repositories and
 - **Export**: Download blueprint JSON for offline use or share with your team
 - **Stripe Billing**: Real checkout flow for RepoFuse Pro upgrades and billing management
 
+## Growth Strategy
+
+- [Developer SaaS Growth Brief](docs/DEVELOPER_SAAS_GROWTH.md): developer-led distribution, high-intent GitHub outreach, Product Hunt timing, first-user tests, and RepoFuse's first 14-day growth plan.
+
 ## Tech Stack
 
 - **Framework**: Next.js 16 with App Router
