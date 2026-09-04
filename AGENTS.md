@@ -37,8 +37,8 @@ pnpm build      # production build (requires valid DATABASE_URL at build time)
 
 - The Neon serverless driver (`@neondatabase/serverless`) uses HTTPS to communicate with Neon's proxy. It does **not** support standard PostgreSQL connections (no local pg via `psql`). You must have a real Neon `DATABASE_URL`.
 - Blueprint creation happens entirely in `POST /api/analyses/[id]/run` via SSE streaming. The `/api/analyses/[id]/analyze` endpoint is a legacy route that does NOT write blueprints to the database.
-- Auth: legacy GitHub OAuth cookies (`github_user_id` + `github_access_token`), or Clerk when configured. `middleware.ts` protects `/dashboard/*` (Clerk `auth.protect()` or cookie check).
-- Do **not** add both `middleware.ts` and `proxy.ts` — Next.js 16 build fails if both exist.
+- Auth: legacy GitHub OAuth cookies (`github_user_id` + `github_access_token`), or Clerk when configured. `proxy.ts` protects `/dashboard/*` (Clerk `auth.protect()` or cookie check). This uses Next.js 16's `proxy` convention (the renamed successor to `middleware`).
+- Do **not** add both `middleware.ts` and `proxy.ts` — Next.js 16 build fails if both exist. This repo uses `proxy.ts`.
 - To bypass auth for local testing, set cookies in the browser: `document.cookie = "github_user_id=12345; path=/"; document.cookie = "github_access_token=TOKEN; path=/";`
 
 ### Testing notes
