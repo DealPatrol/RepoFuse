@@ -8,7 +8,7 @@ const clerkConfigured = Boolean(
     process.env.CLERK_SECRET_KEY?.trim(),
 )
 
-function githubCookieMiddleware(request: NextRequest) {
+function githubCookieProxy(request: NextRequest) {
   if (!isDashboardRoute(request)) {
     return NextResponse.next()
   }
@@ -20,7 +20,7 @@ function githubCookieMiddleware(request: NextRequest) {
   return NextResponse.next()
 }
 
-export default clerkConfigured
+const proxy = clerkConfigured
   ? clerkMiddleware(async (auth, request: NextRequest) => {
       try {
         if (!isDashboardRoute(request)) {
@@ -34,11 +34,13 @@ export default clerkConfigured
         }
         return NextResponse.next()
       } catch (error) {
-        console.error('[v0] Middleware error:', error)
-        return NextResponse.redirect(new URL('/?error=middleware_error', request.url))
+        console.error('[v0] Proxy error:', error)
+        return NextResponse.redirect(new URL('/?error=proxy_error', request.url))
       }
     })
-  : githubCookieMiddleware
+  : githubCookieProxy
+
+export default proxy
 
 export const config = {
   matcher: ['/dashboard/:path*'],

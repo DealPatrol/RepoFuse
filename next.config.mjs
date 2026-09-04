@@ -5,6 +5,9 @@ const repoRoot = path.dirname(fileURLToPath(import.meta.url))
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Keep the curated repo AGENTS.md under human control. Next.js 16.3+ otherwise
+  // re-injects a `nextjs-agent-rules` block into AGENTS.md on every `next dev` run.
+  agentRules: false,
   turbopack: {
     root: repoRoot,
   },
