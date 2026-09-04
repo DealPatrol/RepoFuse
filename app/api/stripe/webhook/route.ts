@@ -38,8 +38,14 @@ function getCurrentPeriodEnd(subscription: Stripe.Subscription): string | null {
 }
 
 function mapSubscriptionStatus(status: Stripe.Subscription.Status): NeonSubscriptionStatus {
-  if (status === 'active' || status === 'trialing' || status === 'past_due') {
-    return status
+  if (status === 'active') {
+    return 'active'
+  }
+  if (status === 'trialing') {
+    return 'trialing'
+  }
+  if (status === 'past_due') {
+    return 'past_due'
   }
 
   return 'canceled'
