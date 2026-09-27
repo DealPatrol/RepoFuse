@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getCurrentAccessToken } from '@/lib/auth'
+import { getCurrentAccessToken, getGitHubNotLinkedMessage } from '@/lib/auth'
 import { GitHubApiError, listGitHubRepositories } from '@/lib/github'
 
 export async function GET() {
@@ -7,6 +7,10 @@ export async function GET() {
     const accessToken = await getCurrentAccessToken()
 
     if (!accessToken) {
+      const notLinked = await getGitHubNotLinkedMessage()
+      if (notLinked) {
+        return NextResponse.json({ error: notLinked }, { status: 403 })
+      }
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 

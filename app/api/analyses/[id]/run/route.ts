@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { aiConfigErrorMessage, getAnthropicClient, isAiConfigured } from '@/lib/ai-gateway'
 import { z } from 'zod'
-import { getCurrentAccessToken, getCurrentUser } from '@/lib/auth'
+import { getCurrentAccessToken, getCurrentUser, getGitHubNotLinkedMessage } from '@/lib/auth'
 import {
   getGitHubRepositoryTree,
   getGitHubRepositoryTreeFromBranch,
@@ -151,7 +151,10 @@ export async function POST(
       try {
         const accessToken = await getCurrentAccessToken()
         if (!accessToken) {
-          send({ error: 'Sign in with GitHub before running an analysis.' })
+          const notLinked = await getGitHubNotLinkedMessage()
+          send({
+            error: notLinked ?? 'Sign in with GitHub before running an analysis.',
+          })
           controller.close()
           return
         }

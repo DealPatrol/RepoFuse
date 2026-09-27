@@ -19,6 +19,10 @@ import {
   Trash2,
 } from 'lucide-react'
 import type { Repository } from '@/lib/queries'
+import {
+  GITHUB_ACCOUNT_NOT_LINKED_CODE,
+  GITHUB_ACCOUNT_NOT_LINKED_MESSAGE,
+} from '@/lib/github-account'
 
 interface RepositoriesListProps {
   repositories: Repository[]
@@ -32,6 +36,7 @@ interface AuthStatus {
     github_avatar_url: string | null
   }
   error?: string
+  code?: string
 }
 
 interface GitHubRepository {
@@ -83,6 +88,10 @@ export function RepositoriesList({ repositories }: RepositoriesListProps) {
   )
   const oauthError = searchParams.get('error')
   const oauthConnected = searchParams.get('connected')
+  const githubNotLinked =
+    oauthError === GITHUB_ACCOUNT_NOT_LINKED_CODE ||
+    auth?.code === GITHUB_ACCOUNT_NOT_LINKED_CODE ||
+    auth?.error === GITHUB_ACCOUNT_NOT_LINKED_MESSAGE
 
   const loadGitHubRepos = useCallback(async () => {
     setLoadingGitHubRepos(true)
@@ -266,7 +275,7 @@ export function RepositoriesList({ repositories }: RepositoriesListProps) {
                 </Button>
               </div>
             </div>
-          ) : (
+          ) : githubNotLinked ? null : (
             <Button asChild>
               <a href="/api/auth/github/login">
                 <Github className="h-4 w-4 mr-2" />
@@ -313,11 +322,13 @@ export function RepositoriesList({ repositories }: RepositoriesListProps) {
         </Card>
       </div>
 
-      {(oauthConnected || error || auth?.error || oauthError) && (
+      {(oauthConnected || error || auth?.error || oauthError) && !(githubNotLinked && !auth?.authenticated) && (
         <Card className={oauthConnected ? 'border-primary/30 bg-primary/5 p-4 text-sm text-primary' : 'border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive'}>
           {oauthConnected
             ? 'GitHub connected successfully. You can import repositories now.'
-            : error || auth?.error || `GitHub sign-in failed: ${oauthError}`}
+            : githubNotLinked
+              ? GITHUB_ACCOUNT_NOT_LINKED_MESSAGE
+              : error || auth?.error || `GitHub sign-in failed: ${oauthError}`}
         </Card>
       )}
 
@@ -339,16 +350,22 @@ export function RepositoriesList({ repositories }: RepositoriesListProps) {
         {!auth?.authenticated ? (
           <div className="rounded-xl border border-dashed p-8 text-center">
             <Github className="mx-auto mb-3 h-10 w-10 text-muted-foreground/40" />
-            <h3 className="font-semibold text-foreground">Connect your GitHub account</h3>
+            <h3 className="font-semibold text-foreground">
+              {githubNotLinked ? 'Connect GitHub in your account settings' : 'Connect your GitHub account'}
+            </h3>
             <p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground">
-              Once you sign in, RepoFuse can read your repositories and show what you can build from the code you already own.
+              {githubNotLinked
+                ? GITHUB_ACCOUNT_NOT_LINKED_MESSAGE
+                : 'Once you sign in, RepoFuse can read your repositories and show what you can build from the code you already own.'}
             </p>
-            <Button className="mt-4" asChild>
-              <a href="/api/auth/github/login">
-                <ShieldCheck className="h-4 w-4 mr-2" />
-                Continue with GitHub
-              </a>
-            </Button>
+            {githubNotLinked ? null : (
+              <Button className="mt-4" asChild>
+                <a href="/api/auth/github/login">
+                  <ShieldCheck className="h-4 w-4 mr-2" />
+                  Continue with GitHub
+                </a>
+              </Button>
+            )}
           </div>
         ) : loadingGitHubRepos ? (
           <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">

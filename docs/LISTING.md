@@ -240,12 +240,13 @@ Normal non-MCP website routes retain their existing behavior.
 - [ ] Confirm the Vercel plan allows the route’s 300-second `maxDuration`.
 - [ ] In Clerk, keep GitHub social login enabled and request the GitHub permissions needed to read
   selected private repositories and create a repository on explicit user request.
-- [ ] In Clerk OAuth Applications → Settings → Client onboarding, enable **Publish CIMD support**.
-- [ ] Enable **Publish DCR support** for clients that do not yet support CIMD (notably legacy Claude
-  and directory scanners), and require PKCE with `S256`.
+- [ ] In Clerk OAuth Applications → Settings → Client onboarding, leave **Publish CIMD support**
+  off. Clients use dynamic client registration.
+- [ ] Enable **Publish DCR support**, and require PKCE with `S256`.
 - [ ] Set Clerk dynamic-client default scopes to `openid profile email`.
-- [ ] Confirm Clerk authorization-server metadata advertises CIMD and, while enabled, a
-  `registration_endpoint`.
+- [ ] Confirm Clerk's live authorization-server metadata includes `registration_endpoint` and does
+  not advertise `client_id_metadata_document_supported: true`. RepoFuse's
+  `/.well-known/oauth-authorization-server` must mirror that document.
 - [ ] Deploy to a non-production preview first and run the OAuth flow from MCP Inspector, Claude,
   ChatGPT developer mode, and Cursor.
 - [ ] Create the populated reviewer account described above without inaccessible MFA.

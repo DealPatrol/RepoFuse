@@ -107,10 +107,12 @@ Apply `migrations/010_mcp_rate_limits.sql` and
 
 In Clerk OAuth Applications → Settings → Client onboarding:
 
-- enable **Publish CIMD support**
-- enable **Publish DCR support** for clients that still require dynamic registration
+- leave **Publish CIMD support** off. Production clients use dynamic client registration, and RepoFuse must not advertise `client_id_metadata_document_supported: true`.
+- enable **Publish DCR support**
 - require PKCE with `S256`
 - configure default scopes: `openid profile email`
+
+`/.well-known/oauth-authorization-server` mirrors Clerk's live authorization-server metadata. When that document would advertise Client ID Metadata Documents, RepoFuse omits `client_id_metadata_document_supported` so clients keep using the `registration_endpoint`.
 
 See `docs/LISTING.md` for deployment, reviewer-account, and directory-owner steps.
 
