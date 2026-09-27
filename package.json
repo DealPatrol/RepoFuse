@@ -1,6 +1,7 @@
 {
   "name": "@repofuse/mcp",
   "version": "0.3.0",
+  "type": "module",
   "private": false,
   "description": "RepoFuse MCP server for discovering buildable apps hidden in GitHub repositories.",
   "license": "MIT",

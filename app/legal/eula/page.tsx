@@ -29,7 +29,7 @@ export default function EulaPage() {
               <li>Redistribute or resell the service</li>
               <li>Use the service for unlawful purposes</li>
               <li>Violate any applicable laws or regulations</li>
-              <li>Interfere with the platform's operations</li>
+              <li>Interfere with the platform&apos;s operations</li>
             </ul>
           </section>
 

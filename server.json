@@ -5,6 +5,11 @@
   "description": "Discover and scaffold new apps by reusing code from your GitHub repositories.",
   "version": "0.3.0",
   "websiteUrl": "https://repofuse.com/mcp",
+  "repository": {
+    "url": "https://github.com/DealPatrol/RepoFuse",
+    "source": "github",
+    "id": "1163562366"
+  },
   "icons": [
     {
       "src": "https://repofuse.com/icon.svg",

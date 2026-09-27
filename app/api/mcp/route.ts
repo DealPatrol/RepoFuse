@@ -168,6 +168,9 @@ function withCors(response: Response): Response {
 const oauthHandler = withMcpAuth(
   handleMcpRequest,
   async (_, token) => {
+    if (!token) {
+      return undefined
+    }
     const clerkAuth = await auth({ acceptsToken: 'oauth_token' })
     return verifyClerkToken(clerkAuth, token)
   },
