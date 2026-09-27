@@ -4,14 +4,12 @@ import {
   getAnalysisById,
   getBlueprintsByAnalysis,
   getRepositoriesForAnalysis,
-  getUserViewedBlueprintIds,
   type Analysis,
   type AppBlueprint,
   type Repository,
 } from '@/lib/queries'
 import { getCurrentUser } from '@/lib/auth'
-import { resolveProAccess } from '@/lib/pro-access'
-import { PLANS } from '@/lib/stripe'
+import { applyBlueprintAccess } from '@/lib/blueprint-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,6 +31,7 @@ export default async function AnalysisDetailPage({
   let userPlan = 'free'
   let viewedBlueprintIds: string[] = []
   let isTrialing = false
+  let blueprintLimit = 1
 
   try {
     ;[analysis, repositories, blueprints] = await Promise.all([
@@ -45,13 +44,12 @@ export default async function AnalysisDetailPage({
   }
 
   try {
-    const [proAccess, viewedIds] = await Promise.all([
-      resolveProAccess(user),
-      getUserViewedBlueprintIds(user.id),
-    ])
-    userPlan = proAccess.canAccessPro ? proAccess.plan : 'free'
-    viewedBlueprintIds = viewedIds
-    isTrialing = proAccess.subscription?.status === 'trialing'
+    const access = await applyBlueprintAccess(user, blueprints)
+    blueprints = access.blueprints
+    userPlan = access.userPlan
+    viewedBlueprintIds = access.viewedBlueprintIds
+    isTrialing = access.isTrialing
+    blueprintLimit = access.blueprintLimit
   } catch {
     // Subscription/views table not available yet — use free defaults
   }
@@ -59,9 +57,6 @@ export default async function AnalysisDetailPage({
   if (!analysis) {
     notFound()
   }
-
-  const planConfig = PLANS[userPlan as keyof typeof PLANS] || PLANS.free
-  const blueprintLimit = planConfig.blueprints_viewable
 
   return (
     <AnalysisDetail

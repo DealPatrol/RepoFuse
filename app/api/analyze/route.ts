@@ -2,9 +2,15 @@ import { NextResponse } from 'next/server'
 import { generateText } from 'ai'
 import { scanCrossPlatformCode } from '@/lib/cross-platform-scanner'
 import { analyzeScannedFiles, createAnthropicPromptRunner } from '@/lib/repofuse-core.js'
+import { getCurrentUser } from '@/lib/auth'
 
 export async function POST() {
   try {
+    const user = await getCurrentUser()
+    if (!user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const scannedFiles = await scanCrossPlatformCode()
 
     if (scannedFiles.length === 0) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAnalysisById, getBlueprintsByAnalysis } from '@/lib/queries'
 import { getCurrentUser } from '@/lib/auth'
+import { applyBlueprintAccess } from '@/lib/blueprint-access'
 
 export async function GET(
   _request: NextRequest,
@@ -19,7 +20,8 @@ export async function GET(
     }
 
     const blueprints = await getBlueprintsByAnalysis(id, user.id)
-    return NextResponse.json(blueprints)
+    const access = await applyBlueprintAccess(user, blueprints)
+    return NextResponse.json(access.blueprints)
   } catch (error) {
     console.error('[analyses/blueprints] error:', error)
     return NextResponse.json({ error: 'Failed to fetch blueprints' }, { status: 500 })

@@ -8,7 +8,12 @@ import { scrapeRedditPosts } from '@/lib/reddit-scraper'
 export async function POST(request: NextRequest) {
   // Verify the request is from a trusted source
   const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET || 'default-secret'
+  const cronSecret = process.env.CRON_SECRET?.trim()
+
+  if (!cronSecret) {
+    console.error('[reddit-sync] CRON_SECRET is not configured')
+    return NextResponse.json({ error: 'Service unavailable' }, { status: 503 })
+  }
 
   if (authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

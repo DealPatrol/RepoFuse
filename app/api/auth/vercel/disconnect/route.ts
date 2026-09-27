@@ -8,7 +8,7 @@ export async function POST() {
 
   const db = getDb()
   await db`
-    UPDATE users
+    UPDATE user_auth
     SET vercel_access_token = NULL,
         vercel_team_id      = NULL,
         updated_at          = NOW()

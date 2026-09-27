@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { generateText } from 'ai'
 import { getCreditBalance, deductCredits, refundCredits, CREDITS } from '@/lib/credits'
 import { getCurrentUser } from '@/lib/auth'
+import { getAnalysisById, getRepositoriesForAnalysis } from '@/lib/queries'
 
 const model = 'openai/gpt-4-turbo'
 
@@ -20,7 +21,10 @@ interface AppSuggestion {
   is_complete?: boolean
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   let chargedUserId: string | null = null
   let analysisIdForRefund: string | null = null
 
@@ -30,14 +34,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { analysisId, selectedRepos } = (await request.json()) as {
-      analysisId: string
-      selectedRepos: SelectedRepository[]
-    }
+    const { id: analysisId } = await params
     analysisIdForRefund = analysisId
 
-    if (!Array.isArray(selectedRepos) || selectedRepos.length === 0) {
-      return NextResponse.json({ error: 'selectedRepos is required' }, { status: 400 })
+    const analysis = await getAnalysisById(analysisId, user.id)
+    if (!analysis) {
+      return NextResponse.json({ error: 'Analysis not found' }, { status: 404 })
+    }
+
+    const selectedRepos = await getRepositoriesForAnalysis(analysisId, user.id)
+    if (selectedRepos.length === 0) {
+      return NextResponse.json({ error: 'No repositories are linked to this analysis' }, { status: 400 })
     }
 
     const currentBalance = await getCreditBalance(user.id)

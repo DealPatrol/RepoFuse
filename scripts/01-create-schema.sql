@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS user_auth (
   stripe_price_id TEXT,
   plan_tier VARCHAR(20) DEFAULT 'free' CHECK (plan_tier IN ('free', 'pro', 'scale', 'byok')),
   subscription_status VARCHAR(50),
+  vercel_access_token TEXT,
+  vercel_team_id TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -22,6 +24,8 @@ ALTER TABLE user_auth ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;
 ALTER TABLE user_auth ADD COLUMN IF NOT EXISTS stripe_price_id TEXT;
 ALTER TABLE user_auth ADD COLUMN IF NOT EXISTS plan_tier VARCHAR(20) DEFAULT 'free';
 ALTER TABLE user_auth ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(50);
+ALTER TABLE user_auth ADD COLUMN IF NOT EXISTS vercel_access_token TEXT;
+ALTER TABLE user_auth ADD COLUMN IF NOT EXISTS vercel_team_id TEXT;
 
 -- Repositories table (GitHub repos added by users)
 CREATE TABLE IF NOT EXISTS repositories (
@@ -107,7 +111,6 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   stripe_customer_id VARCHAR(255) UNIQUE,
   stripe_subscription_id VARCHAR(255) UNIQUE,
   plan VARCHAR(50) DEFAULT 'free' CHECK (plan IN ('free', 'pro', 'scale', 'byok')),
-  plan VARCHAR(50) DEFAULT 'free' CHECK (plan IN ('free', 'byok', 'pro', 'scale')),
   status VARCHAR(50) DEFAULT 'active' CHECK (status IN ('active', 'past_due', 'canceled', 'trialing')),
   current_period_end TIMESTAMP WITH TIME ZONE,
   analyses_used_this_month INTEGER DEFAULT 0,
@@ -119,6 +122,38 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 CREATE INDEX IF NOT EXISTS idx_subscriptions_github_id ON subscriptions(github_id);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_customer_id ON subscriptions(stripe_customer_id);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_subscription_id ON subscriptions(stripe_subscription_id);
+
+-- Credit balance and immutable audit trail
+CREATE TABLE IF NOT EXISTS user_credits (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL UNIQUE REFERENCES user_auth(id) ON DELETE CASCADE,
+  current_balance BIGINT NOT NULL DEFAULT 0,
+  total_granted BIGINT NOT NULL DEFAULT 0,
+  total_used BIGINT NOT NULL DEFAULT 0,
+  last_renewal_date TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS credit_transactions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES user_auth(id) ON DELETE CASCADE,
+  amount BIGINT NOT NULL,
+  transaction_type VARCHAR(50) NOT NULL,
+  reason TEXT,
+  metadata JSONB DEFAULT '{}',
+  balance_after BIGINT NOT NULL,
+  idempotency_key TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_credits_user_id ON user_credits(user_id);
+CREATE INDEX IF NOT EXISTS idx_credit_transactions_user_id ON credit_transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_credit_transactions_type ON credit_transactions(transaction_type);
+CREATE INDEX IF NOT EXISTS idx_credit_transactions_created ON credit_transactions(created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_transactions_idempotency_key
+  ON credit_transactions(idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
 
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_user_auth_github_id ON user_auth(github_id);
