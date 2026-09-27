@@ -4,7 +4,9 @@ import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { createRepoFuseMcpServer } from '../lib/repofuse-mcp.js'
 
 const expectedTools = [
   'list_github_repositories',
@@ -53,12 +55,21 @@ const client = new Client({
 try {
   await client.connect(transport)
   const { tools } = await client.listTools()
-  const toolNames = tools.map((tool) => tool.name).sort()
-  const missingTools = expectedTools.filter((name) => !toolNames.includes(name))
+  validateTools(tools, expectedTools)
 
-  if (missingTools.length > 0) {
-    throw new Error(`RepoFuse MCP started, but missing tools: ${missingTools.join(', ')}`)
-  }
+  const [extendedClientTransport, extendedServerTransport] = InMemoryTransport.createLinkedPair()
+  const extendedServer = createRepoFuseMcpServer({
+    githubToken: 'repofuse-smoke-test-token',
+    analysisPromptRunner: async () => '{"blueprints":[]}',
+    scaffoldPromptRunner: async () => '{}',
+    getBlueprintGaps: async () => ({ name: 'Smoke test blueprint' }),
+  })
+  const extendedClient = new Client({ name: 'repofuse-extended-smoke-test', version: '0.1.0' })
+  await extendedServer.connect(extendedServerTransport)
+  await extendedClient.connect(extendedClientTransport)
+  const extendedTools = await extendedClient.listTools()
+  validateTools(extendedTools.tools, [...expectedTools, 'get_blueprint_gaps'])
+  await extendedClient.close()
 
   console.log(`RepoFuse MCP smoke test passed${isLive ? ' (live env)' : ' (structural)'}.`)
   for (const name of expectedTools) {
@@ -69,5 +80,24 @@ try {
     await client.close()
   } catch {
     await transport.close()
+  }
+}
+
+function validateTools(tools, expected) {
+  const toolNames = tools.map((tool) => tool.name).sort()
+  const missingTools = expected.filter((name) => !toolNames.includes(name))
+  if (missingTools.length > 0) {
+    throw new Error(`RepoFuse MCP started, but missing tools: ${missingTools.join(', ')}`)
+  }
+
+  for (const tool of tools.filter(({ name }) => expected.includes(name))) {
+    if (!tool.title || !tool.description) {
+      throw new Error(`${tool.name} must expose a title and description.`)
+    }
+    for (const annotation of ['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint']) {
+      if (typeof tool.annotations?.[annotation] !== 'boolean') {
+        throw new Error(`${tool.name} must expose boolean ${annotation}.`)
+      }
+    }
   }
 }

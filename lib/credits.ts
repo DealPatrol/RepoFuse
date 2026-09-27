@@ -202,29 +202,79 @@ export async function deductCredits(
   amount: number,
   type: 'analysis' | 'scaffold' | 'build_app' | 'pattern_analyzer',
   metadata: CreditMetadata = {}
-): Promise<{ success: boolean; transaction?: CreditTransaction; error?: string }> {
+): Promise<{ success: boolean; transaction?: CreditTransaction; wasAlreadyProcessed?: boolean; error?: string }> {
   const sql = getDb()
+  const idempotencyKey = getIdempotencyKey(metadata)
   await getOrCreateUserCredits(userId)
 
   const transaction = await sql`
-    WITH updated AS (
+    WITH existing AS MATERIALIZED (
+      SELECT *
+      FROM credit_transactions
+      WHERE idempotency_key = ${idempotencyKey}
+        AND user_id = ${userId}
+        AND ${idempotencyKey} IS NOT NULL
+      LIMIT 1
+    ),
+    available AS MATERIALIZED (
+      SELECT current_balance
+      FROM user_credits
+      WHERE user_id = ${userId}
+        AND current_balance >= ${amount}
+        AND NOT EXISTS (SELECT 1 FROM existing)
+      FOR UPDATE
+    ),
+    inserted AS (
+      INSERT INTO credit_transactions (
+        user_id, amount, transaction_type, reason, metadata, balance_after, idempotency_key
+      )
+      SELECT
+        ${userId},
+        ${-amount},
+        ${type},
+        ${`${type} deduction`},
+        ${JSON.stringify(metadata)}::jsonb,
+        current_balance - ${amount},
+        ${idempotencyKey}
+      FROM available
+      ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+      RETURNING *
+    ),
+    updated AS (
       UPDATE user_credits
       SET
         current_balance = current_balance - ${amount},
         total_used = total_used + ${amount}
       WHERE user_id = ${userId}
-        AND current_balance >= ${amount}
+        AND EXISTS (SELECT 1 FROM inserted)
       RETURNING current_balance
     )
-    INSERT INTO credit_transactions (
-      user_id, amount, transaction_type, reason, metadata, balance_after
-    )
-    SELECT ${userId}, ${-amount}, ${type}, ${`${type} deduction`}, ${JSON.stringify(metadata)}::jsonb, current_balance
-    FROM updated
-    RETURNING *
+    SELECT inserted.*, false AS was_already_processed
+    FROM inserted
+    WHERE EXISTS (SELECT 1 FROM updated)
+    UNION ALL
+    SELECT existing.*, true AS was_already_processed
+    FROM existing
   `
 
   if (transaction.length === 0) {
+    if (idempotencyKey) {
+      const existing = await sql`
+        SELECT *
+        FROM credit_transactions
+        WHERE idempotency_key = ${idempotencyKey}
+          AND user_id = ${userId}
+        LIMIT 1
+      `
+      if (existing[0]) {
+        return {
+          success: true,
+          transaction: existing[0] as CreditTransaction,
+          wasAlreadyProcessed: true,
+        }
+      }
+    }
+
     const currentBalance = await getCreditBalance(userId)
     return {
       success: false,
@@ -235,6 +285,7 @@ export async function deductCredits(
   return {
     success: true,
     transaction: transaction[0] as CreditTransaction,
+    wasAlreadyProcessed: transaction[0].was_already_processed as boolean,
   }
 }
 

@@ -43,5 +43,5 @@ const proxy = clerkConfigured
 export default proxy
 
 export const config = {
-  matcher: ['/dashboard/:path*'],
+  matcher: ['/dashboard/:path*', '/api/mcp'],
 }
