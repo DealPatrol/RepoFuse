@@ -11,6 +11,13 @@ vi.mock('@/lib/pro-access', () => ({
   resolveProAccess: vi.fn(),
 }))
 
+vi.mock('@/lib/stripe', () => ({
+  PLANS: {
+    free: { blueprints_viewable: 1 },
+    pro: { blueprints_viewable: -1 },
+  },
+}))
+
 const viewedBlueprints = vi.mocked(getUserViewedBlueprintIds)
 const proAccess = vi.mocked(resolveProAccess)
 const user = { id: 'user-1' } as never
