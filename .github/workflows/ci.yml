@@ -37,8 +37,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Lint
-        run: pnpm lint
+      - name: Lint (no regressions from main baseline)
+        run: node scripts/lint-baseline.mjs
 
       - name: Type check
         run: pnpm exec tsc --noEmit
