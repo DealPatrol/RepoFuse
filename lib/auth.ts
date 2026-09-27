@@ -71,10 +71,10 @@ async function fetchGitHubUserFromToken(accessToken: string): Promise<{
   return { id: u.id, login: u.login, avatar_url: u.avatar_url }
 }
 
-async function getCurrentUserFromClerk(): Promise<AuthUser | null> {
-  const { userId } = await auth()
-  if (!userId) return null
-
+export async function getAuthUserFromClerkUserId(
+  userId: string,
+  allowCookieFallback = false,
+): Promise<AuthUser | null> {
   const client = await clerkClient()
   const clerkUser = await client.users.getUser(userId)
 
@@ -93,8 +93,10 @@ async function getCurrentUserFromClerk(): Promise<AuthUser | null> {
     const tokens = await client.users.getUserOauthAccessToken(userId, 'oauth_github')
     accessToken = tokens.data[0]?.token ?? null
   } catch {
-    const cookieStore = await cookies()
-    accessToken = cookieStore.get(GITHUB_ACCESS_TOKEN_COOKIE)?.value ?? null
+    if (allowCookieFallback) {
+      const cookieStore = await cookies()
+      accessToken = cookieStore.get(GITHUB_ACCESS_TOKEN_COOKIE)?.value ?? null
+    }
   }
 
   if (!accessToken) return null
@@ -146,6 +148,13 @@ async function getCurrentUserFromClerk(): Promise<AuthUser | null> {
     vercel_access_token: null,
     vercel_team_id: null,
   }
+}
+
+async function getCurrentUserFromClerk(): Promise<AuthUser | null> {
+  const { userId } = await auth()
+  if (!userId) return null
+
+  return getAuthUserFromClerkUserId(userId, true)
 }
 
 async function getCurrentUserFromCookies(): Promise<AuthUser | null> {

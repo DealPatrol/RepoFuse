@@ -192,6 +192,91 @@ export async function releaseAnalysisUsage(githubId: number): Promise<void> {
   `
 }
 
+export async function reserveMcpAnalysisUsage(
+  githubId: number,
+  monthlyLimit: number,
+  idempotencyKey: string,
+): Promise<{ reserved: boolean; wasAlreadyProcessed: boolean }> {
+  const sql = getDb()
+  const result = await sql`
+    WITH claimed AS (
+      INSERT INTO mcp_analysis_usage_reservations (idempotency_key, github_id)
+      VALUES (${idempotencyKey}, ${githubId})
+      ON CONFLICT (idempotency_key) DO NOTHING
+      RETURNING idempotency_key
+    ),
+    reserved AS (
+      UPDATE subscriptions
+      SET analyses_used_this_month = analyses_used_this_month + 1,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE github_id = ${githubId}
+        AND analyses_used_this_month < ${monthlyLimit}
+        AND EXISTS (SELECT 1 FROM claimed)
+      RETURNING id
+    ),
+    cleanup AS (
+      DELETE FROM mcp_analysis_usage_reservations
+      WHERE idempotency_key = ${idempotencyKey}
+        AND EXISTS (SELECT 1 FROM claimed)
+        AND NOT EXISTS (SELECT 1 FROM reserved)
+      RETURNING idempotency_key
+    )
+    SELECT true AS reserved, false AS was_already_processed
+    FROM reserved
+    UNION ALL
+    SELECT true AS reserved, true AS was_already_processed
+    FROM mcp_analysis_usage_reservations
+    WHERE idempotency_key = ${idempotencyKey}
+      AND github_id = ${githubId}
+      AND NOT EXISTS (SELECT 1 FROM claimed)
+  `
+
+  const row = result[0] as
+    | { reserved: boolean; was_already_processed: boolean }
+    | undefined
+  if (row) {
+    return {
+      reserved: row.reserved,
+      wasAlreadyProcessed: row.was_already_processed,
+    }
+  }
+
+  // A concurrent request may have won the unique-key race after this statement's
+  // snapshot was created. Check once more in a fresh statement before reporting
+  // the monthly quota as exhausted.
+  const concurrentReservation = await sql`
+    SELECT 1
+    FROM mcp_analysis_usage_reservations
+    WHERE idempotency_key = ${idempotencyKey}
+      AND github_id = ${githubId}
+    LIMIT 1
+  `
+  return {
+    reserved: concurrentReservation.length > 0,
+    wasAlreadyProcessed: concurrentReservation.length > 0,
+  }
+}
+
+export async function releaseMcpAnalysisUsage(
+  githubId: number,
+  idempotencyKey: string,
+): Promise<void> {
+  const sql = getDb()
+  await sql`
+    WITH released AS (
+      DELETE FROM mcp_analysis_usage_reservations
+      WHERE idempotency_key = ${idempotencyKey}
+        AND github_id = ${githubId}
+      RETURNING idempotency_key
+    )
+    UPDATE subscriptions
+    SET analyses_used_this_month = GREATEST(analyses_used_this_month - 1, 0),
+        updated_at = CURRENT_TIMESTAMP
+    WHERE github_id = ${githubId}
+      AND EXISTS (SELECT 1 FROM released)
+  `
+}
+
 export async function resetMonthlyUsage(githubId: number): Promise<void> {
   const sql = getDb()
   await sql`
@@ -395,6 +480,23 @@ export async function getBlueprintsByAnalysis(analysisId: string, userId?: strin
     `
     : await sql`SELECT * FROM app_blueprints WHERE analysis_id = ${analysisId} ORDER BY reuse_percentage DESC`
   return blueprints as AppBlueprint[]
+}
+
+export async function getBlueprintByIdForUser(
+  blueprintId: string,
+  userId: string,
+): Promise<AppBlueprint | null> {
+  const sql = getDb()
+  const blueprints = await sql`
+    SELECT b.*
+    FROM app_blueprints b
+    JOIN analyses a ON a.id = b.analysis_id
+    WHERE b.id = ${blueprintId}
+      AND b.user_id = ${userId}
+      AND a.user_id = ${userId}
+    LIMIT 1
+  `
+  return (blueprints[0] as AppBlueprint | undefined) ?? null
 }
 
 export async function deleteBlueprintsByAnalysis(analysisId: string): Promise<void> {
