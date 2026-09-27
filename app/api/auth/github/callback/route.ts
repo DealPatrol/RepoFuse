@@ -12,6 +12,25 @@ function getGitHubClientId() {
   return process.env.GITHUB_CLIENT_ID || process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID
 }
 
+async function fetchPrimaryEmail(accessToken: string): Promise<string | null> {
+  try {
+    const res = await fetch('https://api.github.com/user/emails', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'RepoFuse',
+      },
+      cache: 'no-store',
+    })
+    if (!res.ok) return null
+    const emails = (await res.json()) as Array<{ email: string; primary: boolean; verified: boolean }>
+    const primary = emails.find((e) => e.primary && e.verified)
+    return primary?.email ?? emails.find((e) => e.verified)?.email ?? null
+  } catch {
+    return null
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
@@ -63,12 +82,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/?error=token_exchange_failed', getBaseUrl(request)))
     }
 
-    const userResponse = await fetch('https://api.github.com/user', {
-      headers: {
-        Authorization: `Bearer ${access_token}`,
-        Accept: 'application/vnd.github+json',
-      },
-    })
+    // Fetch user profile and primary email in parallel
+    const [userResponse, primaryEmail] = await Promise.all([
+      fetch('https://api.github.com/user', {
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+          Accept: 'application/vnd.github+json',
+        },
+      }),
+      fetchPrimaryEmail(access_token),
+    ])
 
     if (!userResponse.ok) {
       return NextResponse.redirect(new URL('/?error=github_user_fetch_failed', getBaseUrl(request)))
@@ -79,13 +102,14 @@ export async function GET(request: NextRequest) {
     try {
       const sql = getDb()
       await sql`
-        INSERT INTO user_auth (github_id, github_username, github_avatar_url, access_token)
-        VALUES (${githubUser.id}, ${githubUser.login}, ${githubUser.avatar_url}, ${access_token})
+        INSERT INTO user_auth (github_id, github_username, github_avatar_url, access_token, email)
+        VALUES (${githubUser.id}, ${githubUser.login}, ${githubUser.avatar_url}, ${access_token}, ${primaryEmail})
         ON CONFLICT (github_id)
         DO UPDATE SET
           access_token = ${access_token},
           github_username = ${githubUser.login},
           github_avatar_url = ${githubUser.avatar_url},
+          email = COALESCE(${primaryEmail}, user_auth.email),
           updated_at = CURRENT_TIMESTAMP
       `
       await upsertSubscription({ github_id: githubUser.id })
