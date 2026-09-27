@@ -1,8 +1,12 @@
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import { cookies } from 'next/headers'
+import { GITHUB_ACCOUNT_NOT_LINKED_MESSAGE } from '@/lib/github-account'
 import { isClerkConfigured } from '@/lib/clerk-auth'
 import { getDb } from '@/lib/db'
 import { upsertSubscription } from '@/lib/queries'
+
+/** Clerk Backend API provider slug. Do not pass the deprecated `oauth_github` prefix. */
+const CLERK_GITHUB_OAUTH_PROVIDER = 'github' as const
 
 export const GITHUB_ACCESS_TOKEN_COOKIE = 'github_access_token'
 
@@ -53,6 +57,11 @@ export function sanitizeReturnTo(
   }
 }
 
+function isGitHubExternalAccount(account: { provider: string }): boolean {
+  const provider = account.provider.toLowerCase()
+  return provider === 'github' || provider === 'oauth_github'
+}
+
 async function fetchGitHubUserFromToken(accessToken: string): Promise<{
   id: number
   login: string
@@ -79,31 +88,38 @@ export async function getAuthUserFromClerkUserId(
   const clerkUser = await client.users.getUser(userId)
 
   const githubAccount =
-    clerkUser.externalAccounts?.find(
-      (account) => account.provider === 'oauth_github' || account.provider === 'github',
-    ) ?? null
-
-  if (!githubAccount) return null
-
-  const githubId = Number.parseInt(githubAccount.providerUserId, 10)
-  if (Number.isNaN(githubId)) return null
+    clerkUser.externalAccounts?.find((account) => isGitHubExternalAccount(account)) ?? null
 
   let accessToken: string | null = null
   try {
-    const tokens = await client.users.getUserOauthAccessToken(userId, 'oauth_github')
+    const tokens = await client.users.getUserOauthAccessToken(userId, CLERK_GITHUB_OAUTH_PROVIDER)
     accessToken = tokens.data[0]?.token ?? null
   } catch {
-    if (allowCookieFallback) {
-      const cookieStore = await cookies()
-      accessToken = cookieStore.get(GITHUB_ACCESS_TOKEN_COOKIE)?.value ?? null
-    }
+    accessToken = null
+  }
+
+  if (!accessToken && allowCookieFallback) {
+    const cookieStore = await cookies()
+    accessToken = cookieStore.get(GITHUB_ACCESS_TOKEN_COOKIE)?.value ?? null
   }
 
   if (!accessToken) return null
 
-  const githubUsername =
-    githubAccount.username || clerkUser.username || `user-${githubId}`
-  const avatarUrl = clerkUser.imageUrl ?? githubAccount.imageUrl ?? null
+  let githubId = githubAccount ? Number.parseInt(githubAccount.providerUserId, 10) : Number.NaN
+  let githubUsername = githubAccount?.username || clerkUser.username || ''
+  let avatarUrl = clerkUser.imageUrl ?? githubAccount?.imageUrl ?? null
+
+  if (Number.isNaN(githubId)) {
+    const githubProfile = await fetchGitHubUserFromToken(accessToken)
+    if (!githubProfile) return null
+    githubId = githubProfile.id
+    githubUsername = githubProfile.login
+    avatarUrl = githubProfile.avatar_url ?? avatarUrl
+  }
+
+  if (!githubUsername) {
+    githubUsername = `user-${githubId}`
+  }
 
   try {
     const sql = getDb()
@@ -243,4 +259,20 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 export async function getCurrentAccessToken(): Promise<string | null> {
   const user = await getCurrentUser()
   return user?.access_token ?? null
+}
+
+/**
+ * Clerk session exists, but RepoFuse has no GitHub token for listing repos or
+ * reading file contents. Null when the caller is signed out or already has a token.
+ */
+export async function getGitHubNotLinkedMessage(): Promise<string | null> {
+  if (!isClerkConfigured()) return null
+
+  const { userId } = await auth()
+  if (!userId) return null
+
+  const linkedUser = await getAuthUserFromClerkUserId(userId, true)
+  if (linkedUser?.access_token) return null
+
+  return GITHUB_ACCOUNT_NOT_LINKED_MESSAGE
 }

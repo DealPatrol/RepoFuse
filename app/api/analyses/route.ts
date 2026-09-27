@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUser } from '@/lib/auth'
+import { getCurrentUser, getGitHubNotLinkedMessage } from '@/lib/auth'
 import { createAnalysis, getRepositoryById, linkAnalysisToRepository, getAllAnalyses } from '@/lib/queries'
 import { createAnalysisRequestSchema } from '@/lib/schemas'
 
@@ -8,6 +8,10 @@ export async function GET() {
     const user = await getCurrentUser()
 
     if (!user) {
+      const notLinked = await getGitHubNotLinkedMessage()
+      if (notLinked) {
+        return NextResponse.json({ error: notLinked }, { status: 403 })
+      }
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
@@ -24,6 +28,10 @@ export async function POST(request: NextRequest) {
     const user = await getCurrentUser()
 
     if (!user) {
+      const notLinked = await getGitHubNotLinkedMessage()
+      if (notLinked) {
+        return NextResponse.json({ error: notLinked }, { status: 403 })
+      }
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 

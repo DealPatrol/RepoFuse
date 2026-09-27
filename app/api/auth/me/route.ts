@@ -1,12 +1,20 @@
 import { NextResponse } from 'next/server'
-import { getCurrentUser } from '@/lib/auth'
+import { getCurrentUser, getGitHubNotLinkedMessage } from '@/lib/auth'
 import { getBillingState } from '@/lib/billing'
+import { GITHUB_ACCOUNT_NOT_LINKED_CODE } from '@/lib/github-account'
 
 export async function GET() {
   try {
     const user = await getCurrentUser()
 
     if (!user) {
+      const notLinked = await getGitHubNotLinkedMessage()
+      if (notLinked) {
+        return NextResponse.json(
+          { authenticated: false, error: notLinked, code: GITHUB_ACCOUNT_NOT_LINKED_CODE },
+          { status: 403 },
+        )
+      }
       return NextResponse.json({ authenticated: false }, { status: 401 })
     }
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentAccessToken, getCurrentUser } from '@/lib/auth'
+import { getCurrentAccessToken, getCurrentUser, getGitHubNotLinkedMessage } from '@/lib/auth'
 import { listGitHubRepositories } from '@/lib/github'
 import { createRepository, getAllRepositories, getSubscriptionByGithubId, upsertSubscription } from '@/lib/queries'
 import { isOnFreeTier } from '@/lib/pro-access'
@@ -9,6 +9,10 @@ export async function POST(request: NextRequest) {
   try {
     const accessToken = await getCurrentAccessToken()
     if (!accessToken) {
+      const notLinked = await getGitHubNotLinkedMessage()
+      if (notLinked) {
+        return NextResponse.json({ error: notLinked }, { status: 403 })
+      }
       return NextResponse.json({ error: 'Not authenticated with GitHub' }, { status: 401 })
     }
 

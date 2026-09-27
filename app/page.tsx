@@ -31,6 +31,7 @@ import {
 const ERROR_MESSAGES: Record<string, string> = {
   auth_required: 'You must sign in to access the dashboard.',
   github_oauth_not_configured: 'GitHub OAuth is not configured.',
+  github_not_linked: 'Connect GitHub in your account settings to list repositories and run analyses.',
   gitlab_oauth_not_configured: 'GitLab OAuth is not configured.',
   invalid_oauth_state: 'Sign-in session expired or cookies were blocked.',
   missing_code: 'Your OAuth provider did not return an authorization code.',

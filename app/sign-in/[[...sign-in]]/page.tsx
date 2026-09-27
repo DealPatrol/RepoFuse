@@ -1,10 +1,15 @@
 import Link from 'next/link'
+import { SignIn } from '@clerk/nextjs'
 import { ArrowRight, GitBranch, Github, LockKeyhole, ShieldCheck } from 'lucide-react'
 import { RepoFuseLogo3D } from '@/components/repofuse-logo-3d'
 import { sanitizeReturnTo } from '@/lib/auth'
+import { isClerkConfigured } from '@/lib/clerk-auth'
+import { GITHUB_ACCOUNT_NOT_LINKED_MESSAGE } from '@/lib/github-account'
+import { isLegacyGitHubOAuthConfigured } from '@/lib/github-oauth'
 
 const ERROR_MESSAGES: Record<string, string> = {
   github_oauth_not_configured: 'GitHub OAuth is not configured yet.',
+  github_not_linked: GITHUB_ACCOUNT_NOT_LINKED_MESSAGE,
   gitlab_oauth_not_configured: 'GitLab OAuth is not configured yet.',
   bitbucket_oauth_not_configured: 'Bitbucket OAuth is not configured yet.',
   bitbucket_not_available: 'Bitbucket sign-in is visible, but repository scanning is not enabled for Bitbucket yet.',
@@ -19,6 +24,7 @@ type SignInPageProps = {
     error?: string
     idea?: string
     returnTo?: string
+    redirect_url?: string
   }>
 }
 
@@ -28,7 +34,20 @@ function providerHref(provider: 'github' | 'gitlab' | 'bitbucket', returnTo: str
 
 export default async function SignInPage({ searchParams }: SignInPageProps) {
   const params = await searchParams
-  const returnTo = sanitizeReturnTo(params.returnTo, '/dashboard')
+  const returnTo = sanitizeReturnTo(params.returnTo || params.redirect_url, '/dashboard')
+  if (isClerkConfigured() && !isLegacyGitHubOAuthConfigured()) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-16">
+        <SignIn
+          routing="path"
+          path="/sign-in"
+          signUpUrl="/sign-up"
+          fallbackRedirectUrl={returnTo}
+          forceRedirectUrl={returnTo}
+        />
+      </div>
+    )
+  }
   const idea = params.idea?.trim()
   const error = params.error ? ERROR_MESSAGES[params.error] ?? 'Could not start sign-in. Try another provider.' : null
 

@@ -3,6 +3,7 @@ import {
   fetchClerkAuthorizationServerMetadata,
 } from '@clerk/mcp-tools/server'
 import { metadataCorsOptionsRequestHandler } from '@clerk/mcp-tools/next'
+import { mirrorClerkAuthorizationServerMetadata } from '@/lib/oauth-metadata'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +17,8 @@ export async function GET() {
   }
 
   try {
-    const metadata = await fetchClerkAuthorizationServerMetadata({ publishableKey })
+    const liveMetadata = await fetchClerkAuthorizationServerMetadata({ publishableKey })
+    const metadata = mirrorClerkAuthorizationServerMetadata(liveMetadata)
     return Response.json(metadata, {
       headers: {
         ...corsHeaders,

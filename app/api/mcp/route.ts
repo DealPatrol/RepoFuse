@@ -4,7 +4,8 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { generateText } from 'ai'
 import { withMcpAuth } from 'mcp-handler'
 import { gatewayProviderOptions, getGatewayModel, isAiConfigured } from '@/lib/ai-gateway'
-import { getAuthUserFromClerkUserId, getCurrentUser, type AuthUser } from '@/lib/auth'
+import { getAuthUserFromClerkUserId, getCurrentUser, getGitHubNotLinkedMessage, type AuthUser } from '@/lib/auth'
+import { GITHUB_ACCOUNT_NOT_LINKED_MESSAGE } from '@/lib/github-account'
 import { isClerkConfigured } from '@/lib/clerk-auth'
 import { CREDITS, deductCredits, refundCredits } from '@/lib/credits'
 import { consumeMcpRateLimit } from '@/lib/mcp-rate-limit'
@@ -27,7 +28,15 @@ export const maxDuration = 300
 async function handleMcpRequest(request: Request) {
   const user = await resolveMcpUser(request)
 
-  if (!user?.id) {
+  if (!user?.access_token) {
+    const githubAccountMissing = await missingGitHubAccount(request)
+    if (githubAccountMissing) {
+      return githubNotLinkedResponse()
+    }
+    return oauthUnauthorized(request)
+  }
+
+  if (!user.id) {
     return oauthUnauthorized(request)
   }
 
@@ -195,6 +204,28 @@ async function resolveMcpUser(request: Request): Promise<AuthUser | null> {
     return getAuthUserFromClerkUserId(clerkUserId)
   }
   return getCurrentUser()
+}
+
+async function missingGitHubAccount(request: Request): Promise<boolean> {
+  const oauthUserId = request.auth?.extra?.userId
+  if (typeof oauthUserId === 'string') {
+    return true
+  }
+  try {
+    return Boolean(await getGitHubNotLinkedMessage())
+  } catch {
+    return false
+  }
+}
+
+function githubNotLinkedResponse(): Response {
+  return Response.json(
+    {
+      error: 'github_not_linked',
+      error_description: GITHUB_ACCOUNT_NOT_LINKED_MESSAGE,
+    },
+    { status: 403 },
+  )
 }
 
 function oauthUnauthorized(request: Request): Response {
