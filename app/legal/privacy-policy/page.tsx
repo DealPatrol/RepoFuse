@@ -48,14 +48,22 @@ export default function PrivacyPolicyPage() {
           <section className="mb-8">
             <h2 className="text-2xl font-bold mb-4">4. GitHub Data Privacy</h2>
             <p className="text-foreground">
-              RepoFuse only accesses the repositories and data you explicitly authorize through GitHub OAuth. We do not store your GitHub credentials and only retain necessary metadata for analysis.
+              RepoFuse only accesses repositories and data authorized through GitHub OAuth. We store
+              the OAuth access token needed to perform requested operations, repository metadata,
+              analyzed file paths, and generated blueprints. We do not return OAuth tokens, passwords,
+              or other authentication secrets to AI assistants.
             </p>
           </section>
 
           <section className="mb-8">
             <h2 className="text-2xl font-bold mb-4">5. Third-Party Services</h2>
             <p className="text-foreground">
-              RepoFuse uses third-party services including GitHub, Stripe for payments, and Neon for database hosting. Each service has its own privacy policy.
+              RepoFuse uses GitHub for repository access, Clerk for authentication and OAuth,
+              Stripe for payments, Neon for database hosting, Vercel for application hosting and AI
+              gateway services, and configured AI model providers such as Anthropic or OpenAI to
+              generate analyses and scaffolds. Requests sent to AI providers include the repository
+              names, file paths, blueprint details, and prompts needed to complete the requested task.
+              Each provider processes data under its own privacy terms.
             </p>
           </section>
 
@@ -67,32 +75,58 @@ export default function PrivacyPolicyPage() {
               <li>Request data deletion</li>
               <li>Opt-out of communications</li>
               <li>Revoke GitHub authorization at any time</li>
+              <li>Revoke an AI assistant&apos;s RepoFuse OAuth connection at any time</li>
             </ul>
           </section>
 
           <section className="mb-8">
-            <h2 className="text-2xl font-bold mb-4">7. Cookies and Tracking</h2>
+            <h2 className="text-2xl font-bold mb-4">7. MCP and AI Assistants</h2>
+            <p className="text-foreground">
+              When you connect Claude, ChatGPT, Cursor, or another MCP client, RepoFuse receives
+              OAuth identity and tool requests from that client. Tool responses may contain repository
+              names and URLs, file paths, technology choices, and generated blueprint or scaffold
+              content. RepoFuse applies the same account permissions, plan limits, credits, and rate
+              limits used by the website. RepoFuse does not receive or store the surrounding assistant
+              conversation unless it is included in a tool argument.
+            </p>
+          </section>
+
+          <section className="mb-8">
+            <h2 className="text-2xl font-bold mb-4">8. Data Retention and Deletion</h2>
+            <p className="text-foreground">
+              Account, repository metadata, analyses, blueprints, billing records, and usage records
+              are retained while your account is active and as needed for security, billing, legal,
+              and fraud-prevention obligations. Repository source content used during an analysis is
+              processed to answer the request and is not stored as complete source files. You may
+              request account deletion at privacy@repofuse.com. We delete or de-identify eligible data
+              within 30 days, except records that must be retained by law or for legitimate billing
+              and security purposes.
+            </p>
+          </section>
+
+          <section className="mb-8">
+            <h2 className="text-2xl font-bold mb-4">9. Cookies and Tracking</h2>
             <p className="text-foreground">
               RepoFuse uses cookies and similar technologies to maintain sessions, remember preferences, and analyze usage patterns. You can control cookie settings in your browser.
             </p>
           </section>
 
           <section className="mb-8">
-            <h2 className="text-2xl font-bold mb-4">8. Children&apos;s Privacy</h2>
+            <h2 className="text-2xl font-bold mb-4">10. Children&apos;s Privacy</h2>
             <p className="text-foreground">
               RepoFuse is not intended for users under 13. We do not knowingly collect data from children.
             </p>
           </section>
 
           <section className="mb-8">
-            <h2 className="text-2xl font-bold mb-4">9. Changes to This Policy</h2>
+            <h2 className="text-2xl font-bold mb-4">11. Changes to This Policy</h2>
             <p className="text-foreground">
               We may update this Privacy Policy periodically. We will notify you of significant changes by email or through the platform.
             </p>
           </section>
 
           <section className="mb-8">
-            <h2 className="text-2xl font-bold mb-4">10. Contact Us</h2>
+            <h2 className="text-2xl font-bold mb-4">12. Contact Us</h2>
             <p className="text-foreground">
               For privacy concerns, contact: privacy@repofuse.com
             </p>

@@ -60,6 +60,17 @@ try {
     throw new Error(`RepoFuse MCP started, but missing tools: ${missingTools.join(', ')}`)
   }
 
+  for (const tool of tools.filter(({ name }) => expectedTools.includes(name))) {
+    if (!tool.title || !tool.description) {
+      throw new Error(`${tool.name} must expose a title and description.`)
+    }
+    for (const annotation of ['readOnlyHint', 'destructiveHint', 'openWorldHint']) {
+      if (typeof tool.annotations?.[annotation] !== 'boolean') {
+        throw new Error(`${tool.name} must expose boolean ${annotation}.`)
+      }
+    }
+  }
+
   console.log(`RepoFuse MCP smoke test passed${isLive ? ' (live env)' : ' (structural)'}.`)
   for (const name of expectedTools) {
     console.log(`- ${name}`)

@@ -1,0 +1,19 @@
+{
+  "name": "repofuse",
+  "displayName": "RepoFuse",
+  "description": "Discover buildable apps and scaffolds by reusing code from your GitHub repositories.",
+  "version": "0.3.0",
+  "author": {
+    "name": "RepoFuse",
+    "url": "https://repofuse.com"
+  },
+  "homepage": "https://repofuse.com/mcp",
+  "repository": "https://github.com/DealPatrol/RepoFuse",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "github",
+    "code-reuse",
+    "app-blueprints"
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.repofuse/repofuse",
+  "title": "RepoFuse",
+  "description": "Discover and scaffold new apps by reusing code from your GitHub repositories.",
+  "version": "0.3.0",
+  "websiteUrl": "https://repofuse.com/mcp",
+  "icons": [
+    {
+      "src": "https://repofuse.com/icon.svg",
+      "mimeType": "image/svg+xml",
+      "sizes": ["180x180"]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://repofuse.com/api/mcp"
+    }
+  ]
+}

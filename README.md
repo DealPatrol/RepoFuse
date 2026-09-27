@@ -149,6 +149,7 @@ This repo now includes a standalone stdio MCP server at `mcp/repofuse.mjs`.
 - `analyze_repositories`
 - `generate_scaffold`
 - `create_repo_from_blueprint`
+- hosted only: `get_blueprint_gaps`
 
 ### Environment variables
 The MCP server expects:
@@ -172,8 +173,11 @@ pnpm mcp:test:live
 ```
 
 ### Streamable HTTP endpoint inside RepoFuse
-RepoFuse also exposes a stateless MCP endpoint at `/api/mcp` for authenticated web-app sessions.
-It reuses the same RepoFuse MCP tool definitions as the stdio server.
+RepoFuse exposes an OAuth-protected Streamable HTTP endpoint at
+`https://repofuse.com/api/mcp`. It supports external assistants and authenticated web-app sessions,
+resolves GitHub access server-side, and enforces account plan, credit, and rate limits.
+
+Connection instructions: `https://repofuse.com/mcp`.
 
 ### Example Claude Desktop config
 See `examples/claude-desktop.mcp.json`.
@@ -181,11 +185,11 @@ See `examples/claude-desktop.mcp.json`.
 ### Example Cursor config
 See `examples/cursor.mcp.json`.
 
-### Repo-ready Cursor workspace config
-See `.cursor/mcp.json`.
+### Cursor plugin config
+See `.cursor-plugin/plugin.json` and the root `mcp.json`.
 
 ### Full MCP setup guide
-See `docs/MCP_SETUP.md` and `docs/CLIENT_SETUP_QUICK.md`.
+See `docs/MCP_SETUP.md` and `docs/LISTING.md`.
 
 ## API Endpoints
 
@@ -233,7 +237,8 @@ See `docs/MCP_SETUP.md` and `docs/CLIENT_SETUP_QUICK.md`.
 - GitHub App permissions are fine-grained and should be configured read-only for analysis access
 - Access tokens are stored in the database (encrypt at rest in production)
 - Code is scanned in memory; file contents are never permanently stored
-- All API routes validate authentication via session cookie
+- Hosted MCP requests validate Clerk OAuth tokens or an existing RepoFuse session
+- OAuth discovery follows RFC 9728 and GitHub tokens are never returned to MCP clients
 
 ## License
 

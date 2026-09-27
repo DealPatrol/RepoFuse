@@ -397,6 +397,23 @@ export async function getBlueprintsByAnalysis(analysisId: string, userId?: strin
   return blueprints as AppBlueprint[]
 }
 
+export async function getBlueprintByIdForUser(
+  blueprintId: string,
+  userId: string,
+): Promise<AppBlueprint | null> {
+  const sql = getDb()
+  const blueprints = await sql`
+    SELECT b.*
+    FROM app_blueprints b
+    JOIN analyses a ON a.id = b.analysis_id
+    WHERE b.id = ${blueprintId}
+      AND b.user_id = ${userId}
+      AND a.user_id = ${userId}
+    LIMIT 1
+  `
+  return (blueprints[0] as AppBlueprint | undefined) ?? null
+}
+
 export async function deleteBlueprintsByAnalysis(analysisId: string): Promise<void> {
   const sql = getDb()
   await sql`DELETE FROM app_blueprints WHERE analysis_id = ${analysisId}`
