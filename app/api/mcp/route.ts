@@ -5,14 +5,15 @@ import { generateText } from 'ai'
 import { withMcpAuth } from 'mcp-handler'
 import { gatewayProviderOptions, getGatewayModel, isAiConfigured } from '@/lib/ai-gateway'
 import { getAuthUserFromClerkUserId, getCurrentUser, type AuthUser } from '@/lib/auth'
+import { isClerkConfigured } from '@/lib/clerk-auth'
 import { CREDITS, deductCredits, refundCredits } from '@/lib/credits'
 import { consumeMcpRateLimit } from '@/lib/mcp-rate-limit'
 import { hasProAccess, isOnFreeTier } from '@/lib/pro-access'
 import {
   getBlueprintByIdForUser,
   getSubscriptionByGithubId,
-  releaseAnalysisUsage,
-  reserveAnalysisUsage,
+  releaseMcpAnalysisUsage,
+  reserveMcpAnalysisUsage,
   upsertSubscription,
 } from '@/lib/queries'
 import { createAnthropicPromptRunner } from '@/lib/repofuse-core.js'
@@ -75,21 +76,62 @@ async function handleMcpRequest(request: Request) {
     allowCreateRepo: canAccessPro,
     maxFilesPerRepo: 120,
     maxBlueprints: 5,
-    beforeAnalyze: async () => {
-      if (!subscription || !isOnFreeTier(user, subscription)) {
-        return { reserved: false }
+    beforeAnalyze: async ({
+      repositories,
+      invocationId,
+    }: {
+      repositories: string[]
+      invocationId: string
+    }) => {
+      const idempotencyKey = `mcp:analysis:${user.id}:${invocationId}`
+      if (subscription && isOnFreeTier(user, subscription)) {
+        const limit = PLANS.free.analyses_per_month
+        const reservation = await reserveMcpAnalysisUsage(
+          user.github_id,
+          limit,
+          idempotencyKey,
+        )
+        if (!reservation.reserved) {
+          throw new Error(`Free plan limit reached (${limit} analyses per month).`)
+        }
+        return {
+          quotaOwned: !reservation.wasAlreadyProcessed,
+          githubId: user.github_id,
+          idempotencyKey,
+        }
       }
 
-      const limit = PLANS.free.analyses_per_month
-      const reserved = await reserveAnalysisUsage(user.github_id, limit)
-      if (!reserved) {
-        throw new Error(`Free plan limit reached (${limit} analyses per month).`)
+      const charge = await deductCredits(user.id, CREDITS.ANALYSIS_COST, 'analysis', {
+        repositories,
+        source: 'mcp',
+        idempotency_key: idempotencyKey,
+      })
+      if (!charge.success) {
+        throw new Error(charge.error ?? 'Insufficient credits for repository analysis.')
       }
-      return { reserved: true, githubId: user.github_id }
+      return {
+        charged: !charge.wasAlreadyProcessed,
+        idempotencyKey,
+      }
     },
-    onAnalyzeError: async (usage: { reserved?: boolean; githubId?: number } | undefined) => {
-      if (usage?.reserved && usage.githubId) {
-        await releaseAnalysisUsage(usage.githubId)
+    onAnalyzeError: async (
+      usage:
+        | {
+            charged?: boolean
+            quotaOwned?: boolean
+            githubId?: number
+            idempotencyKey?: string
+          }
+        | undefined,
+    ) => {
+      if (usage?.quotaOwned && usage.githubId && usage.idempotencyKey) {
+        await releaseMcpAnalysisUsage(usage.githubId, usage.idempotencyKey)
+      }
+      if (usage?.charged) {
+        await refundCredits(user.id, CREDITS.ANALYSIS_COST, 'MCP repository analysis failed', {
+          source: 'mcp',
+          idempotency_key: usage.idempotencyKey,
+        })
       }
     },
     beforeScaffold: async ({
@@ -190,6 +232,22 @@ const oauthHandler = withMcpAuth(
 )
 
 async function publicMcpHandler(request: Request) {
+  const hasBearerToken = request.headers
+    .get('Authorization')
+    ?.toLowerCase()
+    .startsWith('bearer ')
+  if (hasBearerToken && !isClerkConfigured()) {
+    return withCors(
+      Response.json(
+        {
+          error: 'oauth_not_configured',
+          error_description: 'RepoFuse OAuth is not configured on this deployment.',
+        },
+        { status: 503 },
+      ),
+    )
+  }
+
   return withCors(await oauthHandler(request))
 }
 

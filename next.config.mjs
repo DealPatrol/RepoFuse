@@ -3,6 +3,19 @@ import { fileURLToPath } from 'node:url'
 
 const repoRoot = path.dirname(fileURLToPath(import.meta.url))
 
+function clerkFrontendOrigin(publishableKey) {
+  if (!publishableKey) return null
+
+  try {
+    const encoded = publishableKey.replace(/^pk_(?:test|live)_/, '')
+    const frontendApi = Buffer.from(encoded, 'base64').toString('utf8').replace(/\$$/, '')
+    const url = new URL(frontendApi.startsWith('http') ? frontendApi : `https://${frontendApi}`)
+    return url.protocol === 'https:' ? url.origin : null
+  } catch {
+    return null
+  }
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Keep the curated repo AGENTS.md under human control. Next.js 16.3+ otherwise
@@ -15,6 +28,15 @@ const nextConfig = {
     unoptimized: true,
   },
   async headers() {
+    const configuredClerkOrigin = clerkFrontendOrigin(
+      process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+    )
+    const clerkSources = [
+      'https://*.clerk.accounts.dev',
+      'https://clerk.repofuse.com',
+      configuredClerkOrigin,
+    ].filter(Boolean)
+
     const contentSecurityPolicy = [
       "default-src 'self'",
       "base-uri 'self'",
@@ -22,8 +44,9 @@ const nextConfig = {
       "img-src 'self' data: blob: https:",
       "font-src 'self' data: https:",
       "style-src 'self' 'unsafe-inline'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live https://va.vercel-scripts.com",
-      "connect-src 'self' https://api.github.com https://github.com https://api.openai.com https://api.anthropic.com https://vitals.vercel-insights.com https://va.vercel-scripts.com https://*.neon.tech",
+      `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live https://va.vercel-scripts.com ${clerkSources.join(' ')} https://challenges.cloudflare.com`,
+      `connect-src 'self' https://api.github.com https://github.com https://api.openai.com https://api.anthropic.com https://vitals.vercel-insights.com https://va.vercel-scripts.com https://*.neon.tech https://api.clerk.com ${clerkSources.join(' ')} https://challenges.cloudflare.com`,
+      `frame-src ${clerkSources.join(' ')} https://challenges.cloudflare.com`,
       "form-action 'self' https://github.com",
     ].join('; ')
 

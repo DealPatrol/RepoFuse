@@ -35,8 +35,9 @@ Ready in the repository:
 
 - `server.json` uses the current `2025-12-11` schema, the `com.repofuse/repofuse` namespace, and a
   Streamable HTTP `remotes` entry.
-- `package.json` has a matching `mcpName` for a future local npm release. The remote listing does not
-  require publishing that package.
+- `mcp/package.json` has a matching `mcpName` for a future local npm release, and `mcp/LICENSE`
+  applies only to that package. The private SaaS root package remains unpublished and unlicensed by
+  this MCP change. The remote listing does not require publishing the local package.
 
 Submit:
 
@@ -53,7 +54,8 @@ Fields come from `server.json`: name `com.repofuse/repofuse`, title `RepoFuse`, 
 short description, website URL, icon URL, remote URL, and transport.
 
 Owner action: create and safely store the registry private key, publish the HTTP or DNS proof, and run
-the authenticated publisher command.
+the authenticated publisher command. If the local package is published later, run
+`npm pack --dry-run --prefix mcp` first and add a Registry `packages` entry only after npm publication.
 
 ### Glama
 
@@ -191,8 +193,8 @@ Pro plan, at least 150 credits, and permission to create repositories.
    - Expected: calls `list_github_repositories`; returns only repositories authorized for the account.
 2. **Analysis:** “Analyze `DealPatrol/sample-web` and `DealPatrol/sample-api`. Suggest up to three new
    apps that reuse code from both, and explain the reusable files.”
-   - Expected: calls `analyze_repositories`; returns grounded blueprints and consumes one allowed
-     analysis.
+   - Expected: calls `analyze_repositories`; returns grounded blueprints and consumes one Free
+     monthly allowance or 100 paid-plan credits.
 3. **Saved gaps:** “For saved blueprint `<REVIEW_BLUEPRINT_UUID>`, show existing files, missing files,
    reuse percentage, and technology stack. Do not generate anything.”
    - Expected: calls `get_blueprint_gaps`; returns only that reviewer-owned blueprint.
@@ -214,9 +216,24 @@ Pro plan, at least 150 credits, and permission to create repositories.
 3. **Invalid write input:** “Create a repository named `owner/repo` from this blueprint.”
    - Expected: input-schema validation rejects the slash-containing name and no GitHub write occurs.
 
+## Billing behavior for website-session MCP users
+
+The `/api/mcp` route still accepts existing RepoFuse cookie sessions when no Bearer token is present.
+Before this PR, those MCP calls did not enforce the website’s billing controls. This PR intentionally
+changes only MCP calls made through that route:
+
+- Free `analyze_repositories` calls consume one monthly analysis allowance.
+- Paid `analyze_repositories` calls cost 100 RepoFuse credits.
+- `generate_scaffold` requires Pro and costs 150 RepoFuse credits.
+- Retried MCP request IDs are deduplicated so a single invocation cannot consume quota or credits
+  more than once.
+
+Normal non-MCP website routes retain their existing behavior.
+
 ## Production owner checklist
 
-- [ ] Apply `migrations/010_mcp_rate_limits.sql` to the production Neon database.
+- [ ] Apply `migrations/010_mcp_rate_limits.sql` and
+  `migrations/011_mcp_analysis_idempotency.sql` to the production Neon database.
 - [ ] In Vercel, retain/set `DATABASE_URL`, `NEXT_PUBLIC_APP_URL=https://repofuse.com`,
   `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, and either `AI_GATEWAY_API_KEY` /
   `VERCEL_OIDC_TOKEN` or `ANTHROPIC_API_KEY`. Optional model override: `REPOFUSE_MODEL`.

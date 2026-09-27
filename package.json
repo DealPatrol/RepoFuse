@@ -1,29 +1,7 @@
 {
-  "name": "@repofuse/mcp",
-  "version": "0.3.0",
-  "type": "module",
-  "private": false,
-  "description": "RepoFuse MCP server for discovering buildable apps hidden in GitHub repositories.",
-  "license": "MIT",
-  "homepage": "https://repofuse.com/mcp",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/DealPatrol/RepoFuse.git"
-  },
-  "mcpName": "com.repofuse/repofuse",
-  "publishConfig": {
-    "access": "public"
-  },
-  "bin": {
-    "repofuse-mcp": "mcp/repofuse.mjs"
-  },
-  "files": [
-    "mcp/repofuse.mjs",
-    "lib/repofuse-core.js",
-    "lib/repofuse-mcp.js",
-    "README.md",
-    "LICENSE"
-  ],
+  "name": "repofuse",
+  "version": "0.1.0",
+  "private": true,
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "dev": "next dev",

@@ -258,6 +258,23 @@ export async function deductCredits(
   `
 
   if (transaction.length === 0) {
+    if (idempotencyKey) {
+      const existing = await sql`
+        SELECT *
+        FROM credit_transactions
+        WHERE idempotency_key = ${idempotencyKey}
+          AND user_id = ${userId}
+        LIMIT 1
+      `
+      if (existing[0]) {
+        return {
+          success: true,
+          transaction: existing[0] as CreditTransaction,
+          wasAlreadyProcessed: true,
+        }
+      }
+    }
+
     const currentBalance = await getCreditBalance(userId)
     return {
       success: false,

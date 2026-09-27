@@ -94,7 +94,7 @@ function validateTools(tools, expected) {
     if (!tool.title || !tool.description) {
       throw new Error(`${tool.name} must expose a title and description.`)
     }
-    for (const annotation of ['readOnlyHint', 'destructiveHint', 'openWorldHint']) {
+    for (const annotation of ['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint']) {
       if (typeof tool.annotations?.[annotation] !== 'boolean') {
         throw new Error(`${tool.name} must expose boolean ${annotation}.`)
       }

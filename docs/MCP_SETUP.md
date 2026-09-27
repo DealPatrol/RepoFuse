@@ -23,6 +23,13 @@ Optional:
 pnpm mcp:repofuse
 ```
 
+The publishable local package metadata and package-scoped MIT license live under `mcp/`. The root
+RepoFuse SaaS package remains private. Validate a future package without publishing it with:
+
+```bash
+npm pack --dry-run --prefix mcp
+```
+
 ### Structural smoke test
 
 This checks that the MCP server boots and registers the expected tools.
@@ -68,7 +75,8 @@ Behavior:
 - supports Clerk OAuth access tokens and existing authenticated RepoFuse web sessions
 - resolves the authorized user's GitHub token server-side
 - allows `create_repo_from_blueprint` only when billing permits Pro features
-- enforces free-plan analysis limits, Pro scaffold access, scaffold credits, and per-user MCP rate limits
+- enforces free-plan analysis limits, 100-credit paid analyses, Pro scaffold access, 150-credit
+  scaffolds, retry idempotency, and per-user MCP rate limits
 - shares the same MCP tool definitions as the stdio server
 - allows up to 300 seconds for long repository analyses
 
@@ -94,7 +102,8 @@ Key values for MCP-capable behavior:
 - `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN`, with `ANTHROPIC_API_KEY` as a fallback
 - optional: `REPOFUSE_MODEL`
 
-Apply `migrations/010_mcp_rate_limits.sql` before enabling the hosted endpoint.
+Apply `migrations/010_mcp_rate_limits.sql` and
+`migrations/011_mcp_analysis_idempotency.sql` before enabling the hosted endpoint.
 
 In Clerk OAuth Applications → Settings → Client onboarding:
 

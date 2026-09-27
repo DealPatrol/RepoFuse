@@ -1,0 +1,37 @@
+{
+  "name": "@repofuse/mcp",
+  "version": "0.3.0",
+  "type": "module",
+  "private": false,
+  "description": "RepoFuse MCP server for discovering buildable apps hidden in GitHub repositories.",
+  "license": "MIT",
+  "homepage": "https://repofuse.com/mcp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DealPatrol/RepoFuse.git",
+    "directory": "mcp"
+  },
+  "mcpName": "com.repofuse/repofuse",
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "repofuse-mcp": "dist/repofuse.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "prepack": "node build-package.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.123.0",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "zod": "^4.5.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
