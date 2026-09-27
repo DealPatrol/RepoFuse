@@ -6,10 +6,22 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
-  lint-and-typecheck:
-    name: Lint & Type Check
+  quality:
+    name: Lint, Type Check, Test & Build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: true
+      DATABASE_URL: postgresql://user:password@example.invalid/database?sslmode=require
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: placeholder
+      ANTHROPIC_API_KEY: placeholder
+
     steps:
       - uses: actions/checkout@v4
 
@@ -25,11 +37,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: MCP smoke test
-        run: pnpm mcp:test
+      - name: Lint
+        run: pnpm lint
 
       - name: Type check
         run: pnpm exec tsc --noEmit
 
-      - name: Lint (non-blocking)
-        run: pnpm lint || true
+      - name: Route tests
+        run: pnpm test
+
+      - name: Critical regression checks
+        run: node scripts/critical-regression-check.mjs
+
+      - name: MCP smoke test
+        run: pnpm mcp:test
+
+      - name: Production build
+        run: pnpm build
