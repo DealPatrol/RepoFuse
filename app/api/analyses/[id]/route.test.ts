@@ -7,6 +7,7 @@ import {
   getBlueprintsByAnalysis,
   getRepositoriesForAnalysis,
 } from '@/lib/queries'
+import { applyBlueprintAccess } from '@/lib/blueprint-access'
 
 vi.mock('@/lib/auth', () => ({
   getCurrentUser: vi.fn(),
@@ -18,10 +19,15 @@ vi.mock('@/lib/queries', () => ({
   getRepositoriesForAnalysis: vi.fn(),
 }))
 
+vi.mock('@/lib/blueprint-access', () => ({
+  applyBlueprintAccess: vi.fn(),
+}))
+
 const currentUser = vi.mocked(getCurrentUser)
 const analysisById = vi.mocked(getAnalysisById)
 const blueprints = vi.mocked(getBlueprintsByAnalysis)
 const repositories = vi.mocked(getRepositoriesForAnalysis)
+const blueprintAccess = vi.mocked(applyBlueprintAccess)
 const request = new NextRequest('http://localhost/api/analyses/analysis-1')
 const context = { params: Promise.resolve({ id: 'analysis-1' }) }
 
@@ -56,6 +62,7 @@ describe('GET /api/analyses/[id]', () => {
     analysisById.mockResolvedValue({ id: 'analysis-1' } as never)
     repositories.mockResolvedValue([])
     blueprints.mockResolvedValue([])
+    blueprintAccess.mockResolvedValue({ blueprints: [] } as never)
 
     const response = await GET(request, context)
 
