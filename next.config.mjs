@@ -41,7 +41,7 @@ const nextConfig = {
       "default-src 'self'",
       "base-uri 'self'",
       "frame-ancestors 'none'",
-      "img-src 'self' data: blob: https:",
+      "img-src 'self' data: blob: https: https://img.clerk.com",
       "font-src 'self' data: https:",
       "style-src 'self' 'unsafe-inline'",
       `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live https://va.vercel-scripts.com ${clerkSources.join(' ')} https://challenges.cloudflare.com`,
