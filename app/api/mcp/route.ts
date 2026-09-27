@@ -92,7 +92,15 @@ async function handleMcpRequest(request: Request) {
         await releaseAnalysisUsage(usage.githubId)
       }
     },
-    beforeScaffold: async ({ appName, technologies }: { appName: string; technologies: string[] }) => {
+    beforeScaffold: async ({
+      appName,
+      technologies,
+      invocationId,
+    }: {
+      appName: string
+      technologies: string[]
+      invocationId: string
+    }) => {
       if (!canAccessPro) {
         throw new Error('Scaffold generation is a Pro feature. Upgrade your RepoFuse plan to use it.')
       }
@@ -100,11 +108,12 @@ async function handleMcpRequest(request: Request) {
         appName,
         technologies,
         source: 'mcp',
+        idempotency_key: `mcp:scaffold:${user.id}:${invocationId}`,
       })
       if (!charge.success) {
         throw new Error(charge.error ?? 'Insufficient credits for scaffold generation.')
       }
-      return { charged: true, appName }
+      return { charged: !charge.wasAlreadyProcessed, appName }
     },
     onScaffoldError: async (usage: { charged?: boolean; appName?: string } | undefined) => {
       if (usage?.charged) {
