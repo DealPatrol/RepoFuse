@@ -2,6 +2,14 @@ import crypto from 'crypto'
 
 const ENCRYPTION_ALGORITHM = 'aes-256-gcm'
 
+function getEncryptionSecret(): string {
+  const secret = process.env.ENCRYPTION_SECRET?.trim()
+  if (!secret) {
+    throw new Error('ENCRYPTION_SECRET is required to encrypt API keys')
+  }
+  return secret
+}
+
 /**
  * Encrypt an API key using AES-256-GCM
  * Uses userId as part of the key material to ensure keys are user-specific
@@ -12,7 +20,7 @@ export function encryptAPIKey(apiKey: string, userId: string): string {
 
   // Derive key from userId + environment secret
   const keyMaterial = crypto.pbkdf2Sync(
-    `${userId}:${process.env.ENCRYPTION_SECRET || 'default-secret'}`,
+    `${userId}:${getEncryptionSecret()}`,
     salt,
     100000,
     32,
@@ -41,7 +49,7 @@ export function decryptAPIKey(encryptedKey: string, userId: string): string {
 
   // Derive same key from userId + environment secret
   const keyMaterial = crypto.pbkdf2Sync(
-    `${userId}:${process.env.ENCRYPTION_SECRET || 'default-secret'}`,
+    `${userId}:${getEncryptionSecret()}`,
     salt,
     100000,
     32,

@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
     // Save to DB
     const db = getDb()
     await db`
-      UPDATE users
+      UPDATE user_auth
       SET vercel_access_token = ${access_token},
           vercel_team_id      = ${team_id ?? null},
           updated_at          = NOW()

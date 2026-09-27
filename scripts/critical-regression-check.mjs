@@ -37,10 +37,26 @@ assertIncludes(
   'const user = await getCurrentUser()',
   'legacy analysis must authenticate before billing or AI work',
 )
+assertIncludes(
+  'app/api/analyses/[id]/analyze/route.ts',
+  'getAnalysisById(analysisId, user.id)',
+  'legacy analysis must verify ownership before billing or AI work',
+)
+assertIncludes(
+  'app/api/analyses/[id]/analyze/route.ts',
+  'getRepositoriesForAnalysis(analysisId, user.id)',
+  'legacy analysis must use repositories linked to the owned analysis',
+)
 assertNotIncludes(
   'app/api/analyses/[id]/analyze/route.ts',
   'userId: string',
   'legacy analysis must not trust a client-supplied userId',
+)
+
+assertIncludes(
+  'app/api/analyze/route.ts',
+  'const user = await getCurrentUser()',
+  'cross-platform analysis must require an authenticated user',
 )
 
 assertIncludes(
@@ -110,6 +126,67 @@ assertIncludes(
   'migrations/009_credit_transaction_idempotency.sql',
   'CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_transactions_idempotency_key',
   'credit idempotency migration must enforce a unique key',
+)
+
+assertIncludes(
+  'app/api/auth/vercel/callback/route.ts',
+  'UPDATE user_auth',
+  'Vercel OAuth must persist credentials to the application user table',
+)
+assertIncludes(
+  'app/api/auth/vercel/disconnect/route.ts',
+  'UPDATE user_auth',
+  'Vercel disconnect must clear credentials from the application user table',
+)
+assertNotIncludes(
+  'scripts/01-create-schema.sql',
+  "plan VARCHAR(50) DEFAULT 'free' CHECK (plan IN ('free', 'byok', 'pro', 'scale'))",
+  'fresh schema must not declare the subscriptions plan column twice',
+)
+assertIncludes(
+  'scripts/01-create-schema.sql',
+  'CREATE TABLE IF NOT EXISTS user_credits',
+  'fresh schema must create credit balances',
+)
+assertIncludes(
+  'scripts/01-create-schema.sql',
+  'idx_credit_transactions_idempotency_key',
+  'fresh schema must enforce idempotent credit transactions',
+)
+assertIncludes(
+  'app/api/setup/init-db/route.ts',
+  "process.env.NODE_ENV === 'production'",
+  'database initialization must be disabled in production',
+)
+assertIncludes(
+  'app/api/auth/debug/route.ts',
+  "process.env.NODE_ENV === 'production'",
+  'the auth diagnostic endpoint must be disabled in production',
+)
+assertNotIncludes(
+  'lib/api-key-encryption.ts',
+  "|| 'default-secret'",
+  'API key encryption must not fall back to a shared default secret',
+)
+assertNotIncludes(
+  'app/api/reddit/sync/route.ts',
+  "|| 'default-secret'",
+  'cron authentication must not fall back to a shared default secret',
+)
+assertIncludes(
+  'app/api/github/create-repo/route.ts',
+  'privateRepo: true',
+  'generated GitHub repositories must be private by default',
+)
+assertIncludes(
+  'app/api/analyses/[id]/route.ts',
+  'applyBlueprintAccess(user, blueprints)',
+  'analysis API responses must mask locked blueprint internals',
+)
+assertIncludes(
+  'app/api/analyses/[id]/blueprints/route.ts',
+  'applyBlueprintAccess(user, blueprints)',
+  'blueprint API responses must mask locked blueprint internals',
 )
 
 console.log('critical regression invariants passed')

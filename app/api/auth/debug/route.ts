@@ -5,13 +5,17 @@ import { getDb } from '@/lib/db'
 // Diagnostic endpoint — visit /api/auth/debug to see what the server sees.
 // Remove or restrict this once the auth issue is resolved.
 export async function GET() {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
   const cookieStore = await cookies()
   const userIdCookie = cookieStore.get('github_user_id')?.value
   const stateCookie = !!cookieStore.get('github_oauth_state')?.value
 
   const result: Record<string, unknown> = {
     cookies: {
-      github_user_id: userIdCookie ? `present (value: ${userIdCookie})` : 'missing',
+      github_user_id: userIdCookie ? 'present' : 'missing',
       github_oauth_state: stateCookie ? 'present' : 'missing',
     },
     env: {

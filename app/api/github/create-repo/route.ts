@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
       accessToken,
       repoName: parsedBody.data.repoName,
       app: parsedBody.data.app,
-      privateRepo: false,
+      privateRepo: true,
     })
 
     return NextResponse.json({
