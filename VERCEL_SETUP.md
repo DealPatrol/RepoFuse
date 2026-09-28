@@ -15,8 +15,8 @@ Go to your Vercel project → **Settings** → **Environment Variables** and add
 | `GITHUB_CLIENT_SECRET` | Production, Preview, Development | GitHub OAuth App client secret |
 | `NEXT_PUBLIC_APP_URL` | Production | Your production URL (e.g. `https://repofuse.vercel.app`) |
 | `NEXT_PUBLIC_APP_URL` | Preview | Leave blank — Vercel sets this automatically for previews |
-| `OPENAI_API_KEY` | Production, Preview | OpenAI API key for AI analysis |
-| `ANTHROPIC_API_KEY` | Production, Preview | Anthropic API key for scaffold generation |
+| `AI_GATEWAY_API_KEY` | Optional | Static AI Gateway key. Not required when OIDC is enabled |
+| `ANTHROPIC_API_KEY` | Development only | Direct Anthropic fallback when AI Gateway credentials are absent |
 | `STRIPE_SECRET_KEY` | Production | Live secret key (`sk_live_...`) |
 | `STRIPE_WEBHOOK_SECRET` | Production | Signing secret (`whsec_...`) from the **live** webhook endpoint |
 | `STRIPE_PRO_PRICE_ID` | Production | Pro plan Price ID |
@@ -32,8 +32,20 @@ Go to your Vercel project → **Settings** → **Environment Variables** and add
 5. Redeploy after changing `STRIPE_WEBHOOK_SECRET`.
 
 **If Stripe emails about failed deliveries:** open the webhook → **Event deliveries** and check the HTTP status. `400 Invalid signature` means `STRIPE_WEBHOOK_SECRET` does not match that endpoint’s signing secret. `503 Webhook not configured` means the env var is missing on Vercel.
-| `ANTHROPIC_API_KEY` | Production, Preview | Anthropic API key for scaffold generation and MCP-backed scaffold generation |
-| `ANTHROPIC_MODEL` | Optional | Override the Claude model used for scaffold generation |
+
+### AI Gateway (required for production LLM calls)
+
+RepoFuse routes analysis, blueprint/scaffold generation, and hosted MCP LLM calls through the Vercel AI Gateway. A funded Anthropic account is not required.
+
+1. In the Vercel project `repofuse`, open **Settings → AI Gateway** and enable it. Usage is billed on the Vercel account.
+2. Keep **Settings → Security → Secure Backend Access with OpenID Connect** enabled so Production and Preview functions receive `VERCEL_OIDC_TOKEN`. Redeploy after turning it on.
+3. Optional: create an AI Gateway API key and set `AI_GATEWAY_API_KEY` if you do not want to use OIDC.
+4. Do not add the Anthropic API key as a gateway bring-your-own-key credential. The app ignores `ANTHROPIC_API_KEY` whenever `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` is present.
+
+Optional model override: `ANTHROPIC_MODEL` or `REPOFUSE_MODEL` (`anthropic/claude-opus-4.6` or `claude-opus-4-6`).
+
+| Variable | Environment | Description |
+|----------|-------------|-------------|
 | `STRIPE_SECRET_KEY` | Production, Preview | Stripe secret key for checkout + billing portal |
 | `STRIPE_PRO_PRICE_ID` | Production, Preview | Stripe price ID for the Pro subscription |
 | `STRIPE_WEBHOOK_SECRET` | Optional | Stripe webhook signing secret |
@@ -74,8 +86,7 @@ The workflow pulls env vars from Vercel automatically via `vercel pull`. Set the
 | `GITHUB_CLIENT_ID` | GitHub OAuth App client ID |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret |
 | `NEXT_PUBLIC_APP_URL` | Your production URL |
-| `OPENAI_API_KEY` | OpenAI API key for AI analysis |
-| `ANTHROPIC_API_KEY` | Anthropic API key for scaffold generation |
+| `AI_GATEWAY_API_KEY` | Optional static AI Gateway key. OIDC covers Vercel deployments |
 | `ANTHROPIC_MODEL` | Optional Claude model override |
 | `STRIPE_SECRET_KEY` | Stripe secret key |
 | `STRIPE_PRO_PRICE_ID` | Stripe Pro price ID |
@@ -112,8 +123,8 @@ psql $DATABASE_URL -f scripts/01-create-schema.sql
 
 **Database errors** → Verify `DATABASE_URL` is correct and Neon project is active
 
-**AI analysis fails** → Check `OPENAI_API_KEY` has sufficient credits
+**AI analysis fails** → Enable AI Gateway on the Vercel project and confirm `VERCEL_OIDC_TOKEN` is present at runtime (OIDC), or set `AI_GATEWAY_API_KEY`
 
-**Scaffold generation fails** → Check `ANTHROPIC_API_KEY` is set and valid
+**Scaffold generation fails** → Same AI Gateway setup. `ANTHROPIC_API_KEY` is only the local fallback when gateway credentials are missing
 
 **GitHub Actions deploy fails** → Verify `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` are set as GitHub secrets

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { generateText } from 'ai'
+import { aiConfigErrorMessage, createPromptRunner, isAiConfigured } from '@/lib/ai-gateway'
 import { scanCrossPlatformCode } from '@/lib/cross-platform-scanner'
-import { analyzeScannedFiles, createAnthropicPromptRunner } from '@/lib/repofuse-core.js'
+import { analyzeScannedFiles } from '@/lib/repofuse-core.js'
 import { getCurrentUser } from '@/lib/auth'
 
 export async function POST() {
@@ -11,32 +11,20 @@ export async function POST() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    if (!isAiConfigured()) {
+      return NextResponse.json({ error: aiConfigErrorMessage() }, { status: 503 })
+    }
+
     const scannedFiles = await scanCrossPlatformCode()
 
     if (scannedFiles.length === 0) {
       return NextResponse.json({ error: 'No code files found to analyze' }, { status: 400 })
     }
 
-    const anthropicRunner = process.env.ANTHROPIC_API_KEY
-      ? createAnthropicPromptRunner({
-          apiKey: process.env.ANTHROPIC_API_KEY,
-          model: process.env.ANTHROPIC_MODEL || process.env.REPOFUSE_MODEL || 'claude-opus-4-6',
-        })
-      : undefined
-
     const result = await analyzeScannedFiles({
       scannedFiles,
       maxBlueprints: 8,
-      runPrompt: anthropicRunner ?? (async (prompt: string) => {
-        const response = await generateText({
-          model: 'openai/gpt-4o-mini',
-          prompt,
-          temperature: 0.2,
-          maxOutputTokens: 4000,
-        })
-
-        return response.text
-      }),
+      runPrompt: createPromptRunner({ feature: 'legacy', kind: 'repofuse', temperature: 0.2 }),
     })
 
     return NextResponse.json({

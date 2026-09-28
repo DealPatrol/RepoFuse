@@ -1,11 +1,8 @@
-import { getAnthropicMessagesModel, getGatewayModel } from '@/lib/ai-gateway'
+import { DEFAULT_ANTHROPIC_MODEL, getAnthropicMessagesModel, getGatewayModel } from '@/lib/ai-gateway'
 
-/** @deprecated Prefer getGatewayModel() for AI SDK or getAnthropicMessagesModel() for Messages API */
-export const DEFAULT_ANTHROPIC_MODEL = 'claude-opus-4-6'
+export { DEFAULT_ANTHROPIC_MODEL, getGatewayModel }
 
-/** Anthropic Messages API model (gateway slug when AI Gateway auth is configured). */
+/** Active model id: gateway slug when AI Gateway auth is configured, otherwise the direct Anthropic id. */
 export function getAnthropicModel(): string {
   return getAnthropicMessagesModel()
 }
-
-export { getGatewayModel }

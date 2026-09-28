@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateText } from 'ai'
+import { aiConfigErrorMessage, isAiConfigured, languageModelFor, llmProviderOptions } from '@/lib/ai-gateway'
 import { getCreditBalance, deductCredits, refundCredits, CREDITS } from '@/lib/credits'
 import { getCurrentUser } from '@/lib/auth'
 import { getAnalysisById, getRepositoriesForAnalysis } from '@/lib/queries'
-
-const model = 'openai/gpt-4-turbo'
 
 interface SelectedRepository {
   name: string
@@ -32,6 +31,10 @@ export async function POST(
     const user = await getCurrentUser()
     if (!user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (!isAiConfigured()) {
+      return NextResponse.json({ error: aiConfigErrorMessage() }, { status: 503 })
     }
 
     const { id: analysisId } = await params
@@ -110,10 +113,11 @@ Your task is to discover what applications could be built by combining files fro
 Return as JSON array of app suggestions. Focus on practical, buildable applications.`
 
     const result = await generateText({
-      model,
+      model: languageModelFor('legacy'),
       prompt,
       temperature: 0.7,
       maxOutputTokens: 2000,
+      ...llmProviderOptions(user.id, 'legacy'),
     })
 
     // Parse AI response and save suggestions

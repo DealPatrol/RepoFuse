@@ -1,17 +1,5 @@
 import { cookies } from 'next/headers'
-import { Anthropic } from '@anthropic-ai/sdk'
-import { getAnthropicModel } from '@/lib/anthropic-model'
-
-let __anthropicClient: Anthropic | null = null
-function getAnthropic(): Anthropic {
-  if (__anthropicClient) return __anthropicClient
-  const key = process.env.ANTHROPIC_API_KEY
-  if (!key) {
-    throw new Error('ANTHROPIC_API_KEY is not configured')
-  }
-  __anthropicClient = new Anthropic({ apiKey: key })
-  return __anthropicClient
-}
+import { generateWithGateway } from '@/lib/ai-gateway'
 
 interface ScannedFile {
   path: string
@@ -65,19 +53,11 @@ For each file, provide:
 - Reusability score
 - Can this be combined with other files to build apps?`
 
-  const response = await getAnthropic().messages.create({
-    model: getAnthropicModel(),
-    max_tokens: 4000,
-    messages: [
-      {
-        role: 'user',
-        content: analysisPrompt,
-      },
-    ],
+  const analysis = await generateWithGateway({
+    feature: 'cross-platform',
+    maxOutputTokens: 4000,
+    messages: [{ role: 'user', content: analysisPrompt }],
   })
-
-  // Parse Claude's response and enrich file data
-  const analysis = response.content[0].type === 'text' ? response.content[0].text : ''
 
   return allFiles.map((file) => ({
     ...file,

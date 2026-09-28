@@ -1,5 +1,4 @@
 import { generateText } from 'ai'
-import Anthropic from '@anthropic-ai/sdk'
 
 export type AIProvider = 'anthropic' | 'openai' | 'grok' | 'deepinfra' | 'builtin'
 
@@ -22,9 +21,11 @@ export function getProviderModel(provider: AIProvider): string {
     case 'deepinfra':
       return 'deepseek-ai/deepseek-coder-33b-instruct'
     case 'builtin':
-      return 'claude-opus-4.6' // Default to Anthropic for builtin
-    default:
-      return 'claude-opus-4.6'
+      return 'anthropic/claude-opus-4.6'
+    default: {
+      const exhaustive: never = provider
+      throw new Error(`Unhandled AI provider: ${String(exhaustive)}`)
+    }
   }
 }
 
@@ -42,10 +43,11 @@ export function getAISDKModel(provider: AIProvider, apiKey?: string): string {
     case 'deepinfra':
       return apiKey ? `deepinfra/deepseek-ai/deepseek-coder-33b-instruct?apiKey=${apiKey}` : 'deepinfra/deepseek-ai/deepseek-coder-33b-instruct'
     case 'builtin':
-      // Builtin uses Vercel AI Gateway (no API key needed)
       return 'anthropic/claude-opus-4.6'
-    default:
-      return 'anthropic/claude-opus-4.6'
+    default: {
+      const exhaustive: never = provider
+      throw new Error(`Unhandled AI provider: ${String(exhaustive)}`)
+    }
   }
 }
 
@@ -69,10 +71,12 @@ export async function validateAPIKey(provider: AIProvider, apiKey: string): Prom
         // Test DeepInfra key format
         return apiKey.length > 20
       case 'builtin':
-        // Builtin doesn't need validation
         return true
-      default:
+      default: {
+        const exhaustive: never = provider
+        console.error(`[v0] API key validation error for ${String(exhaustive)}`)
         return false
+      }
     }
   } catch (error) {
     console.error(`[v0] API key validation error for ${provider}:`, error)

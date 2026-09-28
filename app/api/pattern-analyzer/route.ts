@@ -1,25 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Anthropic } from '@anthropic-ai/sdk'
 import {
   getAnalysisById,
   getRepositoriesForAnalysis,
   getBlueprintsByAnalysis,
   getFilesByRepository,
 } from '@/lib/queries'
-import { getAnthropicModel } from '@/lib/anthropic-model'
+import { aiConfigErrorMessage, generateWithGateway, isAiConfigured } from '@/lib/ai-gateway'
 import { getCurrentUser } from '@/lib/auth'
 import { deductCredits, refundCredits, CREDITS } from '@/lib/credits'
-
-let __anthropicClient: Anthropic | null = null
-function getAnthropic(): Anthropic {
-  if (__anthropicClient) return __anthropicClient
-  const key = process.env.ANTHROPIC_API_KEY
-  if (!key) {
-    throw new Error('ANTHROPIC_API_KEY is not configured')
-  }
-  __anthropicClient = new Anthropic({ apiKey: key })
-  return __anthropicClient
-}
 
 export interface ProjectSuggestion {
   name: string
@@ -58,11 +46,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'analysisId is required' }, { status: 400 })
     }
 
-    if (!process.env.ANTHROPIC_API_KEY) {
-      return NextResponse.json(
-        { error: 'Pattern Analyzer is not configured. Missing ANTHROPIC_API_KEY.' },
-        { status: 503 },
-      )
+    if (!isAiConfigured()) {
+      return NextResponse.json({ error: aiConfigErrorMessage() }, { status: 503 })
     }
 
     const analysis = await getAnalysisById(analysisId, user.id)
@@ -175,13 +160,12 @@ Respond ONLY with a valid JSON object (no markdown fences) matching this exact s
   ]
 }`
 
-    const response = await getAnthropic().messages.create({
-      model: getAnthropicModel(),
-      max_tokens: 4096,
+    const raw = (await generateWithGateway({
+      feature: 'pattern-analyzer',
+      userId: user.id,
+      maxOutputTokens: 4096,
       messages: [{ role: 'user', content: prompt }],
-    })
-
-    const raw = response.content[0].type === 'text' ? response.content[0].text.trim() : ''
+    })).trim()
 
     // Strip accidental markdown fences
     const jsonText = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()

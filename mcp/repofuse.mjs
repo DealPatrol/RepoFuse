@@ -1,18 +1,21 @@
 #!/usr/bin/env node
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { createAnthropicPromptRunner } from '../lib/repofuse-core.js'
+import { aiConfigErrorMessage, createPromptRunner, getActiveAiProvider } from '../lib/ai-runtime.js'
 import { createRepoFuseMcpServer } from '../lib/repofuse-mcp.js'
 
 const githubToken = requireEnv('GITHUB_TOKEN')
-const anthropicApiKey = requireEnv('ANTHROPIC_API_KEY')
-const model = process.env.REPOFUSE_MODEL || process.env.ANTHROPIC_MODEL || 'claude-opus-4-6'
+if (getActiveAiProvider() === 'none') {
+  throw new Error(aiConfigErrorMessage())
+}
 const maxFilesPerRepo = numberFromEnv('REPOFUSE_MAX_FILES_PER_REPO', 120)
 const maxBlueprints = numberFromEnv('REPOFUSE_MAX_BLUEPRINTS', 5)
 
-const promptRunner = createAnthropicPromptRunner({
-  apiKey: anthropicApiKey,
-  model,
+const promptRunner = createPromptRunner({
+  feature: 'mcp',
+  kind: 'repofuse',
+  model: process.env.REPOFUSE_MODEL || process.env.ANTHROPIC_MODEL,
+  temperature: 0.2,
 })
 
 const server = createRepoFuseMcpServer({

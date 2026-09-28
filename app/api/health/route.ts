@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { isAiConfigured } from '@/lib/ai-gateway'
+import { getActiveAiProvider, isAiConfigured } from '@/lib/ai-gateway'
 import { isClerkConfigured } from '@/lib/clerk-auth'
 import { getDb } from '@/lib/db'
 
@@ -51,6 +51,7 @@ export async function GET() {
   return NextResponse.json(
     {
       status,
+      aiProvider: getActiveAiProvider(),
       uptime_ms: Date.now() - startedAt,
       commit: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
       env,

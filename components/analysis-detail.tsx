@@ -143,7 +143,7 @@ export function AnalysisDetail({
       URL.revokeObjectURL(url)
     } catch (e) {
       console.error(e)
-      alert(e instanceof Error ? e.message : 'Could not generate scaffold. Add ANTHROPIC_API_KEY in production if missing.')
+      alert(e instanceof Error ? e.message : 'Could not generate scaffold. Configure Vercel AI Gateway or an Anthropic API key.')
     } finally {
       setScaffoldLoadingId(null)
     }

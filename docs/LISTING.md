@@ -235,8 +235,10 @@ Normal non-MCP website routes retain their existing behavior.
 - [ ] Apply `migrations/010_mcp_rate_limits.sql` and
   `migrations/011_mcp_analysis_idempotency.sql` to the production Neon database.
 - [ ] In Vercel, retain/set `DATABASE_URL`, `NEXT_PUBLIC_APP_URL=https://repofuse.com`,
-  `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, and either `AI_GATEWAY_API_KEY` /
-  `VERCEL_OIDC_TOKEN` or `ANTHROPIC_API_KEY`. Optional model override: `REPOFUSE_MODEL`.
+  `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, and AI Gateway access via
+  `VERCEL_OIDC_TOKEN` (enable OIDC and AI Gateway on the Vercel project) or
+  `AI_GATEWAY_API_KEY`. `ANTHROPIC_API_KEY` is only a fallback when those are unset.
+  Optional model override: `REPOFUSE_MODEL` (`anthropic/claude-opus-4.6`).
 - [ ] Confirm the Vercel plan allows the route’s 300-second `maxDuration`.
 - [ ] In Clerk, keep GitHub social login enabled and request the GitHub permissions needed to read
   selected private repositories and create a repository on explicit user request.
