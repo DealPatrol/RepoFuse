@@ -128,6 +128,6 @@ Full setup guide: `docs/MCP_SETUP.md`
 - For production, update `NEXT_PUBLIC_APP_URL`
 
 **AI analysis failing?**
-- On Vercel, enable AI Gateway and OIDC (`VERCEL_OIDC_TOKEN`), or set `AI_GATEWAY_API_KEY`
+- On Vercel, enable AI Gateway and OIDC. `/api/health` reports `aiProvider: "gateway"` when `VERCEL=1`, even if `VERCEL_OIDC_TOKEN` is unset
 - Locally, set `ANTHROPIC_API_KEY` if you are not using the gateway
 - Look at server logs for the specific error

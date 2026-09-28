@@ -13,7 +13,7 @@ export interface AIProviderConfig {
 export function getProviderModel(provider: AIProvider): string {
   switch (provider) {
     case 'anthropic':
-      return 'anthropic/claude-opus-4.6'
+      return 'anthropic/claude-sonnet-4.6'
     case 'openai':
       return 'gpt-4o'
     case 'grok':
@@ -21,7 +21,7 @@ export function getProviderModel(provider: AIProvider): string {
     case 'deepinfra':
       return 'deepseek-ai/deepseek-coder-33b-instruct'
     case 'builtin':
-      return 'anthropic/claude-opus-4.6'
+      return 'anthropic/claude-sonnet-4.6'
     default: {
       const exhaustive: never = provider
       throw new Error(`Unhandled AI provider: ${String(exhaustive)}`)
@@ -35,7 +35,7 @@ export function getProviderModel(provider: AIProvider): string {
 export function getAISDKModel(provider: AIProvider, apiKey?: string): string {
   switch (provider) {
     case 'anthropic':
-      return apiKey ? `anthropic/claude-opus-4.6?apiKey=${apiKey}` : 'anthropic/claude-opus-4.6'
+      return apiKey ? `anthropic/claude-sonnet-4.6?apiKey=${apiKey}` : 'anthropic/claude-sonnet-4.6'
     case 'openai':
       return apiKey ? `openai/gpt-4o?apiKey=${apiKey}` : 'openai/gpt-4o'
     case 'grok':
@@ -43,7 +43,7 @@ export function getAISDKModel(provider: AIProvider, apiKey?: string): string {
     case 'deepinfra':
       return apiKey ? `deepinfra/deepseek-ai/deepseek-coder-33b-instruct?apiKey=${apiKey}` : 'deepinfra/deepseek-ai/deepseek-coder-33b-instruct'
     case 'builtin':
-      return 'anthropic/claude-opus-4.6'
+      return 'anthropic/claude-sonnet-4.6'
     default: {
       const exhaustive: never = provider
       throw new Error(`Unhandled AI provider: ${String(exhaustive)}`)
@@ -128,7 +128,7 @@ export function getEstimatedCost(provider: AIProvider): {
   outputCost: number
 } {
   const costs: Record<AIProvider, { inputCost: number; outputCost: number }> = {
-    anthropic: { inputCost: 3, outputCost: 15 }, // Claude Opus
+    anthropic: { inputCost: 3, outputCost: 15 }, // Claude Sonnet
     openai: { inputCost: 2.5, outputCost: 10 }, // GPT-4o
     grok: { inputCost: 0.5, outputCost: 1.5 }, // Grok (cheaper)
     deepinfra: { inputCost: 0.14, outputCost: 0.28 }, // DeepSeek (very cheap)
