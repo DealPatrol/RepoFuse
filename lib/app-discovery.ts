@@ -1,16 +1,4 @@
-import { Anthropic } from '@anthropic-ai/sdk'
-import { getAnthropicModel } from '@/lib/anthropic-model'
-
-let __anthropicClient: Anthropic | null = null
-function getAnthropic(): Anthropic {
-  if (__anthropicClient) return __anthropicClient
-  const key = process.env.ANTHROPIC_API_KEY
-  if (!key) {
-    throw new Error('ANTHROPIC_API_KEY is not configured')
-  }
-  __anthropicClient = new Anthropic({ apiKey: key })
-  return __anthropicClient
-}
+import { generateWithGateway } from '@/lib/ai-gateway'
 
 export interface DiscoveredApp {
   name: string
@@ -61,25 +49,15 @@ For each app, provide:
 
 Format as JSON array with objects containing these fields.`
 
-  const response = await getAnthropic().messages.create({
-    model: getAnthropicModel(),
-    max_tokens: 8000,
-    messages: [
-      {
-        role: 'user',
-        content: prompt,
-      },
-    ],
+  const contentText = await generateWithGateway({
+    feature: 'app-discovery',
+    maxOutputTokens: 8000,
+    messages: [{ role: 'user', content: prompt }],
   })
-
-  const content = response.content[0]
-  if (content.type !== 'text') {
-    throw new Error('Unexpected response type from Claude')
-  }
 
   try {
     // Extract JSON from response
-    const jsonMatch = content.text.match(/\[[\s\S]*\]/)
+    const jsonMatch = contentText.match(/\[[\s\S]*\]/)
     if (!jsonMatch) {
       throw new Error('No JSON found in response')
     }
@@ -115,7 +93,7 @@ Format as JSON array with objects containing these fields.`
       }
     })
   } catch (error) {
-    console.error('[v0] Error parsing Claude response:', content.text, error)
+    console.error('[v0] Error parsing Claude response:', contentText, error)
     return []
   }
 }

@@ -1,9 +1,8 @@
 import { verifyClerkToken } from '@clerk/mcp-tools/next'
 import { auth } from '@clerk/nextjs/server'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
-import { generateText } from 'ai'
 import { withMcpAuth } from 'mcp-handler'
-import { gatewayProviderOptions, getGatewayModel, isAiConfigured } from '@/lib/ai-gateway'
+import { createPromptRunner } from '@/lib/ai-gateway'
 import { getAuthUserFromClerkUserId, getCurrentUser, getGitHubNotLinkedMessage, type AuthUser } from '@/lib/auth'
 import { GITHUB_ACCOUNT_NOT_LINKED_MESSAGE } from '@/lib/github-account'
 import { isClerkConfigured } from '@/lib/clerk-auth'
@@ -17,7 +16,6 @@ import {
   reserveMcpAnalysisUsage,
   upsertSubscription,
 } from '@/lib/queries'
-import { createAnthropicPromptRunner } from '@/lib/repofuse-core.js'
 import { createRepoFuseMcpServer } from '@/lib/repofuse-mcp.js'
 import { PLANS } from '@/lib/stripe'
 
@@ -59,24 +57,13 @@ async function handleMcpRequest(request: Request) {
     subscription = await upsertSubscription({ github_id: user.github_id })
   }
   const canAccessPro = hasProAccess(user, subscription)
-  const model = process.env.REPOFUSE_MODEL || process.env.ANTHROPIC_MODEL || 'claude-opus-4-6'
-  const anthropicRunner = process.env['ANTHROPIC_' + 'API_KEY']
-    ? createAnthropicPromptRunner({ apiKey: process.env['ANTHROPIC_' + 'API_KEY'], model })
-    : undefined
-
-  const analysisRunner =
-    anthropicRunner ??
-    (async (prompt: string) => {
-      const result = await generateText({
-        model: isAiConfigured() ? getGatewayModel() : 'openai/gpt-4o-mini',
-        prompt,
-        temperature: 0.2,
-        maxOutputTokens: 4000,
-        ...gatewayProviderOptions(user.id, 'mcp'),
-      })
-
-      return result.text
-    })
+  const analysisRunner = createPromptRunner({
+    feature: 'mcp',
+    userId: user.id,
+    kind: 'repofuse',
+    temperature: 0.2,
+    maxTokens: 4000,
+  })
 
   const server = createRepoFuseMcpServer({
     githubToken: user.access_token,

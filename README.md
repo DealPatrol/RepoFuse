@@ -154,8 +154,8 @@ This repo now includes a standalone stdio MCP server at `mcp/repofuse.mjs`.
 ### Environment variables
 The MCP server expects:
 - `GITHUB_TOKEN`
-- `ANTHROPIC_API_KEY`
-- optional: `REPOFUSE_MODEL`, `REPOFUSE_MAX_FILES_PER_REPO`, `REPOFUSE_MAX_BLUEPRINTS`
+- `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN`, otherwise `ANTHROPIC_API_KEY`
+- optional: `REPOFUSE_MODEL` (`anthropic/claude-opus-4.6`), `REPOFUSE_MAX_FILES_PER_REPO`, `REPOFUSE_MAX_BLUEPRINTS`
 
 ### Run it locally
 ```bash

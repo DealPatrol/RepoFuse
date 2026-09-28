@@ -26,7 +26,13 @@ const env = {
 }
 
 if (isLive) {
-  const missing = ['GITHUB_TOKEN', 'ANTHROPIC_API_KEY'].filter((name) => !process.env[name])
+  const hasAiCredentials = Boolean(
+    process.env.AI_GATEWAY_API_KEY?.trim()
+    || process.env.VERCEL_OIDC_TOKEN?.trim()
+    || process.env.ANTHROPIC_API_KEY?.trim(),
+  )
+  const missing = ['GITHUB_TOKEN'].filter((name) => !process.env[name])
+  if (!hasAiCredentials) missing.push('AI_GATEWAY_API_KEY, VERCEL_OIDC_TOKEN, or ANTHROPIC_API_KEY')
   if (missing.length > 0) {
     console.error(`Missing required env for live MCP test: ${missing.join(', ')}`)
     process.exit(1)

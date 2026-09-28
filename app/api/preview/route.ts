@@ -8,9 +8,7 @@
 import { NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import Anthropic from "@anthropic-ai/sdk";
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+import { generateWithGateway } from "@/lib/ai-gateway";
 
 interface GitHubFile { path: string; content: string; }
 interface SSEEvent {
@@ -176,9 +174,9 @@ async function fixDependencies(raw: string) {
   try { parsed = JSON.parse(raw); }
   catch { return { fixedPackageJson: {}, changes: ["Could not parse package.json"] }; }
 
-  const response = await anthropic.messages.create({
-    model: "claude-opus-4-6",
-    max_tokens: 2048,
+  const text = await generateWithGateway({
+    feature: "preview",
+    maxOutputTokens: 2048,
     messages: [{
       role: "user",
       content: `You are a Node.js expert. Fix deprecated, broken, or unmaintained dependencies.
@@ -190,8 +188,6 @@ package.json:
 ${JSON.stringify(parsed, null, 2)}`,
     }],
   });
-
-  const text = response.content[0].type === "text" ? response.content[0].text : "{}";
   try {
     const result = JSON.parse(text.replace(/```json|```/g, "").trim());
     return { fixedPackageJson: result.packageJson ?? parsed, changes: Array.isArray(result.changes) ? result.changes : [] };

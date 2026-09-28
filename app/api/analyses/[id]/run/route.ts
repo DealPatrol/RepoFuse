@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
-import { aiConfigErrorMessage, getAnthropicClient, isAiConfigured } from '@/lib/ai-gateway'
+import { generateText, tool } from 'ai'
+import { aiConfigErrorMessage, isAiConfigured, languageModelFor, llmProviderOptions } from '@/lib/ai-gateway'
 import { z } from 'zod'
 import { getCurrentAccessToken, getCurrentUser, getGitHubNotLinkedMessage } from '@/lib/auth'
 import {
@@ -21,7 +22,6 @@ import {
   reserveAnalysisUsage,
   releaseAnalysisUsage,
 } from '@/lib/queries'
-import { getAnthropicModel } from '@/lib/anthropic-model'
 import { isOnFreeTier } from '@/lib/pro-access'
 import { PLANS } from '@/lib/stripe'
 import { generateGapsFromBlueprint, generateTemplatesFromBlueprints } from '@/lib/gap-generation'
@@ -300,9 +300,6 @@ export async function POST(
           .map(r => `- ${r.full_name}${r.language ? ` (${r.language})` : ''}: ${r.description ?? 'no description'}`)
           .join('\n')
 
-        // Use Claude to analyze and discover app blueprints (structured tool output)
-        const client = getAnthropicClient()
-
         const userPrompt = `You are acting as an expert software architect and product strategist.
 The developer below has already shipped the products listed under EXISTING PRODUCTS. Your job is to find NEW products they could build by recombining the capabilities buried in their code — not to describe what they already have.
 
@@ -336,106 +333,61 @@ For each app blueprint:
 - List technologies detected
 - In the explanation, name the capabilities being transferred and which repos they come from, plus a suggested first build step`
 
-        const aiResponse = await client.messages.create({
-          model: getAnthropicModel(),
-          max_tokens: 16384,
-          system: [
-            {
-              type: 'text',
-              text: 'You are an expert software architect and product strategist. Your job is to analyze GitHub repository file structures and identify genuinely NEW applications that can be built by recombining existing code capabilities into different product categories. Never suggest rebuilds or minor variations of products the developer has already shipped — the value you provide is showing them markets and use cases their code unlocks that they have not thought of. Stay grounded: reuse claims must reference real files.',
-              cache_control: { type: 'ephemeral' },
-            },
-          ],
-          tools: [
-            {
-              name: 'report_blueprints',
+        const aiResponse = await generateText({
+          model: languageModelFor('analysis-run'),
+          maxOutputTokens: 16384,
+          system: 'You are an expert software architect and product strategist. Your job is to analyze GitHub repository file structures and identify genuinely NEW applications that can be built by recombining existing code capabilities into different product categories. Never suggest rebuilds or minor variations of products the developer has already shipped — the value you provide is showing them markets and use cases their code unlocks that they have not thought of. Stay grounded: reuse claims must reference real files.',
+          prompt: userPrompt,
+          tools: {
+            report_blueprints: tool({
               description: 'Report the discovered app blueprints based on repository file analysis',
-              input_schema: {
-                type: 'object' as const,
-                properties: {
-                  blueprints: {
-                    type: 'array',
-                    items: {
-                      type: 'object',
-                      properties: {
-                        name: { type: 'string', description: 'Clear, descriptive name for the app' },
-                        description: { type: 'string', description: 'What the app does' },
-                        app_type: { type: 'string', description: 'Type of application (e.g. web app, CLI tool, API service)' },
-                        complexity: { type: 'string', enum: ['simple', 'moderate', 'complex'] },
-                        reuse_percentage: { type: 'number', minimum: 0, maximum: 100, description: 'Percentage of existing code that can be reused' },
-                        existing_files: {
-                          type: 'array',
-                          items: {
-                            type: 'object',
-                            properties: {
-                              path: { type: 'string' },
-                              purpose: { type: 'string' },
-                            },
-                            required: ['path', 'purpose'],
-                          },
-                          description: 'Existing files that can be reused',
-                        },
-                        missing_files: {
-                          type: 'array',
-                          items: {
-                            type: 'object',
-                            properties: {
-                              name: { type: 'string' },
-                              purpose: { type: 'string' },
-                            },
-                            required: ['name', 'purpose'],
-                          },
-                          description: 'New files that need to be created',
-                        },
-                        technologies: { type: 'array', items: { type: 'string' }, description: 'Technologies detected' },
-                        explanation: { type: 'string', description: 'Brief explanation of why this app is feasible' },
-                      },
-                      required: ['name', 'description', 'app_type', 'complexity', 'reuse_percentage', 'existing_files', 'missing_files', 'technologies', 'explanation'],
-                    },
-                  },
-                },
-                required: ['blueprints'],
-              },
-            },
-          ],
-          tool_choice: { type: 'tool', name: 'report_blueprints' },
-          messages: [
-            {
-              role: 'user',
-              content: userPrompt,
-            },
-          ],
+              inputSchema: z.object({
+                blueprints: z.array(z.object({
+                  name: z.string().describe('Clear, descriptive name for the app'),
+                  description: z.string().describe('What the app does'),
+                  app_type: z.string().describe('Type of application (e.g. web app, CLI tool, API service)'),
+                  complexity: z.enum(['simple', 'moderate', 'complex']),
+                  reuse_percentage: z.number().min(0).max(100).describe('Percentage of existing code that can be reused'),
+                  existing_files: z.array(z.object({
+                    path: z.string(),
+                    purpose: z.string(),
+                  })).describe('Existing files that can be reused'),
+                  missing_files: z.array(z.object({
+                    name: z.string(),
+                    purpose: z.string(),
+                  })).describe('New files that need to be created'),
+                  technologies: z.array(z.string()).describe('Technologies detected'),
+                  explanation: z.string().describe('Brief explanation of why this app is feasible'),
+                })),
+              }),
+              outputSchema: z.object({ recorded: z.boolean() }),
+              execute: async () => ({ recorded: true }),
+            }),
+          },
+          toolChoice: { type: 'tool', toolName: 'report_blueprints' },
+          ...llmProviderOptions(user.id, 'analysis-run'),
         })
 
         send({ status: 'analyzing', progress: 80 })
 
-        // Check if response was truncated (hit max_tokens)
-        if (aiResponse.stop_reason === 'max_tokens') {
-          console.warn('[analysis] AI response truncated (max_tokens). Tool output may be incomplete.')
+        const wasTruncated = aiResponse.finishReason === 'length'
+        if (wasTruncated) {
+          console.warn('[analysis] AI response truncated (max output tokens). Tool output may be incomplete.')
         }
 
-        // Extract structured output from tool use response
-        let toolUseBlock = aiResponse.content.find(
-          (block) =>
-            block.type === 'tool_use' &&
-            'name' in block &&
-            (block as { name: string }).name === 'report_blueprints',
-        )
-        if (!toolUseBlock) {
-          toolUseBlock = aiResponse.content.find((block) => block.type === 'tool_use')
-        }
-        const rawInput = toolUseBlock?.type === 'tool_use' ? toolUseBlock.input : null
+        const toolCall = aiResponse.toolCalls.find((call) => call.toolName === 'report_blueprints')
+          ?? aiResponse.toolCalls[0]
+        const rawInput = toolCall?.input ?? null
 
         const blueprintsFromAI = parseBlueprints(rawInput)
 
         if (blueprintsFromAI.length === 0) {
-          const wasMaxTokens = aiResponse.stop_reason === 'max_tokens'
-          const msg = wasMaxTokens
+          const msg = wasTruncated
             ? 'AI response was cut short (output too large). Try running with fewer repositories selected.'
             : rawInput
               ? 'AI returned empty results. Try running the analysis again — this can happen intermittently.'
-              : 'Model did not return usable blueprints (missing tool output). Check ANTHROPIC_API_KEY and model availability.'
-          console.error('[analysis] No valid blueprints.', { stop_reason: aiResponse.stop_reason, rawInput: JSON.stringify(rawInput).slice(0, 500) })
+              : 'Model did not return usable blueprints (missing tool output). Check AI Gateway or Anthropic configuration and model availability.'
+          console.error('[analysis] No valid blueprints.', { finishReason: aiResponse.finishReason, rawInput: JSON.stringify(rawInput).slice(0, 500) })
           send({ status: 'failed', error: msg })
           await updateAnalysisStatus(id, 'failed', { error_message: msg })
           if (reservedUsageGithubId !== null) {

@@ -30,8 +30,9 @@ DATABASE_URL=postgresql://...          # From Neon dashboard
 GITHUB_CLIENT_ID=...                   # From GitHub App settings
 GITHUB_CLIENT_SECRET=...               # From GitHub App settings
 NEXT_PUBLIC_APP_URL=http://localhost:3000
-OPENAI_API_KEY=sk-...                  # From OpenAI dashboard
-ANTHROPIC_API_KEY=sk-ant-...           # Optional, for scaffold generation
+# Preferred: vercel env pull (writes VERCEL_OIDC_TOKEN) or AI_GATEWAY_API_KEY
+# Local fallback when gateway credentials are absent:
+ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 ### 3. Create GitHub App
@@ -127,5 +128,6 @@ Full setup guide: `docs/MCP_SETUP.md`
 - For production, update `NEXT_PUBLIC_APP_URL`
 
 **AI analysis failing?**
-- Check `OPENAI_API_KEY` is set and has credits
+- On Vercel, enable AI Gateway and OIDC (`VERCEL_OIDC_TOKEN`), or set `AI_GATEWAY_API_KEY`
+- Locally, set `ANTHROPIC_API_KEY` if you are not using the gateway
 - Look at server logs for the specific error

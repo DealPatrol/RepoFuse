@@ -1,16 +1,4 @@
-import { Anthropic } from '@anthropic-ai/sdk'
-import { getAnthropicModel } from '@/lib/anthropic-model'
-
-let __anthropicClient: Anthropic | null = null
-function getAnthropic(): Anthropic {
-  if (__anthropicClient) return __anthropicClient
-  const key = process.env.ANTHROPIC_API_KEY
-  if (!key) {
-    throw new Error('ANTHROPIC_API_KEY is not configured')
-  }
-  __anthropicClient = new Anthropic({ apiKey: key })
-  return __anthropicClient
-}
+import { generateWithGateway } from '@/lib/ai-gateway'
 
 /**
  * Represents a code snippet with semantic metadata
@@ -71,19 +59,14 @@ Extract and return JSON with:
 Return ONLY valid JSON, no markdown formatting.`
 
   try {
-    const response = await getAnthropic().messages.create({
-      model: getAnthropicModel(),
-      max_tokens: 2000,
+    const text = await generateWithGateway({
+      feature: 'code-completion',
+      maxOutputTokens: 2000,
       messages: [{ role: 'user', content: prompt }],
     })
 
-    const content = response.content[0]
-    if (content.type !== 'text') {
-      throw new Error('Unexpected response type')
-    }
-
     // Parse JSON response
-    const jsonMatch = content.text.match(/\{[\s\S]*\}/)
+    const jsonMatch = text.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
       throw new Error('No JSON found in response')
     }
@@ -271,25 +254,20 @@ Complete the code:
 \`\`\`${language}`
 
   try {
-    const response = await getAnthropic().messages.create({
-      model: getAnthropicModel(),
-      max_tokens: 4000,
+    const text = await generateWithGateway({
+      feature: 'code-completion',
+      maxOutputTokens: 4000,
       messages: [{ role: 'user', content: prompt }],
     })
 
-    const content = response.content[0]
-    if (content.type !== 'text') {
-      throw new Error('Unexpected response type')
-    }
-
     // Extract code from response
-    const codeMatch = content.text.match(/```[\s\S]*?```/)
+    const codeMatch = text.match(/```[\s\S]*?```/)
     if (codeMatch) {
       // Remove triple backticks and language identifier
       return codeMatch[0].replace(/^```.*?\n/, '').replace(/\n?```$/, '')
     }
 
-    return content.text
+    return text
   } catch (error) {
     console.error('[v0] Error generating completion:', error)
     throw error

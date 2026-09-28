@@ -1,8 +1,18 @@
-import Anthropic from '@anthropic-ai/sdk'
-import { generateText, type ModelMessage } from 'ai'
-
-/** Default gateway model (provider/model). See https://ai-gateway.vercel.sh/v1/models */
-export const DEFAULT_GATEWAY_MODEL = 'anthropic/claude-opus-4.6'
+import { generateText, type LanguageModel, type ModelMessage } from 'ai'
+import {
+  aiConfigErrorMessage,
+  createPromptRunner,
+  DEFAULT_ANTHROPIC_MODEL,
+  DEFAULT_GATEWAY_MODEL,
+  gatewayProviderOptions,
+  getActiveAiProvider,
+  getLanguageModel,
+  isAiConfigured,
+  mapClaudeModel,
+  resolvedModelIds,
+  type AiProviderId,
+  type ModelKind,
+} from '@/lib/ai-runtime'
 
 export type AiGatewayFeature =
   | 'analysis-run'
@@ -12,79 +22,67 @@ export type AiGatewayFeature =
   | 'pattern-analyzer'
   | 'mcp'
   | 'legacy'
+  | 'preview'
+  | 'code-completion'
+  | 'app-discovery'
+  | 'cross-platform'
 
-const ANTHROPIC_KEY_ENV = 'ANTHROPIC_' + 'API_KEY'
-
-function usesGatewayAuth(): boolean {
-  return Boolean(process.env.AI_GATEWAY_API_KEY?.trim() || process.env.VERCEL_OIDC_TOKEN?.trim())
+export {
+  aiConfigErrorMessage,
+  createPromptRunner,
+  DEFAULT_ANTHROPIC_MODEL,
+  DEFAULT_GATEWAY_MODEL,
+  gatewayProviderOptions,
+  getActiveAiProvider,
+  isAiConfigured,
+  mapClaudeModel,
 }
+export type { AiProviderId }
 
-function directAnthropicKey(): string | undefined {
-  return process.env[ANTHROPIC_KEY_ENV]?.trim()
-}
-
-/** True when AI Gateway or a direct Anthropic key is available. */
-export function isAiConfigured(): boolean {
-  return usesGatewayAuth() || Boolean(directAnthropicKey())
-}
-
-/**
- * Model slug for AI SDK `generateText` / `streamText` (routes through AI Gateway when using provider/model strings).
- */
-export function getGatewayModel(): string {
-  const configured = process.env.ANTHROPIC_ANALYSIS_MODEL?.trim()
-  if (!configured) return DEFAULT_GATEWAY_MODEL
-  if (configured.includes('/')) return configured
-  return `anthropic/${configured}`
-}
-
-/**
- * Model id for Anthropic Messages API (gateway-compatible endpoint or direct Anthropic).
- */
-export function getAnthropicMessagesModel(): string {
-  const configured = process.env.ANTHROPIC_ANALYSIS_MODEL?.trim()
-  if (configured) {
-    if (usesGatewayAuth() && !configured.includes('/')) {
-      return `anthropic/${configured}`
+function modelKindForFeature(feature: AiGatewayFeature): ModelKind {
+  switch (feature) {
+    case 'mcp':
+    case 'legacy':
+    case 'preview':
+      return 'repofuse'
+    case 'analysis-run':
+    case 'app-idea-chat':
+    case 'scaffold':
+    case 'build-app':
+    case 'pattern-analyzer':
+    case 'code-completion':
+    case 'app-discovery':
+    case 'cross-platform':
+      return 'analysis'
+    default: {
+      const exhaustive: never = feature
+      return exhaustive
     }
-    return configured
   }
-  return usesGatewayAuth() ? DEFAULT_GATEWAY_MODEL : 'claude-opus-4-6'
 }
 
-export function gatewayProviderOptions(userId?: string, feature?: AiGatewayFeature) {
-  const tags = feature ? [`feature:${feature}`] : []
-  if (process.env.VERCEL_ENV) {
-    tags.push(`env:${process.env.VERCEL_ENV}`)
-  }
-
-  return {
-    providerOptions: {
-      gateway: {
-        ...(userId ? { user: userId } : {}),
-        ...(tags.length > 0 ? { tags } : {}),
-      },
-    },
-  } as const
+export function getModelKind(feature: AiGatewayFeature): ModelKind {
+  return modelKindForFeature(feature)
 }
 
-export function getAnthropicClient(): Anthropic {
-  const gatewayKey = process.env.AI_GATEWAY_API_KEY?.trim()
-  const oidc = process.env.VERCEL_OIDC_TOKEN?.trim()
+/** Gateway model id for the active provider selection. */
+export function getGatewayModel(feature: AiGatewayFeature = 'analysis-run'): string {
+  return resolvedModelIds(modelKindForFeature(feature)).gateway
+}
 
-  if (gatewayKey || oidc) {
-    return new Anthropic({
-      apiKey: gatewayKey || oidc || 'gateway',
-      baseURL: 'https://ai-gateway.vercel.sh',
-    })
-  }
+/** Direct Anthropic model id, used only when the gateway is not configured. */
+export function getAnthropicMessagesModel(feature: AiGatewayFeature = 'analysis-run'): string {
+  const ids = resolvedModelIds(modelKindForFeature(feature))
+  return getActiveAiProvider() === 'anthropic' ? ids.anthropic : ids.gateway
+}
 
-  const directKey = directAnthropicKey()
-  if (!directKey) {
-    throw new Error('AI is not configured. Set AI_GATEWAY_API_KEY, VERCEL_OIDC_TOKEN, or your Anthropic API key env var.')
-  }
+export function languageModelFor(feature: AiGatewayFeature): LanguageModel {
+  return getLanguageModel(modelKindForFeature(feature))
+}
 
-  return new Anthropic({ apiKey: directKey })
+export function llmProviderOptions(userId: string | undefined, feature: AiGatewayFeature) {
+  if (getActiveAiProvider() !== 'gateway') return {}
+  return gatewayProviderOptions(userId, feature)
 }
 
 export async function generateWithGateway(params: {
@@ -95,39 +93,24 @@ export async function generateWithGateway(params: {
   userId?: string
   feature: AiGatewayFeature
 }): Promise<string> {
-  // When we have a direct Anthropic key (no gateway auth), use the SDK client directly
-  // to avoid routing through Vercel AI Gateway which requires paid gateway credits.
-  if (!usesGatewayAuth() && directAnthropicKey()) {
-    const client = getAnthropicClient()
-    const directModel = process.env.ANTHROPIC_ANALYSIS_MODEL?.trim() || 'claude-opus-4-6'
-    const response = await client.messages.create({
-      model: directModel,
-      max_tokens: params.maxOutputTokens ?? 4096,
-      ...(params.system ? { system: params.system } : {}),
-      messages: params.messages,
-    })
-    const block = response.content[0]
-    return block.type === 'text' ? block.text : ''
+  const provider = getActiveAiProvider()
+  if (provider === 'none') {
+    throw new Error(aiConfigErrorMessage())
   }
 
-  // Otherwise route through Vercel AI Gateway
   const modelMessages: ModelMessage[] = params.messages.map((message) => ({
     role: message.role,
     content: message.content,
   }))
 
   const result = await generateText({
-    model: getGatewayModel(),
+    model: getLanguageModel(modelKindForFeature(params.feature)),
     system: params.system,
     messages: modelMessages,
     maxOutputTokens: params.maxOutputTokens ?? 4096,
     temperature: params.temperature,
-    ...gatewayProviderOptions(params.userId, params.feature),
+    ...(provider === 'gateway' ? gatewayProviderOptions(params.userId, params.feature) : {}),
   })
 
   return result.text
-}
-
-export function aiConfigErrorMessage(): string {
-  return 'AI is not configured. Enable Vercel AI Gateway (OIDC or AI_GATEWAY_API_KEY) or configure a direct provider API key.'
 }

@@ -10,10 +10,10 @@ RepoFuse supports two MCP modes:
 
 ### Required env
 - `GITHUB_TOKEN`
-- `ANTHROPIC_API_KEY`
+- One of `AI_GATEWAY_API_KEY`, `VERCEL_OIDC_TOKEN`, or `ANTHROPIC_API_KEY` (gateway credentials win)
 
 Optional:
-- `REPOFUSE_MODEL`
+- `REPOFUSE_MODEL` (gateway id such as `anthropic/claude-opus-4.6`, or a direct id such as `claude-opus-4-6`)
 - `REPOFUSE_MAX_FILES_PER_REPO`
 - `REPOFUSE_MAX_BLUEPRINTS`
 
@@ -41,7 +41,7 @@ pnpm mcp:test
 
 ### Live smoke test
 
-This requires real `GITHUB_TOKEN` and `ANTHROPIC_API_KEY` values in your environment.
+This requires a real `GITHUB_TOKEN` plus either gateway credentials (`AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN`) or `ANTHROPIC_API_KEY`.
 
 ```bash
 pnpm mcp:test:live
@@ -99,7 +99,7 @@ Key values for MCP-capable behavior:
 - `NEXT_PUBLIC_APP_URL`
 - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
 - `CLERK_SECRET_KEY`
-- `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN`, with `ANTHROPIC_API_KEY` as a fallback
+- `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` (preferred). `ANTHROPIC_API_KEY` is used only when neither is set
 - optional: `REPOFUSE_MODEL`
 
 Apply `migrations/010_mcp_rate_limits.sql` and

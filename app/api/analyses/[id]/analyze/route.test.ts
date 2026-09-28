@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import { POST } from './route'
 import { getCurrentUser } from '@/lib/auth'
@@ -43,8 +43,16 @@ function request() {
 }
 
 describe('POST /api/analyses/[id]/analyze', () => {
+  const originalGatewayKey = process.env.AI_GATEWAY_API_KEY
+
   beforeEach(() => {
     vi.resetAllMocks()
+    process.env.AI_GATEWAY_API_KEY = 'test-gateway-key'
+  })
+
+  afterEach(() => {
+    if (originalGatewayKey === undefined) delete process.env.AI_GATEWAY_API_KEY
+    else process.env.AI_GATEWAY_API_KEY = originalGatewayKey
   })
 
   it('rejects unauthenticated requests before ownership or billing work', async () => {
