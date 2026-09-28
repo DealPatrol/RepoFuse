@@ -38,11 +38,11 @@ Go to your Vercel project → **Settings** → **Environment Variables** and add
 RepoFuse routes analysis, blueprint/scaffold generation, and hosted MCP LLM calls through the Vercel AI Gateway. A funded Anthropic account is not required.
 
 1. In the Vercel project `repofuse`, open **Settings → AI Gateway** and enable it. Usage is billed on the Vercel account.
-2. Keep **Settings → Security → Secure Backend Access with OpenID Connect** enabled so Production and Preview functions receive `VERCEL_OIDC_TOKEN`. Redeploy after turning it on.
+2. Keep **Settings → Security → Secure Backend Access with OpenID Connect** enabled. Vercel sends the OIDC token on each request as `x-vercel-oidc-token`. It is normal for `VERCEL_OIDC_TOKEN` to be unset in the function environment. `/api/health` should show `aiProvider: "gateway"` and `vercelRuntime: true` after deploy.
 3. Optional: create an AI Gateway API key and set `AI_GATEWAY_API_KEY` if you do not want to use OIDC.
-4. Do not add the Anthropic API key as a gateway bring-your-own-key credential. The app ignores `ANTHROPIC_API_KEY` whenever `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` is present.
+4. Do not add the Anthropic API key as a gateway bring-your-own-key credential. On Vercel the app uses the gateway even if `ANTHROPIC_API_KEY` is set. Off Vercel, that key is the fallback only when `AI_GATEWAY_API_KEY` and `VERCEL_OIDC_TOKEN` are both unset.
 
-Optional model override: `ANTHROPIC_MODEL` or `REPOFUSE_MODEL` (`anthropic/claude-opus-4.6` or `claude-opus-4-6`).
+Optional model override: `ANTHROPIC_ANALYSIS_MODEL`, `ANTHROPIC_MODEL`, or `REPOFUSE_MODEL`. The default for analysis and other calls is `anthropic/claude-sonnet-4.6` (`claude-sonnet-4-6` for a direct Anthropic key).
 
 | Variable | Environment | Description |
 |----------|-------------|-------------|
@@ -123,7 +123,7 @@ psql $DATABASE_URL -f scripts/01-create-schema.sql
 
 **Database errors** → Verify `DATABASE_URL` is correct and Neon project is active
 
-**AI analysis fails** → Enable AI Gateway on the Vercel project and confirm `VERCEL_OIDC_TOKEN` is present at runtime (OIDC), or set `AI_GATEWAY_API_KEY`
+**AI analysis fails** → Enable AI Gateway on the Vercel project and confirm OIDC is enabled. `/api/health` should report `aiProvider: "gateway"` and `vercelRuntime: true`. `VERCEL_OIDC_TOKEN` may be false; that env var is not how serverless functions receive the token. Or set `AI_GATEWAY_API_KEY`.
 
 **Scaffold generation fails** → Same AI Gateway setup. `ANTHROPIC_API_KEY` is only the local fallback when gateway credentials are missing
 

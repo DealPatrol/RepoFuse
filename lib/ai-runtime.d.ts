@@ -4,9 +4,12 @@ export type AiProviderId = 'gateway' | 'anthropic' | 'none'
 export type ModelKind = 'analysis' | 'repofuse'
 
 export const DEFAULT_GATEWAY_MODEL: string
+export const DEFAULT_ANALYSIS_GATEWAY_MODEL: string
 export const DEFAULT_ANTHROPIC_MODEL: string
 
 export function aiConfigErrorMessage(): string
+export function isVercelRuntime(): boolean
+export function usesGatewayAuth(): boolean
 export function getActiveAiProvider(): AiProviderId
 export function isAiConfigured(): boolean
 export function mapClaudeModel(

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { getActiveAiProvider, mapClaudeModel } from '@/lib/ai-runtime'
+import { getActiveAiProvider, isVercelRuntime, mapClaudeModel } from '@/lib/ai-runtime'
 
-const ENV_KEYS = ['AI_GATEWAY_API_KEY', 'VERCEL_OIDC_TOKEN', 'ANTHROPIC_API_KEY'] as const
+const ENV_KEYS = ['AI_GATEWAY_API_KEY', 'VERCEL_OIDC_TOKEN', 'ANTHROPIC_API_KEY', 'VERCEL'] as const
 
 const originalEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]))
 
@@ -29,13 +29,20 @@ describe('AI provider selection', () => {
     expect(getActiveAiProvider()).toBe('gateway')
   })
 
+  it('uses the gateway on Vercel even when the OIDC token is not in process.env', () => {
+    setEnv({ VERCEL: '1', ANTHROPIC_API_KEY: 'sk-ant-direct' })
+    expect(isVercelRuntime()).toBe(true)
+    expect(getActiveAiProvider()).toBe('gateway')
+  })
+
   it('uses the gateway when only the Vercel OIDC token is present', () => {
     setEnv({ VERCEL_OIDC_TOKEN: 'oidc-token' })
     expect(getActiveAiProvider()).toBe('gateway')
   })
 
-  it('falls back to direct Anthropic when gateway credentials are absent', () => {
+  it('falls back to direct Anthropic when not on Vercel and gateway credentials are absent', () => {
     setEnv({ ANTHROPIC_API_KEY: 'sk-ant-direct' })
+    expect(isVercelRuntime()).toBe(false)
     expect(getActiveAiProvider()).toBe('anthropic')
   })
 
@@ -89,17 +96,17 @@ describe('Claude model id mapping', () => {
     })
   })
 
-  it('defaults to Claude Opus 4.6', () => {
+  it('defaults to Claude Sonnet 4.6', () => {
     expect(mapClaudeModel(undefined)).toEqual({
-      gateway: 'anthropic/claude-opus-4.6',
-      anthropic: 'claude-opus-4-6',
+      gateway: 'anthropic/claude-sonnet-4.6',
+      anthropic: 'claude-sonnet-4-6',
     })
   })
 
   it('passes non-Anthropic gateway models through', () => {
     expect(mapClaudeModel('openai/gpt-4o-mini')).toEqual({
       gateway: 'openai/gpt-4o-mini',
-      anthropic: 'claude-opus-4-6',
+      anthropic: 'claude-sonnet-4-6',
     })
   })
 })

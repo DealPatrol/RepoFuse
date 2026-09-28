@@ -13,7 +13,7 @@ RepoFuse supports two MCP modes:
 - One of `AI_GATEWAY_API_KEY`, `VERCEL_OIDC_TOKEN`, or `ANTHROPIC_API_KEY` (gateway credentials win)
 
 Optional:
-- `REPOFUSE_MODEL` (gateway id such as `anthropic/claude-opus-4.6`, or a direct id such as `claude-opus-4-6`)
+- `REPOFUSE_MODEL` (gateway id such as `anthropic/claude-sonnet-4.6`, or a direct id such as `claude-sonnet-4-6`)
 - `REPOFUSE_MAX_FILES_PER_REPO`
 - `REPOFUSE_MAX_BLUEPRINTS`
 

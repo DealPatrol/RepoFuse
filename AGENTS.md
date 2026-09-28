@@ -11,7 +11,7 @@ RepoFuse is a Next.js 16 app (App Router) that connects to GitHub repos, scans f
 - **Runtime**: Node.js 20+, pnpm
 - **Framework**: Next.js 16 (App Router, TypeScript)
 - **Database**: Neon PostgreSQL (via `@neondatabase/serverless` HTTP driver)
-- **AI**: Vercel AI Gateway + AI SDK (`gateway('anthropic/...')` / plain provider model strings). On Vercel this authenticates with `VERCEL_OIDC_TOKEN` (or `AI_GATEWAY_API_KEY`). Direct Anthropic via `ANTHROPIC_API_KEY` is only the local fallback when neither gateway credential is set. Analysis, scaffold, build, chat, and hosted MCP all use this path.
+- **AI**: Vercel AI Gateway + AI SDK (`gateway('anthropic/claude-sonnet-4.6')`). On Vercel (`VERCEL=1`) the gateway authenticates per request via the `x-vercel-oidc-token` header (`@vercel/oidc`); `VERCEL_OIDC_TOKEN` is often unset in the function environment. `AI_GATEWAY_API_KEY` also selects the gateway. Direct Anthropic via `ANTHROPIC_API_KEY` is only the fallback off Vercel when no gateway credential is set. Analysis and other LLM calls default to Claude Sonnet 4.6.
 - **Auth**: GitHub OAuth cookies (default) or optional Clerk (`@clerk/nextjs`) with GitHub social login
 - **UI**: React 19, Shadcn/Radix, Tailwind CSS v4
 
@@ -20,7 +20,7 @@ RepoFuse is a Next.js 16 app (App Router) that connects to GitHub repos, scans f
 See `.env.example` for the full list. Critical ones:
 - `DATABASE_URL` — Neon PostgreSQL connection string (HTTPS-based, not standard pg protocol)
 - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — GitHub OAuth app
-- `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` (from `vercel env pull`) — preferred for AI on Vercel; the app uses the AI SDK gateway provider and does not require a funded Anthropic account. `ANTHROPIC_API_KEY` is a local-dev fallback when neither gateway credential is set (see `.env.example`)
+- `AI_GATEWAY_API_KEY` or a Vercel deployment (`VERCEL=1`, OIDC token per request) — preferred for AI on Vercel; the app uses the AI SDK gateway provider and does not require a funded Anthropic account. `VERCEL_OIDC_TOKEN` from `vercel env pull` also selects the gateway for local dev. `ANTHROPIC_API_KEY` is a fallback only when none of those are set (see `.env.example`)
 - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` / `CLERK_SECRET_KEY` — optional; enables `/sign-in` with Clerk GitHub OAuth
 - `NEXT_PUBLIC_APP_URL` — Set to local dev URL (port 3000) for local development
 

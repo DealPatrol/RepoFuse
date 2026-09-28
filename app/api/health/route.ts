@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getActiveAiProvider, isAiConfigured } from '@/lib/ai-gateway'
+import { getActiveAiProvider, isAiConfigured, isVercelRuntime } from '@/lib/ai-gateway'
 import { isClerkConfigured } from '@/lib/clerk-auth'
 import { getDb } from '@/lib/db'
 
@@ -33,8 +33,9 @@ function checkEnv(): Record<string, boolean> {
     OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
     ANTHROPIC_API_KEY: !!process.env.ANTHROPIC_API_KEY,
     AI_GATEWAY: isAiConfigured(),
-    AI_GATEWAY_API_KEY: !!process.env.AI_GATEWAY_API_KEY,
-    VERCEL_OIDC_TOKEN: !!process.env.VERCEL_OIDC_TOKEN,
+    AI_GATEWAY_API_KEY: !!process.env.AI_GATEWAY_API_KEY?.trim(),
+    VERCEL: isVercelRuntime(),
+    VERCEL_OIDC_TOKEN: !!process.env.VERCEL_OIDC_TOKEN?.trim(),
     CLERK: isClerkConfigured(),
     STRIPE_SECRET_KEY: !!process.env.STRIPE_SECRET_KEY,
     STRIPE_PRO_PRICE_ID: !!process.env.STRIPE_PRO_PRICE_ID,
@@ -52,6 +53,7 @@ export async function GET() {
     {
       status,
       aiProvider: getActiveAiProvider(),
+      vercelRuntime: isVercelRuntime(),
       uptime_ms: Date.now() - startedAt,
       commit: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
       env,

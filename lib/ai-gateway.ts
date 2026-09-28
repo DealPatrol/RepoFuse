@@ -2,12 +2,15 @@ import { generateText, type LanguageModel, type ModelMessage } from 'ai'
 import {
   aiConfigErrorMessage,
   createPromptRunner,
+  DEFAULT_ANALYSIS_GATEWAY_MODEL,
   DEFAULT_ANTHROPIC_MODEL,
   DEFAULT_GATEWAY_MODEL,
   gatewayProviderOptions,
   getActiveAiProvider,
   getLanguageModel,
   isAiConfigured,
+  isVercelRuntime,
+  usesGatewayAuth,
   mapClaudeModel,
   resolvedModelIds,
   type AiProviderId,
@@ -30,12 +33,15 @@ export type AiGatewayFeature =
 export {
   aiConfigErrorMessage,
   createPromptRunner,
+  DEFAULT_ANALYSIS_GATEWAY_MODEL,
   DEFAULT_ANTHROPIC_MODEL,
   DEFAULT_GATEWAY_MODEL,
   gatewayProviderOptions,
   getActiveAiProvider,
   isAiConfigured,
+  isVercelRuntime,
   mapClaudeModel,
+  usesGatewayAuth,
 }
 export type { AiProviderId }
 
