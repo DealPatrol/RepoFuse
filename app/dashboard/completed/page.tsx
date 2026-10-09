@@ -14,7 +14,6 @@ interface CompletedProject {
   completedAt: string
   launchUrl?: string
   revenue?: string
-  users?: number
   techStack: string[]
 }
 
@@ -27,7 +26,6 @@ const MOCK_COMPLETED: CompletedProject[] = [
     completedAt: '2024-11-15',
     launchUrl: 'https://invoiceapi.example.com',
     revenue: '$1.2k MRR',
-    users: 45,
     techStack: ['Node.js', 'Express', 'Stripe', 'PDFKit'],
   },
   {
@@ -37,7 +35,6 @@ const MOCK_COMPLETED: CompletedProject[] = [
     completedAt: '2024-10-22',
     launchUrl: 'https://teamdash.example.com',
     revenue: '$800 MRR',
-    users: 120,
     techStack: ['Next.js', 'Supabase', 'Recharts'],
   },
 ]
@@ -68,7 +65,7 @@ export default async function CompletedProjectsPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="bg-card/50 border-border/50">
           <CardContent className="pt-6">
             <div className="text-3xl font-bold text-green-400">{completedProjects.length}</div>
@@ -81,14 +78,6 @@ export default async function CompletedProjectsPage() {
               ${completedProjects.reduce((acc, p) => acc + (p.revenue ? parseFloat(p.revenue.replace(/[^0-9.]/g, '')) : 0), 0).toFixed(1)}k
             </div>
             <p className="text-sm text-muted-foreground">Total MRR</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-card/50 border-border/50">
-          <CardContent className="pt-6">
-            <div className="text-3xl font-bold text-purple-400">
-              {completedProjects.reduce((acc, p) => acc + (p.users || 0), 0)}
-            </div>
-            <p className="text-sm text-muted-foreground">Total Users</p>
           </CardContent>
         </Card>
         <Card className="bg-card/50 border-border/50">
@@ -145,7 +134,7 @@ export default async function CompletedProjectsPage() {
                   ))}
                 </div>
                 
-                <div className="grid grid-cols-3 gap-4 text-sm pt-4 border-t border-border/50">
+                <div className="grid grid-cols-2 gap-4 text-sm pt-4 border-t border-border/50">
                   <div>
                     <div className="flex items-center gap-1 text-muted-foreground">
                       <Calendar className="h-3 w-3" />
@@ -160,12 +149,6 @@ export default async function CompletedProjectsPage() {
                         Revenue
                       </div>
                       <p className="font-medium text-green-400">{project.revenue}</p>
-                    </div>
-                  )}
-                  {project.users && (
-                    <div>
-                      <span className="text-muted-foreground">Users</span>
-                      <p className="font-medium">{project.users}</p>
                     </div>
                   )}
                 </div>

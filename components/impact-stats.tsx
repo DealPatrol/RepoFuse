@@ -4,22 +4,22 @@ import { TrendingUp, Zap, Clock } from 'lucide-react'
 
 const stats = [
   {
-    value: '12,000+',
-    label: 'Repos Analyzed',
+    value: 'Scan',
+    label: 'Connected repositories',
     icon: TrendingUp,
-    description: 'Real codebases scanned worldwide',
+    description: 'Read-only access to the repos you choose',
   },
   {
-    value: '500+',
-    label: 'Blueprints Discovered',
+    value: 'Rank',
+    label: 'Product ideas',
     icon: Zap,
-    description: 'Potential apps identified',
+    description: 'Sorted by reuse, effort, and demand',
   },
   {
-    value: '10,000+',
-    label: 'Hours Saved',
+    value: 'Plan',
+    label: 'Launch briefs',
     icon: Clock,
-    description: 'Developer time accelerated',
+    description: 'Scope, risks, and a scaffold path for the idea you pick',
   },
 ]
 

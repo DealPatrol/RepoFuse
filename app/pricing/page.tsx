@@ -331,7 +331,6 @@
               '🔒 Read-only repo access — code never stored',
               '✅ 7-day free trial on Pro',
               '↩️ Cancel anytime, no penalties',
-              '🌍 Trusted by 2,400+ developers',
             ].map((t) => (
               <span key={t} className="flex items-center gap-2">{t}</span>
             ))}
@@ -355,23 +354,6 @@
                 </div>
               ))}
             </div>
-          </div>
-
-          {/* ── Social Proof ── */}
-          <div className="mt-24 max-w-3xl mx-auto grid sm:grid-cols-3 gap-4">
-            {[
-              { quote: '"3 hidden apps found in 4 minutes. Shipped the first one 3 weeks later."', author: '@IndieHacker_X' },
-              { quote: '"Reduced our AI costs by 60% with BYOK. Same quality, way less spend."', author: 'Emily W., Scale.io' },
-              { quote: "The scaffold PR had all checks green. I just hit merge. That's it.", author: 'Marcus R., Solo Founder' },
-            ].map((t, i) => (
-              <div key={i} className="bg-[#161B22] border border-[#30363D] rounded-xl p-5 hover:border-[#06B6D4]/30 transition-all">
-                <div className="flex gap-1 mb-3">
-                  {[...Array(5)].map((_, s) => <span key={s} className="text-[#F59E0B] text-xs">★</span>)}
-                </div>
-                <p className="text-sm text-[#8B949E] italic mb-3">{t.quote}</p>
-                <p className="text-xs text-[#8B949E] font-mono">{t.author}</p>
-              </div>
-            ))}
           </div>
 
           {/* ── FAQ ── */}

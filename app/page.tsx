@@ -22,7 +22,6 @@ import {
   Rocket,
   ShieldCheck,
   Sparkles,
-  Star,
   Terminal,
   Workflow,
   Zap,
@@ -420,15 +419,12 @@ export default async function HomePage({
         <section className="border-b border-[#30363D] bg-[#101722] py-20">
           <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[1fr_0.8fr] lg:items-center">
             <div>
-              <div className="mb-4 flex gap-1">
-                {[...Array(5)].map((_, index) => (
-                  <Star key={index} className="h-4 w-4 fill-[#F59E0B] text-[#F59E0B]" />
-                ))}
-              </div>
-              <blockquote className="max-w-3xl text-2xl font-semibold leading-10 text-[#F0F6FC] sm:text-3xl">
-                &quot;RepoFuse found the one product idea we could actually ship from code we already had. The Pro upgrade made sense the moment the launch brief appeared.&quot;
-              </blockquote>
-              <div className="mt-5 text-sm text-[#8B949E]">Indie founder using RepoFuse for multi-repo product discovery</div>
+              <h2 className="max-w-3xl font-mono text-3xl font-black leading-tight text-[#F0F6FC] sm:text-4xl">
+                A free scan shows what you can ship next.
+              </h2>
+              <p className="mt-5 max-w-3xl text-lg leading-8 text-[#AEB8C5]">
+                RepoFuse reads the repositories you connect, maps reusable code, and ranks product ideas by demand, reuse, and effort. Upgrade to Pro when you want launch briefs and scaffold generation.
+              </p>
             </div>
 
             <div className="rounded-2xl border border-[#06B6D4]/40 bg-[#0B0F14] p-6 shadow-[0_0_36px_rgba(6,182,212,0.12)]">

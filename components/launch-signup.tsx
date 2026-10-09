@@ -79,7 +79,7 @@ export function LaunchSignup({ onComplete }: LaunchSignupProps) {
     return (
       <div className="space-y-6">
         <div>
-          <h3 className="text-2xl font-bold text-white mb-2">Join the First 1,000</h3>
+          <h3 className="text-2xl font-bold text-white mb-2">Create your account</h3>
           <p className="text-cyan-200/80">Lock in lifetime pricing. Launch day exclusive.</p>
         </div>
 
