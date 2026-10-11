@@ -7,7 +7,6 @@
     Check, X, ArrowRight, Sparkles, Github,
     Crown, Zap, Rocket, Key, ChevronDown,
   } from 'lucide-react'
-  import { RepoFuseLogo3D } from '@/components/repofuse-logo-3d'
 
   // ── Plan data (inlined so this is safe as a client component) ──────────────
   const PLAN_ANNUAL_DISCOUNT = 0.2 // 20% off
@@ -137,7 +136,8 @@
         <header className="sticky top-0 z-50 border-b border-[#30363D] bg-[#0D1117]/80 backdrop-blur-md">
           <div className="container mx-auto px-6 py-3 flex items-center justify-between">
             <Link href="/" className="flex items-center mt-4">
-              <RepoFuseLogo3D className="h-10 w-10" />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/brand-header-dark.png" alt="RepoFuse" width={168} height={40} className="block h-10 w-auto" />
             </Link>
             <nav className="flex items-center gap-4">
               <Link href="/dashboard" className="text-xs font-mono tracking-widest text-[#06B6D4]/60 hover:text-[#06B6D4] transition-colors uppercase">

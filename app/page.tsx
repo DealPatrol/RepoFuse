@@ -1,6 +1,5 @@
 import Image from 'next/image'
 import Link from 'next/link'
-import { RepoFuseLogo3D } from '@/components/repofuse-logo-3d'
 import { NavDropdown } from '@/components/nav-dropdown'
 import { HeroChat } from '@/components/hero-chat'
 import {
@@ -135,6 +134,18 @@ export default async function HomePage({
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#0B0F14] text-[#F0F6FC]">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'Organization',
+            name: 'RepoFuse',
+            url: 'https://repofuse.com',
+            logo: 'https://repofuse.com/brand-logo.png',
+          }),
+        }}
+      />
       {errorMessage && (
         <div className="border-b border-red-500/30 bg-red-950/50 px-4 py-3 text-sm text-red-300">
           <div className="mx-auto flex max-w-6xl items-center gap-3">
@@ -147,8 +158,8 @@ export default async function HomePage({
       <header className="sticky top-0 z-50 border-b border-[#30363D] bg-[#0B0F14]/88 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
           <Link href="/" className="flex items-center gap-3">
-            <RepoFuseLogo3D className="h-9 w-9" />
-            <span className="hidden font-mono text-sm font-bold text-[#F0F6FC] sm:inline">RepoFuse</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/brand-header-dark.png" alt="RepoFuse" width={168} height={40} className="block h-10 w-auto" />
           </Link>
 
           <nav className="hidden items-center gap-6 md:flex">
