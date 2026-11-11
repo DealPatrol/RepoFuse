@@ -114,8 +114,8 @@ export async function grantCredits(
     WITH existing AS (
       SELECT *
       FROM credit_transactions
-      WHERE idempotency_key = ${idempotencyKey}
-        AND ${idempotencyKey} IS NOT NULL
+      WHERE idempotency_key = ${idempotencyKey}::text
+        AND ${idempotencyKey}::text IS NOT NULL
       LIMIT 1
     ),
     updated AS (
@@ -132,7 +132,7 @@ export async function grantCredits(
       INSERT INTO credit_transactions (
         user_id, amount, transaction_type, reason, metadata, balance_after, idempotency_key
       )
-      SELECT ${userId}, ${amount}, 'grant', ${reason}, ${JSON.stringify(metadata)}::jsonb, current_balance, ${idempotencyKey}
+      SELECT ${userId}, ${amount}, 'grant', ${reason}, ${JSON.stringify(metadata)}::jsonb, current_balance, ${idempotencyKey}::text
       FROM updated
       RETURNING *
     )
@@ -159,8 +159,8 @@ export async function renewMonthlyCredits(
     WITH existing AS (
       SELECT *
       FROM credit_transactions
-      WHERE idempotency_key = ${idempotencyKey}
-        AND ${idempotencyKey} IS NOT NULL
+      WHERE idempotency_key = ${idempotencyKey}::text
+        AND ${idempotencyKey}::text IS NOT NULL
       LIMIT 1
     ),
     current_credits AS (
@@ -183,7 +183,7 @@ export async function renewMonthlyCredits(
       INSERT INTO credit_transactions (
         user_id, amount, transaction_type, reason, metadata, balance_after, idempotency_key
       )
-      SELECT ${userId}, top_up_amount, 'renewal', ${reason}, ${JSON.stringify(metadata)}::jsonb, current_balance, ${idempotencyKey}
+      SELECT ${userId}, top_up_amount, 'renewal', ${reason}, ${JSON.stringify(metadata)}::jsonb, current_balance, ${idempotencyKey}::text
       FROM updated
       WHERE top_up_amount > 0
       RETURNING *
@@ -211,9 +211,9 @@ export async function deductCredits(
     WITH existing AS MATERIALIZED (
       SELECT *
       FROM credit_transactions
-      WHERE idempotency_key = ${idempotencyKey}
+      WHERE idempotency_key = ${idempotencyKey}::text
         AND user_id = ${userId}
-        AND ${idempotencyKey} IS NOT NULL
+        AND ${idempotencyKey}::text IS NOT NULL
       LIMIT 1
     ),
     available AS MATERIALIZED (
@@ -235,7 +235,7 @@ export async function deductCredits(
         ${`${type} deduction`},
         ${JSON.stringify(metadata)}::jsonb,
         current_balance - ${amount},
-        ${idempotencyKey}
+        ${idempotencyKey}::text
       FROM available
       ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
       RETURNING *
@@ -262,7 +262,7 @@ export async function deductCredits(
       const existing = await sql`
         SELECT *
         FROM credit_transactions
-        WHERE idempotency_key = ${idempotencyKey}
+        WHERE idempotency_key = ${idempotencyKey}::text
           AND user_id = ${userId}
         LIMIT 1
       `

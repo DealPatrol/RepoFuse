@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { generateText } from 'ai'
-import { aiConfigErrorMessage, isAiConfigured, languageModelFor, llmProviderOptions } from '@/lib/ai-gateway'
+import { aiConfigErrorMessage, isAiConfigured, generateForFeature } from '@/lib/ai-gateway'
 import { getCreditBalance, deductCredits, refundCredits, CREDITS } from '@/lib/credits'
 import { getCurrentUser } from '@/lib/auth'
 import { getAnalysisById, getRepositoriesForAnalysis } from '@/lib/queries'
@@ -112,12 +111,10 @@ Your task is to discover what applications could be built by combining files fro
 
 Return as JSON array of app suggestions. Focus on practical, buildable applications.`
 
-    const result = await generateText({
-      model: languageModelFor('legacy'),
+    const result = await generateForFeature('legacy', user.id, {
       prompt,
       temperature: 0.7,
       maxOutputTokens: 2000,
-      ...llmProviderOptions(user.id, 'legacy'),
     })
 
     // Parse AI response and save suggestions

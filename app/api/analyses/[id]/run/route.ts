@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
-import { generateText, tool } from 'ai'
-import { aiConfigErrorMessage, isAiConfigured, languageModelFor, llmProviderOptions } from '@/lib/ai-gateway'
+import { tool } from 'ai'
+import { aiConfigErrorMessage, isAiConfigured, generateForFeature } from '@/lib/ai-gateway'
 import { z } from 'zod'
 import { getCurrentAccessToken, getCurrentUser, getGitHubNotLinkedMessage } from '@/lib/auth'
 import {
@@ -333,8 +333,7 @@ For each app blueprint:
 - List technologies detected
 - In the explanation, name the capabilities being transferred and which repos they come from, plus a suggested first build step`
 
-        const aiResponse = await generateText({
-          model: languageModelFor('analysis-run'),
+        const aiResponse = await generateForFeature('analysis-run', user.id, {
           maxOutputTokens: 16384,
           system: 'You are an expert software architect and product strategist. Your job is to analyze GitHub repository file structures and identify genuinely NEW applications that can be built by recombining existing code capabilities into different product categories. Never suggest rebuilds or minor variations of products the developer has already shipped — the value you provide is showing them markets and use cases their code unlocks that they have not thought of. Stay grounded: reuse claims must reference real files.',
           prompt: userPrompt,
@@ -365,7 +364,6 @@ For each app blueprint:
             }),
           },
           toolChoice: { type: 'tool', toolName: 'report_blueprints' },
-          ...llmProviderOptions(user.id, 'analysis-run'),
         })
 
         send({ status: 'analyzing', progress: 80 })

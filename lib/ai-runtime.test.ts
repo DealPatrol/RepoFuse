@@ -110,3 +110,18 @@ describe('Claude model id mapping', () => {
     })
   })
 })
+
+describe('gateway access errors', () => {
+  it('treats free-tier model restrictions as gateway access errors', async () => {
+    const { isGatewayAccessError } = await import('@/lib/ai-runtime')
+    const err = Object.assign(new Error('Free tier users do not have access to this model.'), {
+      statusCode: 403,
+    })
+    expect(isGatewayAccessError(err)).toBe(true)
+  })
+
+  it('does not treat ordinary failures as gateway access errors', async () => {
+    const { isGatewayAccessError } = await import('@/lib/ai-runtime')
+    expect(isGatewayAccessError(new Error('Failed to parse AI response'))).toBe(false)
+  })
+})
