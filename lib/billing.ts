@@ -4,13 +4,10 @@ import { updateUserBilling } from '@/lib/queries'
 import { hasActivePaidSubscription, hasActivePaidUser } from '@/lib/pro-access'
 import { ACTIVE_SUBSCRIPTION_STATUSES } from '@/lib/subscription-status'
 import { getSubscriptionByGithubId } from '@/lib/queries'
-import { getPriceIdForPlan, getStripe, isPaidPlan, isStripeConfigured, type PlanId } from '@/lib/stripe'
+import { getPlanForPriceId, getStripe, isPaidPlan, isStripeConfigured, type PlanId } from '@/lib/stripe'
 
-function planFromStripePriceId(priceId: string | null | undefined): Exclude<PlanId, 'free' | 'byok'> {
-  if (!priceId) return 'pro'
-  const scalePriceId = getPriceIdForPlan('scale')
-  if (scalePriceId && priceId === scalePriceId) return 'scale'
-  return 'pro'
+function planFromStripePriceId(priceId: string | null | undefined): Exclude<PlanId, 'free'> {
+  return getPlanForPriceId(priceId)
 }
 
 const ACTIVE_STATUSES = ACTIVE_SUBSCRIPTION_STATUSES

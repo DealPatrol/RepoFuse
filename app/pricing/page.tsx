@@ -101,7 +101,7 @@
   const faqs = [
     {
       q: 'Do I need a credit card for the free trial?',
-      a: 'No. The Pro 7-day trial starts the moment you sign in with GitHub. We only ask for payment details when you decide to continue after the trial ends.',
+      a: 'No. Start the 7-day Pro trial from your billing page without entering a card. Add a payment method before the trial ends to keep Pro; otherwise you drop back to Free automatically.',
     },
     {
       q: 'What happens when I run out of credits?',
@@ -122,7 +122,8 @@
   ]
 
   export default function PricingPage() {
-    const [annual, setAnnual] = useState(true) // Annual by default
+    // Only monthly Stripe prices exist today, so show monthly pricing only.
+    const annual = false
     const [openFaq, setOpenFaq] = useState<number | null>(null)
 
     function displayPrice(monthly: number) {
@@ -168,29 +169,6 @@
               Start free — no card needed. Upgrade when you want unlimited repos, scaffold generation, and the ability to ship real apps from your code.
             </p>
 
-            {/* Annual / Monthly toggle */}
-            <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-[#161B22] border border-[#30363D]">
-              <button
-                onClick={() => setAnnual(false)}
-                className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${!annual ? 'bg-[#F0F6FC] text-[#0D1117] font-bold' : 'text-[#8B949E] hover:text-[#F0F6FC]'}`}
-              >
-                Monthly
-              </button>
-              <button
-                onClick={() => setAnnual(true)}
-                className={`px-5 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${annual ? 'bg-[#F0F6FC] text-[#0D1117] font-bold' : 'text-[#8B949E] hover:text-[#F0F6FC]'}`}
-              >
-                Annual
-                <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold transition-all ${annual ? 'bg-[#F59E0B] text-[#0D1117]' : 'bg-[#F59E0B]/20 text-[#F59E0B]'}`}>
-                  Save 20%
-                </span>
-              </button>
-            </div>
-            {annual && (
-              <p className="text-xs text-[#F59E0B] mt-3">
-                Annual plans billed as a single payment · cancel within 30 days for a full refund
-              </p>
-            )}
           </div>
 
           {/* ── Plan Cards ── */}
@@ -317,11 +295,11 @@
                     <h3 className="font-mono font-bold text-[#F0F6FC]">BYOK — Bring Your Own Key</h3>
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#F59E0B]/10 text-[#F59E0B] font-bold border border-[#F59E0B]/20">Developer</span>
                   </div>
-                  <p className="text-sm text-[#8B949E]">Use your own Anthropic or OpenAI key. Platform access for <strong className="text-[#F0F6FC]">{annual ? '$7' : '$9'}/mo</strong> — AI costs go direct to the provider. Up to 90% cheaper than Pro.</p>
+                  <p className="text-sm text-[#8B949E]">Use your own Anthropic or OpenAI key. Platform access for <strong className="text-[#F0F6FC]">$9/mo</strong> — AI costs go direct to the provider. Up to 90% cheaper than Pro.</p>
                 </div>
               </div>
-              <a href="/dashboard/settings" className="flex items-center gap-2 text-sm font-bold text-[#F59E0B] hover:text-[#fbbf24] transition-colors whitespace-nowrap flex-shrink-0">
-                Set up BYOK <ArrowRight className="h-4 w-4" />
+              <a href="/dashboard/billing" className="flex items-center gap-2 text-sm font-bold text-[#F59E0B] hover:text-[#fbbf24] transition-colors whitespace-nowrap flex-shrink-0">
+                Get BYOK <ArrowRight className="h-4 w-4" />
               </a>
             </div>
           </div>

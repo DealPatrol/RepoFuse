@@ -37,14 +37,47 @@ export function isStripeConfigured(): boolean {
   return !!(getSecretKeyForMode(getConfiguredMode()) && getPriceId())
 }
 
-export function getPriceIdForPlan(plan: 'pro' | 'scale'): string {
+export type CheckoutPlan = 'pro' | 'scale' | 'byok'
+
+export function parseCheckoutPlan(value: unknown): CheckoutPlan {
+  if (value === 'scale' || value === 'byok') return value
+  return 'pro'
+}
+
+export function getPriceIdForPlan(plan: CheckoutPlan): string {
   const mode = getConfiguredMode()
   if (plan === 'scale') {
     return mode === 'live'
       ? (process.env.STRIPE_SCALE_PRICE_ID_LIVE || process.env.STRIPE_SCALE_PRICE_ID || '')
       : (process.env.STRIPE_SCALE_PRICE_ID_TEST || process.env.STRIPE_SCALE_PRICE_ID || '')
   }
+  if (plan === 'byok') {
+    return mode === 'live'
+      ? (process.env.STRIPE_BYOK_PRICE_ID_LIVE || process.env.STRIPE_BYOK_PRICE_ID || '')
+      : (process.env.STRIPE_BYOK_PRICE_ID_TEST || process.env.STRIPE_BYOK_PRICE_ID || '')
+  }
   return getPriceId()
+}
+
+/** Map a Stripe price ID back to the RepoFuse plan it sells. Unknown prices fall back to Pro. */
+export function getPlanForPriceId(priceId: string | null | undefined): CheckoutPlan {
+  if (!priceId) return 'pro'
+  const scalePriceId = getPriceIdForPlan('scale')
+  if (scalePriceId && priceId === scalePriceId) return 'scale'
+  const byokPriceId = getPriceIdForPlan('byok')
+  if (byokPriceId && priceId === byokPriceId) return 'byok'
+  return 'pro'
+}
+
+/** Shared Checkout Session options so every entry point bills the same way. */
+export function getCheckoutPlanOptions(plan: CheckoutPlan): {
+  trialDays: number | null
+  paymentMethodCollection: 'always' | 'if_required'
+} {
+  // Pro has a 7-day trial with no card required (as advertised on /pricing).
+  // If no card is added by the end of the trial, the subscription cancels itself.
+  if (plan === 'pro') return { trialDays: 7, paymentMethodCollection: 'if_required' }
+  return { trialDays: null, paymentMethodCollection: 'always' }
 }
 
 export function getStripe(): Stripe {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { isStripeConfigured, getStripe, getPriceId } from '@/lib/stripe'
+import { isStripeConfigured, getStripe, getPriceIdForPlan, getCheckoutPlanOptions, parseCheckoutPlan } from '@/lib/stripe'
 import { getSubscriptionByGithubId, upsertSubscription } from '@/lib/queries'
 
 export async function GET(request: NextRequest) {
@@ -16,7 +16,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/?error=auth_required', appUrl))
     }
 
-    const priceId = getPriceId()
+    const plan = parseCheckoutPlan(request.nextUrl.searchParams.get('plan'))
+    const priceId = getPriceIdForPlan(plan)
+    const planOptions = getCheckoutPlanOptions(plan)
     if (!priceId) {
       return NextResponse.redirect(new URL('/dashboard?error=price_not_configured', appUrl))
     }
@@ -44,13 +46,20 @@ export async function GET(request: NextRequest) {
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
+      payment_method_collection: planOptions.paymentMethodCollection,
+      allow_promotion_codes: true,
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${appUrl}/dashboard?upgraded=true`,
       cancel_url: `${appUrl}/pricing?cancelled=true`,
-      metadata: { github_id: String(user.github_id), plan: 'pro' },
+      metadata: { github_id: String(user.github_id), plan },
       subscription_data: {
-        trial_period_days: 14, // Launch offer: 14 days free
-        metadata: { github_id: String(user.github_id), plan: 'pro' },
+        metadata: { github_id: String(user.github_id), plan },
+        ...(planOptions.trialDays
+          ? {
+              trial_period_days: planOptions.trialDays,
+              trial_settings: { end_behavior: { missing_payment_method: 'cancel' as const } },
+            }
+          : {}),
       },
     })
 

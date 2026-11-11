@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { getAppUrl, getPriceId, getStripe, isStripeConfigured } from '@/lib/stripe'
+import { getAppUrl, getCheckoutPlanOptions, getPriceIdForPlan, getStripe, isStripeConfigured, parseCheckoutPlan } from '@/lib/stripe'
 import { updateUserBilling } from '@/lib/queries'
 
 export async function GET(request: NextRequest) {
@@ -18,6 +18,13 @@ export async function GET(request: NextRequest) {
     loginUrl.searchParams.set('returnTo', returnTo)
     return NextResponse.redirect(loginUrl)
   }
+
+  const plan = parseCheckoutPlan(request.nextUrl.searchParams.get('plan'))
+  const priceId = getPriceIdForPlan(plan)
+  if (!priceId) {
+    return NextResponse.redirect(new URL('/pricing?error=checkout_not_configured', appUrl))
+  }
+  const planOptions = getCheckoutPlanOptions(plan)
 
   try {
     const stripe = getStripe()
@@ -40,22 +47,31 @@ export async function GET(request: NextRequest) {
       customer: customerId,
       line_items: [
         {
-          price: getPriceId(),
+          price: priceId,
           quantity: 1,
         },
       ],
       allow_promotion_codes: true,
+      payment_method_collection: planOptions.paymentMethodCollection,
       success_url: `${appUrl}/api/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/pricing?canceled=1`,
       metadata: {
         app_user_id: user.id,
         github_id: String(user.github_id),
+        plan,
       },
       subscription_data: {
         metadata: {
           app_user_id: user.id,
           github_id: String(user.github_id),
+          plan,
         },
+        ...(planOptions.trialDays
+          ? {
+              trial_period_days: planOptions.trialDays,
+              trial_settings: { end_behavior: { missing_payment_method: 'cancel' as const } },
+            }
+          : {}),
       },
     })
 
