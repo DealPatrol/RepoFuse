@@ -6,6 +6,13 @@ import { sanitizeReturnTo } from '@/lib/auth'
 import { isClerkConfigured } from '@/lib/clerk-auth'
 import { GITHUB_ACCOUNT_NOT_LINKED_MESSAGE } from '@/lib/github-account'
 import { isLegacyGitHubOAuthConfigured } from '@/lib/github-oauth'
+import { NOINDEX } from '@/lib/site'
+
+export const metadata = {
+  title: 'Sign in',
+  alternates: { canonical: '/sign-in' },
+  robots: NOINDEX,
+}
 
 const ERROR_MESSAGES: Record<string, string> = {
   github_oauth_not_configured: 'GitHub OAuth is not configured yet.',

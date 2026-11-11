@@ -6,9 +6,12 @@ const clerkConfigured = Boolean(
     process.env.CLERK_SECRET_KEY?.trim(),
 )
 
+const PROTECTED_PREFIXES = ['/dashboard', '/prospects']
+
+/** Signed-in-only pages: the dashboard and the internal prospect-engine prototype. */
 function isDashboardRequest(request: NextRequest): boolean {
   const { pathname } = request.nextUrl
-  return pathname === '/dashboard' || pathname.startsWith('/dashboard/')
+  return PROTECTED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))
 }
 
 function githubCookieProxy(request: NextRequest) {

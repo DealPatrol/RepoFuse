@@ -17,13 +17,13 @@ export default async function BuildPage() {
         <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-500/10 border border-cyan-500/20">
           <Rocket className="h-8 w-8 text-cyan-400" />
         </div>
-        <h1 className="text-3xl font-black text-white">Click here and I'll build it</h1>
+        <h1 className="text-3xl font-black text-white">Click here and I&apos;ll build it</h1>
         <p className="text-zinc-400 max-w-lg mx-auto">
           Sign in to turn the apps hidden in your code into real, deployed repositories &mdash;
           generated and pushed for you automatically.
         </p>
         <Button asChild size="lg">
-          <Link href="/api/auth/login">Sign in to start building</Link>
+          <Link href="/sign-in?returnTo=%2Fdashboard%2Fbuild">Sign in to start building</Link>
         </Button>
       </div>
     )

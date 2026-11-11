@@ -7,7 +7,7 @@ const stats = [
     value: 'Scan',
     label: 'Connected repositories',
     icon: TrendingUp,
-    description: 'Read-only access to the repos you choose',
+    description: 'Access only to the repos you choose',
   },
   {
     value: 'Rank',

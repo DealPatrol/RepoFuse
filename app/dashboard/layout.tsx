@@ -1,5 +1,11 @@
 import { getCurrentUser } from '@/lib/auth'
 import { DashboardSidebar, DashboardMobileNav } from '@/components/dashboard-sidebar'
+import { NOINDEX } from '@/lib/site'
+
+export const metadata = {
+  title: 'Dashboard',
+  robots: NOINDEX,
+}
 
 export default async function DashboardLayout({
   children,

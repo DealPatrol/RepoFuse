@@ -1,4 +1,11 @@
 import { Mail, MessageSquare, AlertCircle, Github } from 'lucide-react'
+import { pageMetadata } from '@/lib/site'
+
+export const metadata = pageMetadata({
+  title: 'Support',
+  description: 'Get help with RepoFuse by email or GitHub issues, plus answers to common questions.',
+  path: '/legal/support',
+})
 
 export default function SupportPage() {
   return (

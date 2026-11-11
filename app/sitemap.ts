@@ -1,17 +1,11 @@
 import type { MetadataRoute } from 'next'
-
-function baseUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : 'https://repofuse.com')
-  )
-}
+import { PUBLIC_PAGES, SITE_URL } from '@/lib/site'
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const url = baseUrl()
-  const now = new Date()
-  return [
-    { url: `${url}/`, lastModified: now, changeFrequency: 'weekly', priority: 1 },
-    { url: `${url}/pricing`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
-  ]
+  return PUBLIC_PAGES.map((page) => ({
+    url: `${SITE_URL}${page.path === '/' ? '/' : page.path}`,
+    lastModified: new Date(`${page.lastModified}T00:00:00Z`),
+    changeFrequency: page.changeFrequency,
+    priority: page.priority,
+  }))
 }

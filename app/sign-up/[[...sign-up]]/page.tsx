@@ -1,6 +1,12 @@
 import { SignUp } from '@clerk/nextjs'
 import { redirect } from 'next/navigation'
 import { isClerkConfigured } from '@/lib/clerk-auth'
+import { NOINDEX } from '@/lib/site'
+
+export const metadata = {
+  title: 'Sign up',
+  robots: NOINDEX,
+}
 
 export default function SignUpPage() {
   if (!isClerkConfigured()) {
