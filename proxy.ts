@@ -33,18 +33,42 @@ function githubCookieProxy(request: NextRequest) {
  * `/api/mcp` and `/.well-known/oauth-*` are not protected here; those handlers
  * keep their own responses.
  */
+function hasLegacyGitHubSession(request: NextRequest): boolean {
+  return Boolean(
+    request.cookies.get('github_user_id')?.value && request.cookies.get('github_access_token')?.value,
+  )
+}
+
+function signInRedirect(request: NextRequest) {
+  const signInPath = process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL?.trim() || '/sign-in'
+  const url = new URL(signInPath, request.url)
+  url.searchParams.set('redirect_url', `${request.nextUrl.pathname}${request.nextUrl.search}`)
+  return NextResponse.redirect(url)
+}
+
+/**
+ * With Clerk enabled, a dashboard request is allowed when it has a Clerk session
+ * or a legacy GitHub OAuth cookie session (the sign-in page still uses the legacy
+ * GitHub OAuth app when it is configured). Signed-out visitors go to sign-in
+ * instead of hitting auth.protect()'s 404.
+ */
 const proxy = clerkConfigured
   ? clerkMiddleware(async (auth, request: NextRequest) => {
       if (!isDashboardRequest(request)) {
         return NextResponse.next()
       }
       try {
-        await auth.protect()
+        const { userId } = await auth()
+        if (userId) {
+          return NextResponse.next()
+        }
       } catch (error) {
-        console.error('[v0] Clerk auth.protect() failed:', error)
-        return NextResponse.redirect(new URL('/?error=auth_failed', request.url))
+        console.error('[proxy] Clerk auth() failed:', error)
       }
-      return NextResponse.next()
+      if (hasLegacyGitHubSession(request)) {
+        return NextResponse.next()
+      }
+      return signInRedirect(request)
     })
   : githubCookieProxy
 
