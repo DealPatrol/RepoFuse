@@ -13,6 +13,8 @@ vi.mock('@/lib/auth', () => ({
 vi.mock('@/lib/stripe', () => ({
   getPriceId: vi.fn(() => 'price_pro'),
   getPriceIdForPlan: vi.fn(() => 'price_scale'),
+  getCheckoutPlanOptions: vi.fn(() => ({ trialDays: null, paymentMethodCollection: 'always' })),
+  parseCheckoutPlan: vi.fn(() => 'pro'),
   getStripe: vi.fn(),
   isStripeConfigured: vi.fn(),
 }))

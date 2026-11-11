@@ -39,6 +39,9 @@ function checkEnv(): Record<string, boolean> {
     CLERK: isClerkConfigured(),
     STRIPE_SECRET_KEY: !!process.env.STRIPE_SECRET_KEY,
     STRIPE_PRO_PRICE_ID: !!process.env.STRIPE_PRO_PRICE_ID,
+    STRIPE_SCALE_PRICE_ID: !!process.env.STRIPE_SCALE_PRICE_ID,
+    STRIPE_BYOK_PRICE_ID: !!process.env.STRIPE_BYOK_PRICE_ID,
+    STRIPE_WEBHOOK_SECRET: !!process.env.STRIPE_WEBHOOK_SECRET,
   }
 }
 

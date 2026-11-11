@@ -7,13 +7,13 @@ import {
   updateUserBilling,
   upsertSubscription,
 } from '@/lib/queries'
-import { getStripe, getWebhookSecret, getPriceIdForPlan } from '@/lib/stripe'
+import { getStripe, getWebhookSecret, getPlanForPriceId } from '@/lib/stripe'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 type NeonSubscriptionStatus = 'active' | 'past_due' | 'canceled' | 'trialing'
-type BillingPlan = 'free' | 'pro' | 'scale'
+type BillingPlan = 'free' | 'pro' | 'scale' | 'byok'
 
 const HANDLED_EVENTS = new Set([
   'checkout.session.completed',
@@ -52,22 +52,17 @@ function mapSubscriptionStatus(status: Stripe.Subscription.Status): NeonSubscrip
 }
 
 function getPlanFromPriceId(priceId: string | null | undefined): BillingPlan {
-  if (!priceId) {
-    return 'pro'
-  }
-
-  const scalePriceId = getPriceIdForPlan('scale')
-  if (scalePriceId && priceId === scalePriceId) {
-    return 'scale'
-  }
-
-  return 'pro'
+  return getPlanForPriceId(priceId)
 }
 
 function getCreditGrantForPrice(priceId: string | null | undefined, fallback: number): number {
-  const scalePriceId = getPriceIdForPlan('scale')
-  if (priceId && scalePriceId && priceId === scalePriceId) {
+  const plan = getPlanForPriceId(priceId)
+  if (plan === 'scale') {
     return CREDITS.SCALE_MONTHLY_GRANT
+  }
+  if (plan === 'byok') {
+    // BYOK runs on the customer's own provider key; no hosted credits are included.
+    return 0
   }
 
   return fallback
@@ -191,8 +186,9 @@ export async function POST(request: NextRequest) {
         }
 
         const { user, priceId } = await persistSubscriptionState({ githubId, customerId, subscription })
-        if (user) {
-          const amount = getCreditGrantForPrice(priceId, CREDITS.INITIAL_GRANT)
+        const signupGrant = getCreditGrantForPrice(priceId, CREDITS.INITIAL_GRANT)
+        if (user && signupGrant > 0) {
+          const amount = signupGrant
           await grantCredits(user.id, amount, 'Subscription signup credit grant', {
             idempotency_key: event.id,
             stripe_event_id: event.id,
@@ -308,8 +304,9 @@ export async function POST(request: NextRequest) {
             const { user, priceId } = await persistSubscriptionState({ githubId, customerId, subscription })
             const billingReason = (invoice as unknown as { billing_reason?: string | null }).billing_reason
 
-            if (user && billingReason !== 'subscription_create') {
-              const amount = getCreditGrantForPrice(priceId, CREDITS.MONTHLY_GRANT)
+            const renewalGrant = getCreditGrantForPrice(priceId, CREDITS.MONTHLY_GRANT)
+            if (user && billingReason !== 'subscription_create' && renewalGrant > 0) {
+              const amount = renewalGrant
               await renewMonthlyCredits(user.id, amount, 'Monthly subscription renewal', {
                 idempotency_key: event.id,
                 stripe_event_id: event.id,

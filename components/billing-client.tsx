@@ -80,8 +80,9 @@ const PLAN_CONFIGS = [
     description: 'Your own API key',
     icon: Key,
     features: ['Unlimited repos', 'Unlimited analyses', 'Use own Anthropic/OpenAI key', 'No included RepoFuse credits', 'Up to 90% cheaper'],
-    cta: 'Set Up BYOK',
-    ctaHref: '/dashboard/settings',
+    cta: 'Get BYOK',
+    ctaHref: null,
+    checkoutPlan: 'byok' as const,
   },
 ] as const
 
@@ -119,7 +120,7 @@ export function BillingClient({
         ? 'Your trial uses the credits already in your balance. Monthly credits are granted on paid subscription renewal.'
         : `${creditAllowanceLabel} are granted on paid subscription renewal.`
 
-  const handleCheckout = async (targetPlan: 'pro' | 'scale' = 'pro') => {
+  const handleCheckout = async (targetPlan: 'pro' | 'scale' | 'byok' = 'pro') => {
     setCheckoutLoading(true)
     try {
       const res = await fetch('/api/stripe/checkout', {
@@ -397,9 +398,7 @@ export function BillingClient({
                       variant={highlighted ? 'default' : 'outline'}
                       className="w-full"
                       onClick={() =>
-                        handleCheckout(
-                          'checkoutPlan' in p && p.checkoutPlan === 'scale' ? 'scale' : 'pro',
-                        )
+                        handleCheckout('checkoutPlan' in p ? p.checkoutPlan : 'pro')
                       }
                       disabled={checkoutLoading}
                     >

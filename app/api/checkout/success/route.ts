@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAppUrl, getStripe } from '@/lib/stripe'
+import { getAppUrl, getPlanForPriceId, getStripe } from '@/lib/stripe'
 import { updateUserBilling, upsertSubscription } from '@/lib/queries'
 import { getDb } from '@/lib/db'
 
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     if (appUserId) {
       const isActive = !!subscription && ['active', 'trialing'].includes(subscription.status)
-      const planTier = isActive ? 'pro' : 'free'
+      const planTier = isActive ? getPlanForPriceId(subscription?.items.data[0]?.price.id) : 'free'
 
       // current_period_end is not on the typed Subscription in this Stripe SDK
       // version, so read it defensively from the raw object.
