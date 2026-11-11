@@ -2,6 +2,7 @@
 
   import { useState } from 'react'
   import Link from 'next/link'
+  import { SiteFooter } from '@/components/site-footer'
   import { Button } from '@/components/ui/button'
   import {
     Check, X, ArrowRight, Sparkles, Github,
@@ -108,7 +109,7 @@
     },
     {
       q: 'Does RepoFuse store my source code?',
-      a: 'Never. RepoFuse uses read-only OAuth access. We analyze file structure, dependency graphs, and code patterns — but your actual source is never stored on our servers.',
+      a: 'No. RepoFuse only scans the repositories you choose. It analyzes file structure, dependency graphs, and code patterns, and keeps file metadata and summaries — your source files are never stored on our servers.',
     },
     {
       q: 'What is BYOK and who is it for?',
@@ -328,7 +329,7 @@
           {/* ── Trust Signals ── */}
           <div className="max-w-3xl mx-auto mt-12 flex flex-wrap justify-center gap-6 text-sm text-[#8B949E]">
             {[
-              '🔒 Read-only repo access — code never stored',
+              '🔒 Only the repos you pick — source never stored',
               '✅ 7-day free trial on Pro',
               '↩️ Cancel anytime, no penalties',
             ].map((t) => (
@@ -393,9 +394,10 @@
               Scan My Repos Free
               <ArrowRight className="h-4 w-4" />
             </a>
-            <p className="text-xs text-[#8B949E] font-mono mt-4">free forever plan · read-only access · no credit card</p>
+            <p className="text-xs text-[#8B949E] font-mono mt-4">free forever plan · source never stored · no credit card</p>
           </div>
         </main>
+        <SiteFooter />
       </div>
     )
   }

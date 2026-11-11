@@ -1,7 +1,10 @@
-export const metadata = {
-  title: 'RepoFuse Privacy Policy',
-  description: 'Privacy Policy for RepoFuse',
-}
+import { pageMetadata } from '@/lib/site'
+
+export const metadata = pageMetadata({
+  title: 'Privacy Policy',
+  description: 'How RepoFuse collects, uses, and protects your account and repository data.',
+  path: '/privacy',
+})
 
 export default function PrivacyPolicyPage() {
   return (

@@ -1,23 +1,15 @@
 import type { MetadataRoute } from 'next'
-
-function baseUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : 'https://repofuse.com')
-  )
-}
+import { SITE_URL } from '@/lib/site'
 
 export default function robots(): MetadataRoute.Robots {
-  const url = baseUrl()
   return {
     rules: [
       {
         userAgent: '*',
-        allow: ['/', '/pricing'],
-        disallow: ['/api/', '/dashboard/'],
+        allow: '/',
+        disallow: ['/api/', '/dashboard', '/prospects', '/sign-in', '/sign-up'],
       },
     ],
-    sitemap: `${url}/sitemap.xml`,
-    host: url,
+    sitemap: `${SITE_URL}/sitemap.xml`,
   }
 }

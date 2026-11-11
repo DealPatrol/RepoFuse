@@ -2,6 +2,8 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { NavDropdown } from '@/components/nav-dropdown'
 import { HeroChat } from '@/components/hero-chat'
+import { SiteFooter } from '@/components/site-footer'
+import { pageMetadata } from '@/lib/site'
 import {
   Activity,
   AlertCircle,
@@ -25,6 +27,14 @@ import {
   Workflow,
   Zap,
 } from 'lucide-react'
+
+export const metadata = pageMetadata({
+  title: 'RepoFuse — Discover Apps Hidden in Your Code',
+  description:
+    'RepoFuse scans your GitHub or GitLab repos, finds reusable code, and ranks the products you could build and sell from it, with launch briefs and scaffold plans.',
+  path: '/',
+  absoluteTitle: true,
+})
 
 const ERROR_MESSAGES: Record<string, string> = {
   auth_required: 'You must sign in to access the dashboard.',
@@ -95,8 +105,8 @@ const planHighlights = [
 ]
 
 const proofPoints = [
-  'Read-only GitHub and GitLab access',
-  'Source code is not stored',
+  'Scans only the repos you pick',
+  'Source files are not stored',
   'Free scan before you upgrade',
   'Cancel anytime from billing',
 ]
@@ -256,7 +266,7 @@ export default async function HomePage({
                     <span className="ml-3 font-mono text-xs text-[#8B949E]">RepoFuse Opportunity Scan</span>
                     <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-[#10B981]/10 px-2 py-1 text-[11px] font-mono text-[#3FB950]">
                       <span className="h-1.5 w-1.5 rounded-full bg-[#3FB950]" />
-                      live
+                      demo
                     </span>
                   </div>
 
@@ -271,7 +281,7 @@ export default async function HomePage({
                         priority
                       />
                       <div>
-                        <div className="font-mono text-sm font-bold text-[#F0F6FC]">DealPatrol workspace</div>
+                        <div className="font-mono text-sm font-bold text-[#F0F6FC]">Demo workspace</div>
                         <div className="mt-1 text-xs text-[#8B949E]">Analyzing 14 repos, 43 services, 2,813 files</div>
                       </div>
                     </div>
@@ -282,7 +292,7 @@ export default async function HomePage({
                         <span className="text-[#F0F6FC]">repofuse scan --find-subscription-products</span>
                       </div>
                       <div className="mt-3 space-y-2 pl-7 text-xs text-[#8B949E]">
-                        <div>Connected with read-only access</div>
+                        <div>Connected to 14 selected repos</div>
                         <div className="text-[#06B6D4]">Mapped reusable billing, auth, and analytics logic</div>
                         <div className="text-[#F59E0B]">Detected 3 monetizable product wedges</div>
                       </div>
@@ -345,7 +355,7 @@ export default async function HomePage({
                 A straight path from repo scan to paid plan.
               </h2>
               <p className="mt-4 text-lg leading-8 text-[#AEB8C5]">
-                The homepage now sells the workflow buyers care about: connect safely, find revenue-grade ideas, validate the winner, and upgrade when they need more scans and scaffolds.
+                Connect the repos you choose, see which ideas are worth charging for, validate the winner, and upgrade when you need more scans and scaffolds.
               </p>
             </div>
 
@@ -371,14 +381,14 @@ export default async function HomePage({
                 <LockKeyhole className="h-6 w-6 text-[#F59E0B]" />
               </div>
               <h2 className="font-mono text-3xl font-black text-[#F0F6FC] sm:text-4xl">
-                Remove the two reasons developers hesitate.
+                Safe to connect. Clear about what Pro adds.
               </h2>
               <p className="mt-4 text-lg leading-8 text-[#AEB8C5]">
-                Subscription pages lose buyers when they worry about source-code access or cannot see why Pro is worth paying for. RepoFuse answers both before the pricing click.
+                You choose which repositories RepoFuse scans, source files are never stored, and your first scan is free, so you can judge the results before you pay.
               </p>
               <div className="mt-7 grid gap-3 sm:grid-cols-2">
                 {[
-                  ['Security', 'Read-only OAuth. No stored source code.'],
+                  ['Security', 'You pick the repos. Source files are not stored.'],
                   ['Value', 'Free scan proves the opportunity before upgrade.'],
                   ['Speed', 'From repo map to launch brief in minutes.'],
                   ['Expansion', 'Team, scaffold, digest, and Scale upgrades.'],
@@ -505,11 +515,12 @@ export default async function HomePage({
               </Link>
             </div>
             <p className="mt-5 font-mono text-xs text-[#8B949E]">
-              No credit card for the first scan. Read-only access. Source code is not stored.
+              No credit card for the first scan. Source files are not stored.
             </p>
           </div>
         </section>
       </main>
+      <SiteFooter />
     </div>
   )
 }

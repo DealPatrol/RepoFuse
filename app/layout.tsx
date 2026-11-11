@@ -3,20 +3,13 @@ import type { Metadata } from 'next'
 import { Analytics } from '@vercel/analytics/next'
 import { AuthProvider } from '@/components/auth-provider'
 import { ThemeProvider } from '@/components/theme-provider'
+import { DEFAULT_OG_IMAGE, SITE_URL } from '@/lib/site'
 import './globals.css'
 
-function siteUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : 'https://repofuse.com')
-  )
-}
-
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl()),
-  alternates: {
-    canonical: '/',
-  },
+  // Canonicals are set per page (lib/site.ts pageMetadata). A root-level
+  // canonical would be inherited by every page and point them all at "/".
+  metadataBase: new URL(SITE_URL),
   title: {
     default: 'RepoFuse — Discover Apps Hidden in Your Code',
     template: '%s · RepoFuse',
@@ -35,21 +28,14 @@ export const metadata: Metadata = {
   ],
   openGraph: {
     type: 'website',
-    url: siteUrl(),
+    url: '/',
     title: 'RepoFuse — Discover Apps Hidden in Your Code',
     description: 'Scan your GitHub repos, surface buildable app ideas, and ship faster.',
     siteName: 'RepoFuse',
-    images: [
-      {
-        url: '/repofuse-logo.jpg',
-        width: 1024,
-        height: 1024,
-        alt: 'RepoFuse logo',
-      },
-    ],
+    images: [DEFAULT_OG_IMAGE],
   },
   twitter: {
-    card: 'summary_large_image',
+    card: 'summary',
     title: 'RepoFuse',
     description: 'Scan your GitHub repos, surface buildable app ideas, and ship faster.',
     images: ['/repofuse-logo.jpg'],
@@ -61,7 +47,6 @@ export const metadata: Metadata = {
 export const viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
 }
 
 export default function RootLayout({

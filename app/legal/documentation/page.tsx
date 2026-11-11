@@ -1,7 +1,10 @@
-export const metadata = {
-  title: 'RepoFuse Documentation - Integration Guide',
-  description: 'Complete documentation for RepoFuse integration',
-}
+import { pageMetadata } from '@/lib/site'
+
+export const metadata = pageMetadata({
+  title: 'Documentation',
+  description: 'How to connect repositories, run a RepoFuse scan, read results, and use the MCP server.',
+  path: '/legal/documentation',
+})
 
 export default function DocumentationPage() {
   return (

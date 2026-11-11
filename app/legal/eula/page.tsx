@@ -1,7 +1,10 @@
-export const metadata = {
-  title: 'RepoFuse Terms of Service',
-  description: 'Terms of Service for RepoFuse',
-}
+import { pageMetadata } from '@/lib/site'
+
+export const metadata = pageMetadata({
+  title: 'Terms of Service',
+  description: 'The terms that govern your use of RepoFuse, including subscriptions, credits, and acceptable use.',
+  path: '/terms',
+})
 
 export default function EulaPage() {
   return (

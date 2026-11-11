@@ -138,7 +138,7 @@ export function HeroChat() {
         <div className="flex items-center gap-2 border-t border-[#30363D] px-4 py-3">
           <div className="flex items-center gap-1.5 rounded-lg border border-[#30363D] bg-[#0B0F14] px-3 py-1.5">
             <Sparkles className="h-3.5 w-3.5 text-[#F59E0B]" />
-            <span className="font-mono text-xs text-[#8B949E]">Claude 4.7 Opus</span>
+            <span className="font-mono text-xs text-[#8B949E]">Claude Sonnet 4.6</span>
           </div>
           <button
             type="button"

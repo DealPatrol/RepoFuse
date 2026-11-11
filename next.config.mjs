@@ -27,6 +27,29 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  async redirects() {
+    // One canonical host for SEO. www, the old admin alias, and the default
+    // vercel.app production alias all 301 to the apex, keeping the path.
+    // /api/* and /.well-known/* are left alone so any webhook, OAuth, or MCP
+    // client still pointed at an alias host keeps working (POSTs and OAuth
+    // discovery do not reliably follow redirects).
+    const canonicalHost = 'https://repofuse.com'
+    const aliasHosts = ['www.repofuse.com', 'admin.repofuse.com', 'repo-app-architect.vercel.app']
+    return aliasHosts.flatMap((host) => [
+      {
+        source: '/',
+        has: [{ type: 'host', value: host }],
+        destination: `${canonicalHost}/`,
+        statusCode: 301,
+      },
+      {
+        source: '/:path((?!api/|api$|\\.well-known/).+)',
+        has: [{ type: 'host', value: host }],
+        destination: `${canonicalHost}/:path`,
+        statusCode: 301,
+      },
+    ])
+  },
   async headers() {
     const configuredClerkOrigin = clerkFrontendOrigin(
       process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,

@@ -1,10 +1,13 @@
 import Link from 'next/link'
+import { pageMetadata } from '@/lib/site'
 import type { ReactNode } from 'react'
 
-export const metadata = {
+export const metadata = pageMetadata({
   title: 'MCP Server',
-  description: 'Connect RepoFuse to Claude, ChatGPT, Cursor, or Claude Code over MCP.',
-}
+  description:
+    'Connect RepoFuse to Claude, ChatGPT, Cursor, or Claude Code over MCP to scan repos and get build-ready product ideas from your AI assistant.',
+  path: '/mcp',
+})
 
 const endpoint = 'https://repofuse.com/api/mcp'
 
