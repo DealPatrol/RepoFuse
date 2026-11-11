@@ -40,3 +40,13 @@ export function createPromptRunner(options?: {
   userId?: string
   kind?: ModelKind
 }): (prompt: string, options?: { maxTokens?: number }) => Promise<string>
+
+export function isGatewayAccessError(error: unknown): boolean
+export function generateTextWithFallback(
+  options: Omit<Parameters<typeof import('ai').generateText>[0], 'model'> & {
+    kind?: ModelKind
+    model?: string
+    userId?: string
+    feature?: string
+  },
+): ReturnType<typeof import('ai').generateText>

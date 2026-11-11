@@ -1,4 +1,4 @@
-import { generateText, type LanguageModel, type ModelMessage } from 'ai'
+import { type LanguageModel, type ModelMessage } from 'ai'
 import {
   aiConfigErrorMessage,
   createPromptRunner,
@@ -6,6 +6,7 @@ import {
   DEFAULT_ANTHROPIC_MODEL,
   DEFAULT_GATEWAY_MODEL,
   gatewayProviderOptions,
+  generateTextWithFallback,
   getActiveAiProvider,
   getLanguageModel,
   isAiConfigured,
@@ -37,6 +38,7 @@ export {
   DEFAULT_ANTHROPIC_MODEL,
   DEFAULT_GATEWAY_MODEL,
   gatewayProviderOptions,
+  generateTextWithFallback,
   getActiveAiProvider,
   isAiConfigured,
   isVercelRuntime,
@@ -109,14 +111,29 @@ export async function generateWithGateway(params: {
     content: message.content,
   }))
 
-  const result = await generateText({
-    model: getLanguageModel(modelKindForFeature(params.feature)),
+  const result = await generateTextWithFallback({
+    kind: modelKindForFeature(params.feature),
+    userId: params.userId,
+    feature: params.feature,
     system: params.system,
     messages: modelMessages,
     maxOutputTokens: params.maxOutputTokens ?? 4096,
     temperature: params.temperature,
-    ...(provider === 'gateway' ? gatewayProviderOptions(params.userId, params.feature) : {}),
   })
 
   return result.text
+}
+
+/** generateText for a feature, with direct-Anthropic fallback when the gateway refuses the call. */
+export function generateForFeature(
+  feature: AiGatewayFeature,
+  userId: string | undefined,
+  args: Omit<Parameters<typeof generateTextWithFallback>[0], 'kind' | 'userId' | 'feature' | 'model'>,
+) {
+  return generateTextWithFallback({
+    ...args,
+    kind: modelKindForFeature(feature),
+    userId,
+    feature,
+  } as Parameters<typeof generateTextWithFallback>[0])
 }
