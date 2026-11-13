@@ -1,0 +1,17 @@
+# RepoFuse
+
+> RepoFuse scans your GitHub or GitLab repos, finds reusable code, and ranks the products you could build and sell from it, with launch briefs and scaffold plans.
+
+Site: https://repofuse.com
+Sitemap: https://repofuse.com/sitemap.xml
+
+## Main pages
+- [MCP Server · RepoFuse](https://repofuse.com/mcp): Connect RepoFuse to Claude, ChatGPT, Cursor, or Claude Code over MCP to scan repos and get build-ready product ideas from your AI assistant.
+- [Pricing · RepoFuse](https://repofuse.com/pricing): RepoFuse plans: start with a free repo scan, then upgrade to Pro, Scale, or bring your own AI key for more scans, launch briefs, and scaffold generation.
+- [Privacy Policy · RepoFuse](https://repofuse.com/privacy): How RepoFuse collects, uses, and protects your account and repository data.
+- [Terms of Service · RepoFuse](https://repofuse.com/terms): The terms that govern your use of RepoFuse, including subscriptions, credits, and acceptable use.
+
+## Legal
+- [Documentation · RepoFuse](https://repofuse.com/legal/documentation): How to connect repositories, run a RepoFuse scan, read results, and use the MCP server.
+- [Support · RepoFuse](https://repofuse.com/legal/support): Get help with RepoFuse by email or GitHub issues, plus answers to common questions.
+
