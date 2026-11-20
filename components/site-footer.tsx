@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { SisterSites } from '@/components/sister-sites';
 
 const footerLinks = [
   { href: '/pricing', label: 'Pricing' },
@@ -22,6 +23,7 @@ export function SiteFooter() {
           ))}
         </nav>
       </div>
-    </footer>
+          <SisterSites selfUrl="https://repofuse.com" clusters={['devtools']} />
+</footer>
   )
 }
