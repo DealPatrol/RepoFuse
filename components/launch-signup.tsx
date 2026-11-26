@@ -80,12 +80,12 @@ export function LaunchSignup({ onComplete }: LaunchSignupProps) {
       <div className="space-y-6">
         <div>
           <h3 className="text-2xl font-bold text-white mb-2">Create your account</h3>
-          <p className="text-cyan-200/80">Lock in lifetime pricing. Launch day exclusive.</p>
+          <p className="text-[#D3D4DC]">Lock in lifetime pricing. Launch day exclusive.</p>
         </div>
 
         <form onSubmit={handleInfoSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="name" className="text-cyan-300 font-semibold">
+            <Label htmlFor="name" className="text-[#D3D4DC] font-semibold">
               Full Name
             </Label>
             <Input
@@ -94,12 +94,12 @@ export function LaunchSignup({ onComplete }: LaunchSignupProps) {
               placeholder="Alex Developer"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="mt-2 bg-black/50 border-cyan-500/30 text-white placeholder:text-cyan-400/30"
+              className="mt-2 bg-black/50 border-[#363C3E] text-white placeholder:text-[#D3D4DC]"
             />
           </div>
 
           <div>
-            <Label htmlFor="email" className="text-cyan-300 font-semibold">
+            <Label htmlFor="email" className="text-[#D3D4DC] font-semibold">
               Email Address
             </Label>
             <Input
@@ -108,7 +108,7 @@ export function LaunchSignup({ onComplete }: LaunchSignupProps) {
               placeholder="you@example.com"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="mt-2 bg-black/50 border-cyan-500/30 text-white placeholder:text-cyan-400/30"
+              className="mt-2 bg-black/50 border-[#363C3E] text-white placeholder:text-[#D3D4DC]"
             />
           </div>
 
@@ -121,15 +121,15 @@ export function LaunchSignup({ onComplete }: LaunchSignupProps) {
 
           <Button
             type="submit"
-            className="w-full bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-black font-bold h-11"
+            className="w-full bg-[#FFC93C] hover:bg-[#F2B824] text-[#1D2122] font-bold h-11"
           >
             Continue
           </Button>
         </form>
 
-        <p className="text-xs text-cyan-400/50 text-center">
+        <p className="text-xs text-[#D3D4DC] text-center">
           We&apos;ll never spam. Read our{' '}
-          <a href="/legal/privacy-policy" className="underline hover:text-cyan-300">
+          <a href="/legal/privacy-policy" className="underline hover:text-[#D3D4DC]">
             privacy policy
           </a>
           .
@@ -143,7 +143,7 @@ export function LaunchSignup({ onComplete }: LaunchSignupProps) {
       <div className="space-y-6">
         <div>
           <h3 className="text-2xl font-bold text-white mb-2">Choose Your Launch Offer</h3>
-          <p className="text-cyan-200/80">Both come with full feature access. Connect GitHub or GitLab to continue.</p>
+          <p className="text-[#D3D4DC]">Both come with full feature access. Connect GitHub or GitLab to continue.</p>
         </div>
 
         <div className="space-y-3">
@@ -151,14 +151,14 @@ export function LaunchSignup({ onComplete }: LaunchSignupProps) {
           <button
             onClick={() => handleTrialChoice('free-trial')}
             disabled={isLoading}
-            className="w-full p-4 rounded-lg border-2 border-cyan-500/50 bg-cyan-950/20 hover:bg-cyan-950/40 hover:border-cyan-400 transition-all text-left disabled:opacity-50"
+            className="w-full p-4 rounded-lg border-2 border-[#363C3E] bg-[#363C3E] hover:bg-[#363C3E] hover:border-[#363C3E] transition-all text-left disabled:opacity-50"
           >
             <div className="flex items-start gap-3">
               <div className="flex-1">
                 <p className="font-bold text-white">14 Days Free</p>
-                <p className="text-sm text-cyan-300 mt-1">Full access. No credit card needed. Connect your repos to start.</p>
+                <p className="text-sm text-[#D3D4DC] mt-1">Full access. No credit card needed. Connect your repos to start.</p>
               </div>
-              {isLoading && <Loader2 className="h-5 w-5 animate-spin text-cyan-400" />}
+              {isLoading && <Loader2 className="h-5 w-5 animate-spin text-[#D3D4DC]" />}
             </div>
           </button>
 
@@ -166,17 +166,17 @@ export function LaunchSignup({ onComplete }: LaunchSignupProps) {
           <button
             onClick={() => handleTrialChoice('launch-with-stripe')}
             disabled={isLoading}
-            className="w-full p-4 rounded-lg border-2 border-yellow-500/50 bg-yellow-950/20 hover:bg-yellow-950/40 hover:border-yellow-400 transition-all text-left disabled:opacity-50"
+            className="w-full p-4 rounded-lg border-2 border-yellow-500/50 bg-[#363C3E] hover:bg-[#363C3E] hover:border-yellow-400 transition-all text-left disabled:opacity-50"
           >
             <div className="flex items-start gap-3">
               <div className="flex-1">
                 <p className="font-bold text-white">
                   Start Pro ($20/mo)
-                  <span className="text-xs text-yellow-400 ml-2">← Lock in Launch Pricing</span>
+                  <span className="text-xs text-[#D3D4DC] ml-2">← Lock in Launch Pricing</span>
                 </p>
-                <p className="text-sm text-yellow-300 mt-1">14 days free, then $20/mo. Unlimited everything.</p>
+                <p className="text-sm text-[#D3D4DC] mt-1">14 days free, then $20/mo. Unlimited everything.</p>
               </div>
-              {isLoading && <Loader2 className="h-5 w-5 animate-spin text-yellow-400" />}
+              {isLoading && <Loader2 className="h-5 w-5 animate-spin text-[#D3D4DC]" />}
             </div>
           </button>
         </div>
@@ -188,7 +188,7 @@ export function LaunchSignup({ onComplete }: LaunchSignupProps) {
           </div>
         )}
 
-        <p className="text-xs text-cyan-400/50 text-center">
+        <p className="text-xs text-[#D3D4DC] text-center">
           You&apos;ll connect GitHub or GitLab next. Pro trial converts to $20/mo after 14 days unless cancelled.
         </p>
       </div>
@@ -198,10 +198,10 @@ export function LaunchSignup({ onComplete }: LaunchSignupProps) {
   if (step === 'success') {
     return (
       <div className="space-y-6 text-center">
-        <CheckCircle2 className="h-12 w-12 text-green-400 mx-auto" />
+        <CheckCircle2 className="h-12 w-12 text-[#D3D4DC] mx-auto" />
         <div>
           <h3 className="text-2xl font-bold text-white">Welcome to RepoFuse!</h3>
-          <p className="text-cyan-200/80 mt-2">Check your email to confirm. Redirecting...</p>
+          <p className="text-[#D3D4DC] mt-2">Check your email to confirm. Redirecting...</p>
         </div>
       </div>
     )
