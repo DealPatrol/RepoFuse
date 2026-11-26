@@ -24,74 +24,88 @@
 }
 
 :root {
-  --background: oklch(0.95 0 0);
-  --foreground: oklch(0.15 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.15 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.15 0 0);
-  --primary: oklch(0.52 0.194 258);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.95 0 0);
-  --secondary-foreground: oklch(0.15 0 0);
-  --muted: oklch(0.88 0 0);
-  --muted-foreground: oklch(0.45 0 0);
-  --accent: oklch(0.52 0.194 258);
-  --accent-foreground: oklch(1 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.9 0 0);
-  --input: oklch(0.95 0 0);
-  --ring: oklch(0.52 0.194 258);
-  --chart-1: oklch(0.52 0.194 258);
-  --chart-2: oklch(0.65 0.2 130);
-  --chart-3: oklch(0.58 0.19 42);
-  --chart-4: oklch(0.71 0.18 180);
-  --chart-5: oklch(0.68 0.19 300);
+  /* Monochrome/Sharp palette: Deep Charcoal + Cool Silver, Signal Yellow for CTAs only */
+  --background: #F4F5F7;
+  --foreground: #2B3031;
+  --card: #FFFFFF;
+  --card-foreground: #2B3031;
+  --popover: #FFFFFF;
+  --popover-foreground: #2B3031;
+  --primary: #2B3031;
+  --primary-foreground: #F4F5F7;
+  --secondary: #E9EAEE;
+  --secondary-foreground: #2B3031;
+  --muted: #E9EAEE;
+  --muted-foreground: #6A7075;
+  --accent: #E9EAEE;
+  --accent-foreground: #2B3031;
+  --destructive: #B42318;
+  --destructive-foreground: #F4F5F7;
+  --border: #D3D4DC;
+  --input: #D3D4DC;
+  --ring: #2B3031;
+  --cta: #FFC93C;
+  --cta-hover: #F2B824;
+  --cta-foreground: #1D2122;
+  --surface: #F4F5F7;
+  --success: #2B3031;
+  --chart-1: #2B3031;
+  --chart-2: #6A7075;
+  --chart-3: #989AA0;
+  --chart-4: #D3D4DC;
+  --chart-5: #363C3E;
+  --sidebar: #F4F5F7;
+  --sidebar-foreground: #2B3031;
+  --sidebar-primary: #2B3031;
+  --sidebar-primary-foreground: #F4F5F7;
+  --sidebar-accent: #E9EAEE;
+  --sidebar-accent-foreground: #2B3031;
+  --sidebar-border: #D3D4DC;
+  --sidebar-ring: #2B3031;
   --radius: 0.625rem;
-  --sidebar: oklch(0.95 0 0);
-  --sidebar-foreground: oklch(0.15 0 0);
-  --sidebar-primary: oklch(0.52 0.194 258);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.88 0 0);
-  --sidebar-accent-foreground: oklch(0.15 0 0);
-  --sidebar-border: oklch(0.9 0 0);
-  --sidebar-ring: oklch(0.52 0.194 258);
+
 }
 
 .dark {
-  --background: oklch(0.08 0 0);
-  --foreground: oklch(0.98 0 0);
-  --card: oklch(0.12 0 0);
-  --card-foreground: oklch(0.98 0 0);
-  --popover: oklch(0.12 0 0);
-  --popover-foreground: oklch(0.98 0 0);
-  --primary: oklch(0.98 0 0);
-  --primary-foreground: oklch(0.08 0 0);
-  --secondary: oklch(0.18 0 0);
-  --secondary-foreground: oklch(0.98 0 0);
-  --muted: oklch(0.18 0 0);
-  --muted-foreground: oklch(0.65 0 0);
-  --accent: oklch(0.18 0 0);
-  --accent-foreground: oklch(0.98 0 0);
-  --destructive: oklch(0.55 0.2 25);
-  --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.22 0 0);
-  --input: oklch(0.18 0 0);
-  --ring: oklch(0.98 0 0);
-  --chart-1: oklch(0.7 0.15 150);
-  --chart-2: oklch(0.65 0.15 200);
-  --chart-3: oklch(0.6 0.15 280);
-  --chart-4: oklch(0.75 0.12 50);
-  --chart-5: oklch(0.7 0.15 320);
-  --sidebar: oklch(0.1 0 0);
-  --sidebar-foreground: oklch(0.98 0 0);
-  --sidebar-primary: oklch(0.98 0 0);
-  --sidebar-primary-foreground: oklch(0.08 0 0);
-  --sidebar-accent: oklch(0.18 0 0);
-  --sidebar-accent-foreground: oklch(0.98 0 0);
-  --sidebar-border: oklch(0.22 0 0);
-  --sidebar-ring: oklch(0.98 0 0);
+  /* Dark surfaces stay on the charcoal–silver axis; yellow is reserved for CTAs */
+  --background: #1D2122;
+  --foreground: #D3D4DC;
+  --card: #2B3031;
+  --card-foreground: #D3D4DC;
+  --popover: #2B3031;
+  --popover-foreground: #D3D4DC;
+  --primary: #D3D4DC;
+  --primary-foreground: #1D2122;
+  --secondary: #363C3E;
+  --secondary-foreground: #D3D4DC;
+  --muted: #363C3E;
+  --muted-foreground: #989AA0;
+  --accent: #363C3E;
+  --accent-foreground: #D3D4DC;
+  --destructive: #E85D4C;
+  --destructive-foreground: #1D2122;
+  --border: #363C3E;
+  --input: #363C3E;
+  --ring: #D3D4DC;
+  --cta: #FFC93C;
+  --cta-hover: #F2B824;
+  --cta-foreground: #1D2122;
+  --surface: #2B3031;
+  --success: #D3D4DC;
+  --chart-1: #D3D4DC;
+  --chart-2: #989AA0;
+  --chart-3: #6A7075;
+  --chart-4: #363C3E;
+  --chart-5: #2B3031;
+  --sidebar: #1D2122;
+  --sidebar-foreground: #D3D4DC;
+  --sidebar-primary: #FFC93C;
+  --sidebar-primary-foreground: #1D2122;
+  --sidebar-accent: #363C3E;
+  --sidebar-accent-foreground: #D3D4DC;
+  --sidebar-border: #363C3E;
+  --sidebar-ring: #D3D4DC;
+
 }
 
 @theme inline {
@@ -105,6 +119,9 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-cta: var(--cta);
+  --color-cta-hover: var(--cta-hover);
+  --color-cta-foreground: var(--cta-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -142,4 +159,13 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Squint Test: only the primary CTA and one hero word should pop. */
+.hero-accent {
+  text-decoration-line: underline;
+  text-decoration-color: #FFC93C;
+  text-decoration-thickness: 0.16em;
+  text-underline-offset: 0.14em;
+  text-decoration-skip-ink: none;
 }

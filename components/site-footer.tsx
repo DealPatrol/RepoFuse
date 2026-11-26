@@ -12,12 +12,12 @@ const footerLinks = [
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-[#30363D] bg-[#0B0F14] px-4 py-10 text-sm text-[#8B949E] sm:px-6">
+    <footer className="border-t border-[#363C3E] bg-[#1D2122] px-4 py-10 text-sm text-[#989AA0] sm:px-6">
       <div className="mx-auto flex max-w-7xl flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
         <p className="font-mono text-xs">© {new Date().getFullYear()} RepoFuse</p>
         <nav aria-label="Footer" className="flex flex-wrap gap-x-6 gap-y-3">
           {footerLinks.map((link) => (
-            <Link key={link.href} href={link.href} className="transition-colors hover:text-[#F0F6FC]">
+            <Link key={link.href} href={link.href} className="transition-colors hover:text-[#D3D4DC]">
               {link.label}
             </Link>
           ))}
